@@ -16,16 +16,19 @@ create table if not exists ventas (
 create index if not exists ventas_fecha_idx on ventas (fecha);
 
 -- 2) Seguridad a nivel de fila (RLS)
---    Activamos RLS y permitimos acceso con la clave "anon".
---    NOTA: la clave anon va incrustada en la web, así que cualquiera
---    con la URL de tu app podría leer/escribir. Para uso personal es
---    suficiente; si quieres proteger con usuario y contraseña, dímelo
---    y añadimos login (Supabase Auth).
+--    Activamos RLS y SOLO permitimos acceso a usuarios que han iniciado
+--    sesión (rol "authenticated"). El rol "anon" (sin login) queda
+--    bloqueado: alguien con la URL ve la web, pero no puede leer ni
+--    escribir datos sin usuario y contraseña.
+--    Todos los usuarios autenticados comparten las mismas ventas.
 alter table ventas enable row level security;
 
-create policy "acceso_anon_ventas"
+-- Si ya habías creado la política anterior, la quitamos antes.
+drop policy if exists "acceso_anon_ventas" on ventas;
+
+create policy "acceso_autenticados_ventas"
   on ventas
   for all
-  to anon
+  to authenticated
   using (true)
   with check (true);

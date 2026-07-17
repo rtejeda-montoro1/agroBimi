@@ -53,11 +53,29 @@ En el móvil, abre la URL y usa "Añadir a pantalla de inicio" para tenerla como
 
 ---
 
-## Seguridad
+## Acceso con usuario y contraseña
 
-La clave `anon` va incrustada en la web, por lo que cualquiera con tu URL podría ver/editar los datos.
-Para uso personal suele bastar con no compartir la URL. Si quieres protegerla con **usuario y
-contraseña**, pídemelo y añadimos login (Supabase Auth) con reglas RLS por usuario.
+La app está protegida con **login** (Supabase Auth). Al abrirla, pide email y contraseña, y
+sin iniciar sesión no se puede ver ni editar ninguna venta. Todos los usuarios que entren
+comparten **las mismas ventas**.
+
+### Crear usuarios (solo tú)
+
+No hay registro público: los usuarios se crean a mano desde Supabase.
+
+1. Entra en Supabase → **Authentication** → **Users** → botón **Add user** → **Create new user**.
+2. Pon el **email** y una **contraseña**, y marca **Auto Confirm User** (para que pueda entrar sin verificar el correo).
+3. Repite por cada persona a la que quieras dar acceso. Pásale su email y contraseña.
+
+> Si actualizas desde una versión anterior de la app, vuelve a ejecutar `schema.sql` en el
+> **SQL Editor** para aplicar las nuevas reglas de seguridad (bloquean el acceso sin login).
+
+## Seguridad — nota
+
+La clave `anon` sigue yendo incrustada en la web (es normal en apps de navegador), pero **por sí
+sola ya no da acceso a los datos**: las reglas RLS solo permiten leer/escribir a usuarios con
+sesión iniciada. Para bloquear del todo el acceso, basta con no crear usuarios de más y usar
+contraseñas fuertes.
 
 ## Archivos
 

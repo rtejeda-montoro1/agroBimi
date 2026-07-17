@@ -20,6 +20,60 @@ const fmtEUR = new Intl.NumberFormat("es-ES", { style: "currency", currency: "EU
 
 let ventasActuales = []; // cache de lo mostrado, para editar sin volver a consultar
 
+// =====================================================================
+//  AUTENTICACIÓN (Supabase Auth)
+//  Las cuentas se crean desde Supabase → Authentication → Users.
+//  No hay registro público: solo entra quien ya tiene usuario.
+// =====================================================================
+const loginScreen = $("loginScreen");
+const loginForm = $("loginForm");
+const loginError = $("loginError");
+let ventasCargadas = false;
+
+async function initAuth() {
+  const { data: { session } } = await db.auth.getSession();
+  aplicarSesion(session);
+  // Reacciona a cambios de sesión (login, logout, expiración del token)
+  db.auth.onAuthStateChange((_evento, session) => aplicarSesion(session));
+}
+
+function aplicarSesion(session) {
+  const haySesion = !!session;
+  document.body.classList.toggle("authed", haySesion);
+  if (haySesion) {
+    if (!ventasCargadas) { ventasCargadas = true; cargarVentas(); }
+  } else {
+    ventasCargadas = false;
+    lista.innerHTML = "";
+  }
+}
+
+loginForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  loginError.textContent = "";
+  const btn = $("btnLogin");
+  btn.disabled = true;
+  btn.textContent = "Entrando…";
+
+  const { error } = await db.auth.signInWithPassword({
+    email: $("email").value.trim(),
+    password: $("password").value,
+  });
+
+  btn.disabled = false;
+  btn.textContent = "Entrar";
+  if (error) {
+    loginError.textContent = "Email o contraseña incorrectos.";
+  } else {
+    loginForm.reset();
+  }
+});
+
+$("btnLogout").addEventListener("click", async () => {
+  await db.auth.signOut();
+  toast("Sesión cerrada");
+});
+
 // --- Cargar y pintar ventas ---
 async function cargarVentas() {
   let query = db.from("ventas").select("*").order("fecha", { ascending: false });
@@ -161,4 +215,5 @@ function toast(msg) {
 }
 
 // --- Arranque ---
-cargarVentas();
+// Primero comprobamos la sesión; las ventas se cargan solo tras iniciar sesión.
+initAuth();
