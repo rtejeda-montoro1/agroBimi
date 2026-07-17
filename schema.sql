@@ -23,8 +23,10 @@ create index if not exists ventas_fecha_idx on ventas (fecha);
 --    Todos los usuarios autenticados comparten las mismas ventas.
 alter table ventas enable row level security;
 
--- Si ya habías creado la política anterior, la quitamos antes.
+-- Quitamos políticas previas (la antigua de anon y la actual) para poder
+-- ejecutar este archivo las veces que haga falta sin que dé error.
 drop policy if exists "acceso_anon_ventas" on ventas;
+drop policy if exists "acceso_autenticados_ventas" on ventas;
 
 create policy "acceso_autenticados_ventas"
   on ventas
@@ -32,3 +34,10 @@ create policy "acceso_autenticados_ventas"
   to authenticated
   using (true)
   with check (true);
+
+-- 3) Permisos de tabla (GRANT)
+--    RLS decide QUÉ filas ve cada rol, pero el rol necesita además
+--    permiso sobre la tabla. Damos acceso completo a los usuarios con
+--    sesión y se lo quitamos por completo al rol anónimo (sin login).
+grant select, insert, update, delete on table ventas to authenticated;
+revoke all on table ventas from anon;

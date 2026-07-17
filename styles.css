@@ -60,6 +60,22 @@ body.authed .login-screen { display: none; }
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  flex-wrap: wrap;
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.logo {
+  height: 52px;
+  width: auto;
+  display: block;
+  flex: none;
+  background: #fff;
+  border-radius: 10px;
+  padding: 6px 10px;
 }
 #btnLogout {
   display: none;
@@ -81,11 +97,11 @@ body {
 header {
   background: var(--primary);
   color: #fff;
-  padding: 18px 20px;
+  padding: 14px 20px;
   box-shadow: var(--shadow);
 }
-header h1 { margin: 0; font-size: 1.3rem; }
-header p  { margin: 4px 0 0; opacity: .85; font-size: .85rem; }
+header h1 { margin: 0; font-size: 1.3rem; color: #fff; }
+header p  { margin: 4px 0 0; font-size: .85rem; color: #fff; opacity: .85; }
 
 .container {
   max-width: 900px;
