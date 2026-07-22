@@ -3,14 +3,16 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Recuento de Ventas</title>
+  <title>Gestión de Bimi</title>
+  <link rel="icon" type="image/png" href="logo_web.png" />
+  <link rel="apple-touch-icon" href="logo_web.png" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <!-- Pantalla de inicio de sesión (visible hasta que entras) -->
   <div class="login-screen" id="loginScreen">
     <div class="login-box">
-      <h1>🧾 Recuento de Ventas</h1>
+      <h1>🌱 Gestión de Bimi</h1>
       <p class="sub">Introduce tus datos para entrar</p>
       <form id="loginForm">
         <div class="field">
@@ -32,8 +34,8 @@
       <div class="brand">
         <img src="logo_web.png" alt="AgroBimi" class="logo" />
         <div>
-          <h1>🧾 Recuento de Ventas</h1>
-          <p>Registra y consulta las ventas de tu tienda</p>
+          <h1>🌱 Gestión de Bimi</h1>
+          <p>Agricultores y sus registros de producción</p>
         </div>
       </div>
       <button class="btn-ghost" id="btnLogout">Cerrar sesión</button>
@@ -41,69 +43,299 @@
   </header>
 
   <main class="container">
-    <!-- Barra de búsqueda -->
-    <div class="toolbar">
-      <div class="field">
-        <label for="desde">Desde</label>
-        <input type="date" id="desde" />
+    <!-- ============================================================= -->
+    <!--  VISTA 1: Lista / búsqueda de agricultores                    -->
+    <!-- ============================================================= -->
+    <section id="vistaAgricultores">
+      <div class="toolbar">
+        <div class="field" style="flex:2 1 220px;">
+          <label for="buscarAgricultor">Buscar agricultor (nombre o código)</label>
+          <input type="text" id="buscarAgricultor" placeholder="Nombre o código (ej. 007)..." />
+        </div>
+        <button class="btn-ghost" id="btnLimpiar">Limpiar</button>
+        <button class="btn-primary" id="btnBuscarCampana">🔎 Buscar campaña</button>
+        <button class="btn-primary" id="btnCajasCamara">📦 Cajas en cámara</button>
+        <button class="btn-primary" id="btnAnadirAgricultor">+ Añadir agricultor</button>
       </div>
-      <div class="field">
-        <label for="hasta">Hasta</label>
-        <input type="date" id="hasta" />
-      </div>
-      <div class="field" style="flex:2 1 180px;">
-        <label for="buscar">Buscar (producto o factura)</label>
-        <input type="text" id="buscar" placeholder="Ej. camiseta, F-2024..." />
-      </div>
-      <button class="btn-ghost" id="btnLimpiar">Limpiar</button>
-      <button class="btn-primary" id="btnAnadir">+ Añadir</button>
-    </div>
 
-    <!-- Resumen -->
-    <div class="summary">
-      <span class="total" id="total">Total: 0,00 €</span>
-      <span class="count" id="count">0 ventas</span>
-    </div>
+      <div class="summary">
+        <span class="count" id="countAgricultores">0 agricultores</span>
+      </div>
 
-    <!-- Lista de ventas -->
-    <div class="card-list" id="lista"></div>
+      <div class="card-list" id="listaAgricultores"></div>
+    </section>
+
+    <!-- ============================================================= -->
+    <!--  VISTA 2: Detalle de un agricultor y sus registros            -->
+    <!-- ============================================================= -->
+    <section id="vistaRegistros" hidden>
+      <div class="detalle-header">
+        <button class="btn-primary" id="btnVolver">← Volver</button>
+        <h2 id="nombreAgricultor"></h2>
+        <button class="btn-primary" id="btnAnadirCampana">+ Añadir campaña</button>
+        <button class="btn-primary" id="btnExport">⬇ Export</button>
+        <button class="btn-primary" id="btnAnadirRegistro">+ Añadir</button>
+      </div>
+
+      <div class="toolbar toolbar-filtros">
+        <div class="field">
+          <label for="filtroFacturaReg">Filtrar por Nº Factura</label>
+          <input type="text" id="filtroFacturaReg" placeholder="Ej. FAC 01..." />
+        </div>
+        <div class="field">
+          <label for="filtroFechaDesde">Entrada desde</label>
+          <input type="date" id="filtroFechaDesde" />
+        </div>
+        <div class="field">
+          <label for="filtroFechaHasta">Entrada hasta</label>
+          <input type="date" id="filtroFechaHasta" />
+        </div>
+        <button class="btn-ghost" id="btnLimpiarFiltrosReg">Limpiar filtros</button>
+      </div>
+
+      <div class="summary">
+        <span class="count" id="countRegistros">0 registros</span>
+      </div>
+
+      <div class="tabla-wrap">
+        <table class="tabla-registros" id="tablaRegistros">
+          <thead>
+            <tr>
+              <th>
+                <button type="button" class="th-sort" id="btnOrdenFecha">
+                  Fecha Entrada <span id="ordenFechaIcono">↓</span>
+                </button>
+              </th>
+              <th>Campaña</th>
+              <th>Ciclo</th>
+              <th>Cajas</th>
+              <th>Fecha (CMR)</th>
+              <th>Nº Factura</th>
+              <th>Nº Plantas</th>
+              <th>Fecha de Retirada</th>
+              <th>Comentarios</th>
+              <th class="col-acciones">Acciones</th>
+            </tr>
+          </thead>
+          <tbody id="cuerpoRegistros"></tbody>
+        </table>
+      </div>
+      <div id="registrosVacio" class="empty" hidden>Este agricultor todavía no tiene registros.</div>
+    </section>
   </main>
 
-  <!-- Modal Añadir/Editar -->
-  <div class="modal-backdrop" id="modal">
+  <!-- ============================================================= -->
+  <!--  Modal: Añadir agricultor                                     -->
+  <!-- ============================================================= -->
+  <div class="modal-backdrop" id="modalAgricultor">
     <div class="modal">
-      <h2 id="modalTitulo">Añadir venta</h2>
-      <form id="formVenta">
-        <input type="hidden" id="ventaId" />
-        <div class="field">
-          <label for="fecha">Fecha de venta *</label>
-          <input type="date" id="fecha" required />
+      <h2 id="modalAgricultorTitulo">Añadir agricultor</h2>
+      <form id="formAgricultor">
+        <input type="hidden" id="agricultorId" />
+        <div class="field" id="campoCodigoAgricultor" hidden>
+          <label for="codigoAgricultor">Código (no editable)</label>
+          <input type="text" id="codigoAgricultor" disabled />
         </div>
         <div class="field">
-          <label for="producto">Producto *</label>
-          <input type="text" id="producto" required placeholder="Nombre del producto" />
-        </div>
-        <div class="field">
-          <label for="precio">Precio (€) *</label>
-          <input type="number" id="precio" step="0.01" min="0" required placeholder="0,00" />
-        </div>
-        <div class="field">
-          <label for="factura">Nº de factura</label>
-          <input type="text" id="factura" placeholder="Opcional" />
+          <label for="nombre">Nombre *</label>
+          <input type="text" id="nombre" required placeholder="Nombre del agricultor" />
         </div>
         <div class="modal-actions">
-          <button type="button" class="btn-ghost" id="btnCancelar">Cancelar</button>
-          <button type="submit" class="btn-primary" id="btnGuardar">Guardar</button>
+          <button type="button" class="btn-ghost" data-cerrar="modalAgricultor">Cancelar</button>
+          <button type="submit" class="btn-primary">Guardar</button>
         </div>
       </form>
     </div>
   </div>
 
+  <!-- ============================================================= -->
+  <!--  Modal: Añadir / Editar registro                              -->
+  <!-- ============================================================= -->
+  <div class="modal-backdrop" id="modalRegistro">
+    <div class="modal modal-ancho">
+      <h2 id="modalRegistroTitulo">Añadir registro</h2>
+      <form id="formRegistro">
+        <input type="hidden" id="registroId" />
+        <div class="grid-campos">
+          <div class="field campo-ancho">
+            <label for="campana_id">Campaña</label>
+            <select id="campana_id"></select>
+          </div>
+          <div class="field">
+            <label for="fecha">Fecha Entrada</label>
+            <input type="date" id="fecha" />
+          </div>
+          <div class="field">
+            <label for="ciclo">Ciclo</label>
+            <input type="text" id="ciclo" placeholder="Ej. 1" />
+          </div>
+          <div class="field">
+            <label for="cajas_entradas">Nº Cajas Entradas</label>
+            <input type="number" id="cajas_entradas" min="0" step="1" placeholder="0" />
+          </div>
+          <div class="field">
+            <label for="fecha_cmr">Fecha (CMR)</label>
+            <input type="date" id="fecha_cmr" />
+          </div>
+          <div class="field">
+            <label for="cajas_salidas">Nº Cajas Salidas</label>
+            <input type="number" id="cajas_salidas" min="0" step="1" placeholder="0" />
+          </div>
+          <div class="field">
+            <label for="descuento_cajas">Descuento Cajas</label>
+            <input type="number" id="descuento_cajas" min="0" step="1" placeholder="0" />
+          </div>
+          <div class="field">
+            <label for="num_factura">Nº Factura</label>
+            <input type="text" id="num_factura" placeholder="Opcional" />
+          </div>
+          <div class="field">
+            <label for="cajas_vacias_retiradas">Cajas Vacías retiradas</label>
+            <input type="number" id="cajas_vacias_retiradas" min="0" step="1" placeholder="0" />
+          </div>
+          <div class="field">
+            <label for="num_plantas">Nº Plantas</label>
+            <input type="number" id="num_plantas" min="0" step="1" placeholder="0" />
+          </div>
+          <div class="field">
+            <label for="fecha_retirada">Fecha de Retirada</label>
+            <input type="date" id="fecha_retirada" />
+          </div>
+          <div class="field campo-ancho">
+            <label for="comentarios">Comentarios</label>
+            <textarea id="comentarios" rows="3" placeholder="Opcional"></textarea>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn-ghost" data-cerrar="modalRegistro">Cancelar</button>
+          <button type="submit" class="btn-primary">Guardar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ============================================================= -->
+  <!--  Modal: Cajas en cámara (total por agricultor)                -->
+  <!-- ============================================================= -->
+  <div class="modal-backdrop" id="modalCamara">
+    <div class="modal modal-ancho">
+      <h2>📦 Cajas en cámara por agricultor</h2>
+      <p class="sub-modal">Total = Nº Cajas Salidas − Nº Cajas Entradas (sumado de todos sus registros).</p>
+      <div class="total-destacado">
+        <span class="total-etiqueta">Total en cámara (todos los agricultores)</span>
+        <span class="total-valor" id="totalCamaraGlobal">0</span>
+      </div>
+      <div class="tabla-wrap">
+        <table class="tabla-registros">
+          <thead>
+            <tr>
+              <th>Código</th>
+              <th>Agricultor</th>
+              <th>Cajas en cámara</th>
+            </tr>
+          </thead>
+          <tbody id="cuerpoCamara"></tbody>
+        </table>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn-ghost" data-cerrar="modalCamara">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================= -->
+  <!--  Modal: Añadir campaña                                        -->
+  <!-- ============================================================= -->
+  <div class="modal-backdrop" id="modalCampana">
+    <div class="modal">
+      <h2 id="modalCampanaTitulo">Añadir campaña</h2>
+      <form id="formCampana">
+        <input type="hidden" id="campanaId" />
+        <div class="field">
+          <label for="nombreCampana">Nombre de la campaña *</label>
+          <input type="text" id="nombreCampana" required placeholder="Ej. Campaña 2026" />
+        </div>
+        <p class="aviso-campana" id="avisoEditarCampana" hidden>
+          ⚠ Cambiar el nombre afectará a <b>todos los registros</b> que usan esta campaña.
+        </p>
+        <div class="modal-actions">
+          <button type="button" class="btn-ghost" data-cerrar="modalCampana">Cancelar</button>
+          <button type="submit" class="btn-primary">Guardar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ============================================================= -->
+  <!--  Modal: Buscar campaña (datos de todos los agricultores)      -->
+  <!-- ============================================================= -->
+  <div class="modal-backdrop" id="modalBuscarCampana">
+    <div class="modal modal-ancho">
+      <h2>🔎 Buscar por campaña</h2>
+      <div class="field">
+        <label for="selBuscarCampana">Campaña</label>
+        <select id="selBuscarCampana"></select>
+      </div>
+      <div class="campana-acciones">
+        <button type="button" class="btn-primary" id="btnAnadirCampanaBuscar">+ Añadir campaña</button>
+        <button type="button" class="btn-edit" id="btnEditarCampana" disabled>✏ Editar campaña</button>
+        <button type="button" class="btn-del" id="btnEliminarCampana" disabled>🗑 Eliminar campaña</button>
+      </div>
+      <div class="summary">
+        <span class="count" id="countBuscarCampana">0 registros</span>
+      </div>
+      <div class="tabla-wrap">
+        <table class="tabla-registros">
+          <thead>
+            <tr>
+              <th>Código</th>
+              <th>Agricultor</th>
+              <th>Fecha Entrada</th>
+              <th>Ciclo</th>
+              <th>Nº Cajas Entradas</th>
+              <th>Fecha (CMR)</th>
+              <th>Nº Cajas Salidas</th>
+              <th>Descuento Cajas</th>
+              <th>Nº Factura</th>
+              <th>Cajas Vacías retiradas</th>
+              <th>Nº Plantas</th>
+              <th>Fecha de Retirada</th>
+              <th>Comentarios</th>
+            </tr>
+          </thead>
+          <tbody id="cuerpoBuscarCampana"></tbody>
+        </table>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn-ghost" data-cerrar="modalBuscarCampana">Cerrar</button>
+        <button type="button" class="btn-primary" id="btnExportCampana" disabled>⬇ Export</button>
+      </div>
+    </div>
+  </div>
+
+  <footer class="site-footer">
+    <div class="container">
+      <span>© <span id="copyYear">2026</span> AgroBimi. Todos los derechos reservados.</span>
+    </div>
+  </footer>
+
+  <!-- Popover con el detalle de cajas (entradas/salidas/descuento) -->
+  <div class="cajas-popover" id="cajasPopover" role="dialog" aria-label="Detalle de cajas"></div>
+
   <div class="toast" id="toast"></div>
 
-  <!-- Cliente de Supabase -->
+  <!-- Cliente de Supabase y librería para exportar a Excel (con estilos) -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
   <script src="config.js"></script>
+  <script src="js/core.js"></script>
+  <script src="js/utils.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/agricultores.js"></script>
+  <script src="js/campanas.js"></script>
+  <script src="js/registros.js"></script>
+  <script src="js/reportes.js"></script>
+  <script src="js/ui.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

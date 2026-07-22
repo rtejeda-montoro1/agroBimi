@@ -36,10 +36,25 @@
   justify-content: center;
   padding: 16px;
   z-index: 200;
+  overflow: hidden;
+}
+/* Logo en la esquina inferior derecha de la pantalla de login. */
+.login-screen::before {
+  content: "";
+  position: absolute;
+  right: 24px;
+  bottom: 24px;
+  width: min(42%, 300px);
+  height: min(42%, 300px);
+  background: url("logo_web.png") right bottom / contain no-repeat;
+  opacity: .9;
+  pointer-events: none;
 }
 body.authed .login-screen { display: none; }
 
 .login-box {
+  position: relative;
+  z-index: 1;
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: 14px;
@@ -124,14 +139,18 @@ header p  { margin: 4px 0 0; font-size: .85rem; color: #fff; opacity: .85; }
 }
 .field { display: flex; flex-direction: column; gap: 4px; flex: 1 1 130px; }
 .field label { font-size: .75rem; color: var(--muted); font-weight: 600; }
-.field input {
+.field input,
+.field textarea,
+.field select {
   padding: 9px 10px;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--bg);
   color: var(--text);
   font-size: .95rem;
+  font-family: inherit;
 }
+.field textarea { resize: vertical; }
 
 /* ---- Botones ---- */
 button {
@@ -145,6 +164,15 @@ button {
 }
 .btn-primary { background: var(--primary); color: #fff; }
 .btn-primary:hover { background: var(--primary-dark); }
+button:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+}
+.btn-primary:disabled:hover { background: var(--primary); }
+
+/* Filas clicables (ej. cajas en cámara -> registros del agricultor) */
+.fila-clic { cursor: pointer; transition: background .12s; }
+.fila-clic:hover { background: rgba(37, 99, 235, .1); }
 .btn-ghost { background: transparent; color: var(--muted); border: 1px solid var(--border); }
 .btn-sm { padding: 6px 10px; font-size: .8rem; }
 .btn-edit  { background: transparent; color: var(--primary); border: 1px solid var(--border); }
@@ -162,37 +190,147 @@ button {
 .summary .total { font-size: 1.1rem; font-weight: 700; }
 .summary .count { color: var(--muted); font-size: .85rem; }
 
-/* ---- Tabla / lista ---- */
+/* ---- Lista de agricultores ---- */
 .card-list { display: flex; flex-direction: column; gap: 10px; }
-.venta {
+.agricultor {
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: 12px;
-  padding: 14px;
+  padding: 14px 16px;
   box-shadow: var(--shadow);
-  display: grid;
-  grid-template-columns: 100px 1fr auto auto;
-  gap: 12px;
+  display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  cursor: pointer;
+  transition: border-color .15s, transform .05s;
 }
-.venta .fecha   { font-weight: 600; }
-.venta .prod    { min-width: 0; }
-.venta .prod .factura { color: var(--muted); font-size: .8rem; }
-.venta .precio  { font-weight: 700; white-space: nowrap; }
-.venta .acciones { display: flex; gap: 6px; }
+.agricultor:hover { border-color: var(--primary); }
+.agricultor:active { transform: scale(.995); }
+.agricultor-nombre { font-weight: 600; font-size: 1.05rem; min-width: 0; }
+.agricultor .acciones { display: flex; gap: 6px; align-items: center; }
+.agricultor .chevron { color: var(--muted); font-size: 1.4rem; line-height: 1; }
 
-@media (max-width: 600px) {
-  .venta {
-    grid-template-columns: 1fr auto;
-    grid-template-areas:
-      "fecha  precio"
-      "prod   prod"
-      "acc    acc";
-  }
-  .venta .fecha { grid-area: fecha; }
-  .venta .precio { grid-area: precio; text-align: right; }
-  .venta .prod { grid-area: prod; }
-  .venta .acciones { grid-area: acc; justify-content: flex-end; }
+/* ---- Cabecera de la vista de detalle ---- */
+.detalle-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.detalle-header h2 { margin: 0; flex: 1 1 auto; font-size: 1.25rem; min-width: 0; }
+
+/* ---- Tabla de registros ---- */
+.tabla-wrap {
+  overflow-x: auto;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+}
+.tabla-registros {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: .88rem;
+  white-space: nowrap;
+}
+.tabla-registros th,
+.tabla-registros td {
+  padding: 10px 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+.tabla-registros thead th {
+  background: var(--bg);
+  font-size: .74rem;
+  text-transform: uppercase;
+  letter-spacing: .03em;
+  font-weight: 800;
+  color: var(--text);
+  position: sticky;
+  top: 0;
+}
+.tabla-registros tbody tr:last-child td { border-bottom: none; }
+.tabla-registros tbody tr:hover { background: var(--bg); }
+.tabla-registros .col-coment { white-space: normal; max-width: 220px; }
+.tabla-registros .col-acciones { white-space: nowrap; }
+.tabla-registros .col-acciones button { margin-right: 4px; }
+
+/* ---- Columna de cajas colapsada + popover ---- */
+.tabla-registros .col-cajas { text-align: center; }
+.cajas-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 4px 9px;
+  font-size: 1rem;
+  line-height: 1;
+}
+.cajas-btn:hover { border-color: var(--primary); background: var(--bg); }
+
+.cajas-popover {
+  position: fixed;
+  z-index: 250;
+  min-width: 210px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, .25);
+  padding: 8px 12px;
+  font-size: .85rem;
+  visibility: hidden;
+  opacity: 0;
+  transform: translateY(-4px);
+  transition: opacity .12s, transform .12s;
+}
+.cajas-popover.open { visibility: visible; opacity: 1; transform: translateY(0); }
+.cajas-fila {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 5px 0;
+  white-space: nowrap;
+}
+.cajas-fila + .cajas-fila { border-top: 1px solid var(--border); }
+.cajas-fila span { color: var(--muted); }
+
+/* Botón para ordenar en la cabecera de la tabla */
+.th-sort {
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  font-size: .74rem;
+  text-transform: uppercase;
+  letter-spacing: .03em;
+  font-weight: 800;
+  color: var(--text);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.th-sort:hover { color: var(--primary); }
+.th-sort span { font-size: .9rem; }
+
+/* Filas con nº de factura compartido: se resaltan por grupos */
+.tabla-registros tr.factura-grupo td { background: var(--factura-bg); }
+.tabla-registros tr.factura-grupo:hover td { background: var(--factura-bg); }
+.tabla-registros tr.factura-grupo .fact-cell { font-weight: 700; }
+
+/* ---- Formulario del registro (rejilla de campos) ---- */
+.grid-campos {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.grid-campos .field { flex: none; }
+.grid-campos .campo-ancho { grid-column: 1 / -1; }
+@media (max-width: 480px) {
+  .grid-campos { grid-template-columns: 1fr; }
 }
 
 .empty, .error {
@@ -213,6 +351,8 @@ button {
   z-index: 50;
 }
 .modal-backdrop.open { display: flex; }
+/* "Añadir campaña" puede abrirse encima de "Buscar por campaña": debe quedar por delante. */
+#modalCampana { z-index: 60; }
 .modal {
   background: var(--card);
   border-radius: 14px;
@@ -220,8 +360,36 @@ button {
   max-width: 420px;
   padding: 20px;
   box-shadow: 0 10px 40px rgba(0, 0, 0, .3);
+  max-height: 90vh;
+  overflow-y: auto;
 }
+.modal.modal-ancho { max-width: 640px; }
 .modal h2 { margin: 0 0 16px; font-size: 1.15rem; }
+.modal .sub-modal { margin: -8px 0 16px; color: var(--muted); font-size: .82rem; }
+.total-destacado {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: var(--primary);
+  color: #fff;
+  border-radius: 10px;
+  padding: 14px 18px;
+  margin-bottom: 16px;
+}
+.total-destacado .total-etiqueta { font-size: .85rem; opacity: .9; }
+.total-destacado .total-valor { font-size: 1.8rem; font-weight: 800; line-height: 1; }
+.agricultor-codigo {
+  display: inline-block;
+  background: var(--primary);
+  color: #fff;
+  font-size: .78rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 6px;
+  margin-right: 8px;
+  letter-spacing: .04em;
+}
 .modal .field { margin-bottom: 14px; flex: none; }
 .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 8px; }
 
@@ -232,6 +400,41 @@ button {
   padding: 10px 18px; border-radius: 8px;
   font-size: .9rem; opacity: 0;
   transition: opacity .3s; pointer-events: none;
-  z-index: 100;
+  z-index: 300; /* por encima del login (200) para que se vea el aviso de cierre */
 }
 .toast.show { opacity: 1; }
+
+/* ---- Barra de filtros de registros ---- */
+.toolbar-filtros {
+  padding: 12px 14px;
+  margin-top: 4px;
+}
+.toolbar-filtros .field { flex: 1 1 160px; }
+
+/* ---- Footer ---- */
+.site-footer {
+  border-top: 1px solid var(--border);
+  margin-top: 32px;
+  padding: 18px 0;
+  color: var(--muted);
+  font-size: .82rem;
+  text-align: center;
+}
+.site-footer .container { padding: 0 16px; }
+
+/* ---- Acciones de campaña (buscar por campaña) ---- */
+.campana-acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 14px 0 4px;
+}
+.aviso-campana {
+  background: rgba(217, 119, 6, .12);
+  border: 1px solid rgba(217, 119, 6, .35);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin: 0 0 14px;
+  font-size: .85rem;
+}

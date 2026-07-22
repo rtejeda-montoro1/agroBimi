@@ -1,0 +1,10 @@
+# Ajustes locales de Claude Code
+.claude/settings.local.json
+
+# Basura del sistema
+Thumbs.db
+.DS_Store
+
+# Los backups NO van en este repo público (Pages).
+# Viven en el repositorio PRIVADO aparte (tienda-ventas-backups).
+backups/
