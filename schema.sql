@@ -58,6 +58,32 @@ create table if not exists campanas (
 alter table registros add column if not exists campana_id bigint references campanas(id) on delete set null;
 create index if not exists registros_campana_idx on registros (campana_id);
 
+-- Impedir campañas duplicadas por nombre (sin distinguir mayúsculas ni
+-- espacios sobrantes). Es la red de seguridad real: la validación en la app
+-- es solo de UX y puede fallar si su estado está desactualizado.
+--
+-- Paso 1: si ya hubiera duplicados de una versión anterior, los unificamos.
+--   a) Reapuntamos los registros a la campaña de MENOR id de cada nombre.
+update registros r
+set campana_id = (
+  select min(c2.id) from campanas c2
+  where lower(trim(c2.nombre)) = lower(trim(c1.nombre))
+)
+from campanas c1
+where r.campana_id = c1.id;
+
+--   b) Borramos las campañas duplicadas sobrantes (conservando la de menor id).
+delete from campanas c
+where exists (
+  select 1 from campanas c2
+  where lower(trim(c2.nombre)) = lower(trim(c.nombre))
+    and c2.id < c.id
+);
+
+-- Paso 2: índice único que impide crear el mismo nombre de nuevo.
+create unique index if not exists campanas_nombre_unico
+  on campanas (lower(trim(nombre)));
+
 -- 4) Seguridad a nivel de fila (RLS)
 --    Activamos RLS y SOLO permitimos acceso a usuarios que han iniciado
 --    sesión (rol "authenticated"). El rol "anon" (sin login) queda

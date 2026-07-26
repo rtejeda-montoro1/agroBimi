@@ -340,6 +340,30 @@ button:disabled {
 }
 .error { color: var(--danger); }
 
+/* ---- Indicador de carga ---- */
+.cargando {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: var(--muted);
+  padding: 40px 20px;
+  font-size: .9rem;
+}
+.spinner {
+  width: 20px;
+  height: 20px;
+  border: 3px solid var(--border);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: girar .7s linear infinite;
+  flex: none;
+}
+@keyframes girar { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .spinner { animation-duration: 1.6s; }
+}
+
 /* ---- Modal ---- */
 .modal-backdrop {
   position: fixed; inset: 0;
