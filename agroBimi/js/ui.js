@@ -6,7 +6,6 @@
   function configurarEventosInterfaz() {
     App.$("btnAnadirAgricultor").addEventListener("click", () => App.abrirModalAgricultor());
     App.$("btnAnadirRegistro").addEventListener("click", () => App.abrirModalRegistro());
-    App.$("btnCajasCamara").addEventListener("click", App.verCajasCamara);
     App.$("btnExport").addEventListener("click", App.exportarExcel);
 
     App.$("btnOrdenFecha").addEventListener("click", () => {
@@ -14,17 +13,6 @@
       App.state.agrupadoPorFactura = false;
       App.state.ordenFechaAsc = !App.state.ordenFechaAsc;
       App.cargarRegistros();
-    });
-
-    App.$("cuerpoCamara").addEventListener("click", (e) => {
-      const fila = e.target.closest("[data-agri-id]");
-      if (!fila) return;
-      const a = App.state.camaraAgricultores.find(
-        (x) => String(x.id) === fila.dataset.agriId
-      );
-      if (!a) return;
-      App.cerrarModal(App.dom.modalCamara);
-      App.abrirAgricultor(a);
     });
 
     App.$("btnVolver").addEventListener("click", () => {
@@ -68,7 +56,6 @@
     App.configurarEventosRegistros();
     App.configurarEventosPlantas();
     App.configurarEventosCajas();
-    App.configurarEventosPalets();
     App.configurarEventosLiquidaciones();
     App.configurarEventosFacturas();
     App.configurarEventosAjustes();

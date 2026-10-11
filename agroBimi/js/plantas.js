@@ -7,9 +7,7 @@
 //
 //      rendimiento = cajas de bimi / plantas retiradas
 //
-//  Se muestra de dos formas: un resumen por ciclo en la ficha del
-//  agricultor y un informe global filtrable por campaña, ciclo y
-//  agricultor.
+//  Se muestra como resumen por ciclo en la ficha del agricultor.
 // =====================================================================
 
 (function initPlantasModule(App) {
@@ -260,8 +258,8 @@
       App.$("modalPlantaTitulo").textContent = "Editar retirada de plantas";
       App.$("plantaId").value = retirada.id;
       App.$("plantaAgricultor").value = retirada.agricultor_id ?? "";
-      App.$("plantaCampana").value = retirada.campana_id ?? "";
-      App.$("plantaCiclo").value = App.cicloValido(retirada.ciclo);
+      App.ponerCampana(App.$("plantaCampana"), retirada.campana_id);
+      App.$("plantaCiclo").value = App.cicloValido(retirada.ciclo) || "1";
       App.$("plantaFecha").value = retirada.fecha ?? "";
       App.$("plantaNumPlantas").value = retirada.num_plantas ?? "";
       App.$("plantaVariedad").value = retirada.variedad ?? "";
@@ -272,8 +270,8 @@
       App.$("plantaFecha").value = App.hoyISO();
       // Si el listado está filtrado por un agricultor, lo damos por elegido.
       App.$("plantaAgricultor").value = App.$("filtroAgriPlantas").value || "";
-      App.$("plantaCampana").value = App.$("filtroCampanaPlantas").value || "";
-      App.$("plantaCiclo").value = App.$("filtroCicloPlantas").value || "";
+      App.ponerCampana(App.$("plantaCampana"), App.$("filtroCampanaPlantas").value);
+      App.$("plantaCiclo").value = App.$("filtroCicloPlantas").value || "1";
     }
 
     App.abrirModal(App.dom.modalPlanta);
@@ -305,10 +303,14 @@
     }
 
     const campana = App.$("plantaCampana").value;
+    if (!campana) {
+      App.toast("Crea primero una campaña: ninguna retirada puede ir sin campaña.");
+      return;
+    }
     const fila = {
       agricultor_id: parseInt(agricultorId, 10),
-      campana_id: campana ? parseInt(campana, 10) : null,
-      ciclo: App.$("plantaCiclo").value || null,
+      campana_id: parseInt(campana, 10),
+      ciclo: App.$("plantaCiclo").value,
       fecha,
       num_plantas: plantas,
       variedad: App.$("plantaVariedad").value.trim() || null,
@@ -399,7 +401,7 @@
       nuevas.push({
         agricultor_id: r.agricultor_id,
         campana_id: r.campana_id,
-        ciclo: App.cicloValido(r.ciclo) || null,
+        ciclo: App.cicloValido(r.ciclo) || "1",
         fecha: r.fecha_retirada,
         num_plantas: App.num(r.num_plantas),
         comentarios: "Importado del registro",
@@ -425,88 +427,6 @@
     App.toast(`${nuevas.length} retirada/s importada/s`);
     await cargarPlantas();
     if (App.state.agricultorAbierto) await cargarRetiradasAgricultor();
-  }
-
-  // ------------------------------------------------------------------
-  //  Informe global de rendimiento
-  // ------------------------------------------------------------------
-  async function abrirRendimiento() {
-    await App.asegurarAgricultoresTodos();
-    App.abrirModal(App.dom.modalRendimiento);
-    await cargarRendimiento();
-  }
-
-  async function cargarRendimiento() {
-    const cuerpo = App.$("cuerpoRendimiento");
-    cuerpo.innerHTML = App.spinnerFila(11, "Calculando rendimientos...");
-
-    const [retiradas, registros] = await Promise.all([
-      App.consultar(
-        App.db.from("retiradas_plantas").select("agricultor_id,campana_id,ciclo,fecha,num_plantas"),
-        "las retiradas de plantas"
-      ),
-      App.consultar(
-        App.db.from("registros").select("agricultor_id,campana_id,ciclo,fecha,cajas_entradas,descuento_cajas"),
-        "los registros"
-      ),
-    ]);
-
-    if (retiradas === null || registros === null) {
-      cuerpo.innerHTML = App.filaMensaje(11, "No se pudieron calcular los rendimientos.", "error");
-      return;
-    }
-
-    App.state.rendimientoActual = ordenarGrupos(agruparRendimiento(retiradas, registros));
-    pintarRendimiento();
-  }
-
-  function rendimientoFiltrado() {
-    const agri = App.$("filtroAgriRend").value;
-    const campana = App.$("filtroCampanaRend").value;
-    const ciclo = App.$("filtroCicloRend").value;
-
-    return App.state.rendimientoActual.filter((g) => {
-      if (agri && String(g.agricultor_id) !== agri) return false;
-      if (campana && String(g.campana_id ?? "") !== campana) return false;
-      if (ciclo && g.ciclo !== ciclo) return false;
-      return true;
-    });
-  }
-
-  function pintarRendimiento() {
-    const grupos = rendimientoFiltrado();
-    const cuerpo = App.$("cuerpoRendimiento");
-
-    const plantas = grupos.reduce((s, g) => s + g.plantas, 0);
-    const cajas = grupos.reduce((s, g) => s + g.cajas, 0);
-    App.$("rendTotalPlantas").textContent = App.fmtNum(plantas);
-    App.$("rendTotalCajas").textContent = App.fmtNum(cajas);
-    App.$("rendMedio").textContent = plantas > 0 ? App.fmtNum(cajas / plantas, 3) : "—";
-    App.$("btnExportRendimiento").disabled = grupos.length === 0;
-
-    cuerpo.innerHTML = grupos.length === 0
-      ? App.filaMensaje(11, "No hay datos de rendimiento con esos filtros.")
-      : grupos.map((g) => {
-          const a = App.agricultorPorId(g.agricultor_id);
-          // Aviso visual cuando falta un lado del cálculo.
-          const falta = g.plantas === 0 ? "falta-plantas" : (g.cajas === 0 ? "falta-cajas" : "");
-          return `
-        <tr class="${falta}" data-agri-id="${g.agricultor_id}">
-          <td>${App.etiquetaAgricultor(a)}</td>
-          <td>${App.escapar(etiquetaCampana(g.campana_id))}</td>
-          <td>${App.escapar(etiquetaCiclo(g.ciclo))}</td>
-          <td class="col-num">${App.fmtNum(g.plantas)}</td>
-          <td>${App.formatearFecha(g.primeraRetirada)}</td>
-          <td class="col-num">${App.fmtNum(g.cajas)}</td>
-          <td class="col-num">${App.fmtNum(g.cajasNetas)}</td>
-          <td>${App.formatearFecha(g.ultimaEntrada)}</td>
-          <td class="col-num">${g.dias === null ? "—" : App.fmtNum(g.dias)}</td>
-          <td class="col-num"><b>${g.rendimiento === null ? "—" : App.fmtNum(g.rendimiento, 3)}</b></td>
-          <td class="col-num">${g.plantasPorCaja === null ? "—" : App.fmtNum(g.plantasPorCaja, 2)}</td>
-        </tr>`;
-        }).join("");
-
-    App.actualizarContador("countRendimiento", grupos.length, "ciclo", "ciclos");
   }
 
   // ------------------------------------------------------------------
@@ -536,40 +456,11 @@
     App.toast("Excel exportado");
   }
 
-  function exportarRendimiento() {
-    const filas = rendimientoFiltrado().map((g) => {
-      const a = App.agricultorPorId(g.agricultor_id) || {};
-      return {
-        "Código": App.fmtCodigo(a.codigo),
-        "Agricultor": a.nombre || "",
-        "Campaña": g.campana_id ? App.campanaNombre(g.campana_id) : "",
-        "Ciclo": g.ciclo,
-        "Nº Plantas": g.plantas,
-        "1ª Retirada": g.primeraRetirada || "",
-        "Nº Cajas Entradas": g.cajas,
-        "Cajas netas": g.cajasNetas,
-        "Última Entrada": g.ultimaEntrada || "",
-        "Días de ciclo": g.dias ?? "",
-        "Cajas por planta": g.rendimiento === null ? "" : App.redondear(g.rendimiento, 4),
-        "Plantas por caja": g.plantasPorCaja === null ? "" : App.redondear(g.plantasPorCaja, 2),
-      };
-    });
-
-    if (filas.length === 0) {
-      App.toast("No hay rendimientos que exportar.");
-      return;
-    }
-
-    App.descargarLibro(filas, "Rendimiento", "bimi_rendimiento.xlsx");
-    App.toast("Excel exportado");
-  }
-
   // ------------------------------------------------------------------
   //  Eventos
   // ------------------------------------------------------------------
   function configurarEventosPlantas() {
     App.$("btnPlantas").addEventListener("click", () => abrirModalPlantas());
-    App.$("btnRendimiento").addEventListener("click", abrirRendimiento);
     // Desde la ficha del agricultor, ya filtrado por él.
     App.$("btnPlantasAgricultor").addEventListener("click", () =>
       abrirModalPlantas(App.state.agricultorAbierto?.id));
@@ -582,20 +473,6 @@
 
     ["filtroAgriPlantas", "filtroCampanaPlantas", "filtroCicloPlantas"].forEach((id) =>
       App.$(id).addEventListener("change", pintarPlantas));
-    ["filtroAgriRend", "filtroCampanaRend", "filtroCicloRend"].forEach((id) =>
-      App.$(id).addEventListener("change", pintarRendimiento));
-
-    App.$("btnExportRendimiento").addEventListener("click", exportarRendimiento);
-
-    // Clic en una fila del informe: abre la ficha de ese agricultor.
-    App.$("cuerpoRendimiento").addEventListener("click", (e) => {
-      const fila = e.target.closest("[data-agri-id]");
-      if (!fila) return;
-      const a = App.agricultorPorId(fila.dataset.agriId);
-      if (!a) return;
-      App.cerrarModal(App.dom.modalRendimiento);
-      App.abrirAgricultor(a);
-    });
   }
 
   Object.assign(App, {
@@ -603,7 +480,6 @@
     cargarRetiradasAgricultor,
     pintarResumenCiclos,
     abrirModalPlantas,
-    abrirRendimiento,
     configurarEventosPlantas,
   });
 })(window.App);

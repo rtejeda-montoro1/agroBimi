@@ -108,6 +108,21 @@
     App.db.auth.onAuthStateChange((_evento, nuevaSesion) => aplicarSesion(nuevaSesion));
   }
 
+  // El usuario de la báscula no tiene acceso a las tablas: si entra aquí
+  // lo llevamos a su página en vez de enseñarle una app vacía.
+  async function cargarDatosOIrABascula() {
+    const { data: esBascula, error } = await App.db.rpc("es_bascula");
+    if (!error && esBascula) {
+      location.replace("bascula.html");
+      return;
+    }
+    // Los parámetros (precios, IVA, emisor) los necesitan las
+    // liquidaciones y el control de cajas.
+    App.cargarParametros();
+    App.cargarCampanas();
+    App.cargarAgricultores();
+  }
+
   function aplicarSesion(session) {
     const haySesion = !!session;
     document.body.classList.toggle("authed", haySesion);
@@ -116,11 +131,7 @@
       iniciarVigilanciaInactividad();
       if (!App.state.datosCargados) {
         App.state.datosCargados = true;
-        // Los parámetros (precios, IVA, emisor) los necesitan las
-        // liquidaciones y el control de cajas.
-        App.cargarParametros();
-        App.cargarCampanas();
-        App.cargarAgricultores();
+        cargarDatosOIrABascula();
       }
       return;
     }

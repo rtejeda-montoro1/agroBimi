@@ -229,7 +229,7 @@
   }
 
   // ---- Impresión ------------------------------------------------------
-  // Vuelca un documento (factura, carta de porte) en #zonaImpresion y abre
+  // Vuelca un documento (factura) en #zonaImpresion y abre
   // el diálogo de impresión. Desde ahí el navegador permite "Guardar como
   // PDF", así que no hace falta ninguna librería extra.
   function imprimirDocumento(html) {

@@ -8,3 +8,6 @@ Thumbs.db
 # Los backups NO van en este repo público (Pages).
 # Viven en el repositorio PRIVADO aparte (tienda-ventas-backups).
 backups/
+
+# Copia local del código antes de simplificar la web (2026-10-10).
+respaldo/

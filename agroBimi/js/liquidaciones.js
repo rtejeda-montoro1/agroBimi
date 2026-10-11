@@ -136,7 +136,7 @@
       App.$("modalLiquidacionTitulo").textContent = `Editar liquidación ${liquidacion.numero || ""}`.trim();
       App.$("liqId").value = liquidacion.id;
       App.$("liqAgricultor").value = liquidacion.agricultor_id ?? "";
-      App.$("liqCampana").value = liquidacion.campana_id ?? "";
+      App.ponerCampana(App.$("liqCampana"), liquidacion.campana_id);
       App.$("liqDesde").value = liquidacion.fecha_desde ?? "";
       App.$("liqHasta").value = liquidacion.fecha_hasta ?? "";
       App.$("liqPrecioCaja").value = liquidacion.precio_caja ?? "";
@@ -151,7 +151,7 @@
       App.$("liqId").value = "";
       App.$("liqAgricultor").disabled = false;
       App.$("liqAgricultor").value = prefijos.agricultorId ? String(prefijos.agricultorId) : "";
-      App.$("liqCampana").value = prefijos.campanaId ? String(prefijos.campanaId) : "";
+      App.ponerCampana(App.$("liqCampana"), prefijos.campanaId);
       App.$("liqDesde").value = prefijos.desde || App.primerDiaMes();
       App.$("liqHasta").value = prefijos.hasta || App.hoyISO();
       // Precios e IVA por defecto vienen de Ajustes; se pueden cambiar aquí
@@ -195,10 +195,14 @@
     }
 
     const campana = App.$("liqCampana").value;
+    if (!campana) {
+      App.toast("Crea primero una campaña: la liquidación se hace por campaña.");
+      return null;
+    }
     return {
       id: App.$("liqId").value || null,
       agricultorId: parseInt(agricultorId, 10),
-      campanaId: campana ? parseInt(campana, 10) : null,
+      campanaId: parseInt(campana, 10),
       desde,
       hasta,
       precioCaja: App.num(App.$("liqPrecioCaja").value),

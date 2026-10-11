@@ -1,7 +1,7 @@
 # Guía de uso — Gestión de Bimi
 
-Guía breve de las funciones nuevas: plantas y rendimiento, control de cajas,
-palets y cartas de porte, y liquidaciones y facturas.
+Guía breve de las funciones: plantas y rendimiento, control de cajas, y
+liquidaciones y facturas.
 
 Los nombres entre comillas son los botones tal y como salen en la app.
 
@@ -24,7 +24,7 @@ falte y no borra nada.
    perdida. Son los que propone cada liquidación (se pueden cambiar en cada
    una).
 3. **IVA / compensación (%).**
-4. **Series de numeración:** las iniciales de cada documento (LIQ, F, P, CP).
+4. **Series de numeración:** las iniciales de cada documento (LIQ, F).
    Cámbialas antes de crear el primero; luego es mejor no tocarlas.
 
 Y en cada agricultor, «Editar» → **Datos fiscales**: NIF, dirección e IBAN.
@@ -44,14 +44,9 @@ agricultor, campaña, ciclo, fecha y nº de plantas.
 Si el agricultor retira plantas en varias veces dentro del mismo ciclo,
 anota cada una: se suman solas.
 
-**Ver el rendimiento:**
-
-- En la ficha del agricultor, en el panel «📈 Rendimiento por ciclo»: una
-  tarjeta por ciclo con plantas, cajas, cajas/planta, días de ciclo y fechas.
-- En «📈 Rendimientos», el informe de todos, filtrable por agricultor,
-  campaña y ciclo. Las filas en **ámbar** son ciclos a los que les falta un
-  lado del cálculo: o no tienen plantas anotadas, o todavía no han metido
-  cajas.
+**Ver el rendimiento:** en la ficha del agricultor, en el panel
+«📈 Rendimiento por ciclo»: una tarjeta por ciclo con plantas, cajas,
+cajas/planta, días de ciclo y fechas.
 
 **Datos antiguos:** las plantas que ya estaban apuntadas en los registros se
 pasan de golpe con «⬆ Importar de los registros». No duplica lo ya importado,
@@ -91,45 +86,7 @@ No hay que cobrarlas a mano: al hacer la liquidación se descuentan solas.
 
 ---
 
-## 3. Palets y cartas de porte
-
-**Paletizar en la finca:** «🧱 Palets» → «+ Nuevo palet» → agricultor,
-fecha, ciclo y nº de cajas. Si salen varios palets iguales, pon cuántos en
-**«Crear varios palets iguales»** y se crean todos de golpe, cada uno con su
-código.
-
-Un palet nace **pendiente de carga**: sigue contando como stock en cámara.
-
-**Dar salida al cargar el camión:**
-
-1. En «🧱 Palets», marca los palets que se cargan (o usa
-   «☑ Marcar / desmarcar»). Los que ya tienen salida salen bloqueados.
-2. Pulsa «🚚 Dar salida». Arriba se ve cuántos palets y cuántas cajas son.
-3. Elige la carta de porte, o créala ahí mismo con
-   «+ Nueva carta de porte» (fecha, transportista, matrícula, remolque y
-   destino).
-
-Una carta de porte puede llevar palets de **varios agricultores**.
-
-**Imprimir la carta de porte:** «🚚 Cartas de porte» → «🖨 Imprimir». Sale
-agrupada por agricultor, con el detalle de palets, los totales y los huecos
-de firma.
-
-**Corregir un error:** en el listado de palets, «Quitar de la carta» devuelve
-el palet a pendiente de carga. Si borras una carta de porte, todos sus palets
-vuelven a pendientes.
-
-**Cajas en cámara:** «📦 Cajas en cámara» muestra por separado las salidas
-apuntadas a mano en el registro y las salidas por carta de porte:
-
-    en cámara = entradas − salidas del registro − salidas por carta de porte
-
-Si empiezas a usar cartas de porte, deja de rellenar «Nº Cajas Salidas» a
-mano para no descontar dos veces lo mismo.
-
----
-
-## 4. Liquidaciones y facturas
+## 3. Liquidaciones y facturas
 
 Una liquidación coge los registros de **un** agricultor entre dos fechas que
 todavía no se le han pagado, y calcula:
@@ -174,7 +131,7 @@ tabla del agricultor los sigue agrupando por factura como siempre.
 
 **Sacar el PDF:** abre la liquidación o la factura y pulsa «🖨 Imprimir». En
 el diálogo del navegador, elige **«Guardar como PDF»** en vez de una
-impresora. Funciona igual con las cartas de porte.
+impresora.
 
 **Un registro solo entra en una liquidación.** En la tabla del agricultor los
 ya liquidados salen marcados como **Liquidado** y su botón pasa a
@@ -184,22 +141,77 @@ factura).
 
 ---
 
+## 4. Puesto de la báscula
+
+Junto a la báscula hay una tablet (u ordenador) con la página
+**bascula.html** (la misma dirección de la app, cambiando el final por
+`bascula.html`). Sirve para apuntar las cajas en el momento en que se pesan.
+
+**La primera vez:** entrar con el usuario de la báscula. La sesión se queda
+abierta: no se cierra a los 20 minutos ni al apagar la pantalla. Conviene
+añadirla a la pantalla de inicio de la tablet.
+
+**Apuntar una entrada:**
+
+1. Arriba, comprueba la **campaña** (se queda recordada en la tablet).
+2. Toca el **agricultor**, o escribe su código o nombre en el buscador
+   (con el código y «Intro» se elige directamente).
+3. Toca el **ciclo**. Se propone el último que se le apuntó.
+4. Teclea las **cajas entradas**. Si se lleva cajas vacías, toca el
+   recuadro **«Vacías que se lleva»** y teclea cuántas (si no, se queda en 0).
+   El teclado escribe en el recuadro marcado en azul. Se puede apuntar solo
+   vacías, sin cajas entradas.
+5. Pulsa «✓ Registrar», o «🖨 Registrar e imprimir» si el agricultor
+   tiene que firmar el justificante. Sale un aviso verde y la pantalla
+   queda lista para el siguiente.
+
+**Justificante:** salen **dos copias**, cada una en su página (en la
+impresora de tickets, dos tickets seguidos, sin cortar nada): la 1 es la
+«Copia para el agricultor» y la 2 la «Copia para la empresa». Cada una lleva
+el nombre del agricultor, el ciclo, las cajas entradas, las cajas vacías
+retiradas, la fecha y hora, y el hueco para la firma. Para volver a
+imprimir uno, pulsa 🖨 en su línea de la columna **Hoy**. Si se guarda como
+PDF, el archivo ya se llama con el agricultor, la fecha y la hora (por
+ejemplo «Justificante José Pérez 2026-10-08 10.32.pdf»). La primera vez,
+en el diálogo de impresión elige la impresora y que se recuerde.
+
+**Si se va la red:** se puede seguir apuntando (e imprimiendo) igual. Arriba
+sale un aviso naranja y las entradas aparecen en **Hoy** como
+«⏳ pendiente de envío». Al volver la conexión se envían solas, sin hacer
+nada. Mientras haya pendientes, **no cierres la sesión ni borres los datos
+del navegador** de la tablet: es donde están guardadas. Si alguna entrada
+no se puede guardar (por ejemplo, la tablet tiene mal la hora), sale en rojo
+con «Reintentar» y «Descartar».
+
+Si por error se apunta lo mismo dos veces seguidas al mismo agricultor, la
+tablet pregunta antes de guardar.
+
+**Corregir:** en la columna **Hoy** está todo lo apuntado en el día, con
+«Anular» en cada línea. Solo se puede anular lo del mismo día y que no esté
+liquidado; lo demás se corrige desde la oficina, en la ficha del agricultor,
+donde esos registros salen marcados con **⚖ Báscula**.
+
+Cada entrada es un registro normal (fecha de hoy, ciclo, nº de cajas
+entradas y cajas vacías retiradas), así que cuenta para el rendimiento y las liquidaciones sin hacer
+nada más; las vacías cuentan en el control de cajas vacías. **No vuelvas a apuntar a mano en la oficina
+lo que ya se metió en la báscula**, o se contará dos veces.
+
+El usuario de la báscula solo puede hacer esto: no ve facturas, importes ni
+datos de los agricultores.
+
+---
+
 ## Referencia rápida
 
 | Botón | Para qué |
 | --- | --- |
-| 📈 Rendimientos | Cajas por planta de todos los agricultores y ciclos |
 | 🌱 Plantas retiradas | Anotar y consultar las plantas de cada ciclo |
-| 📦 Cajas en cámara | Stock pendiente de salida por agricultor |
 | ⚖ Control de cajas | Descuadres de cajas vacías y lo que hay que cobrar |
-| 🧱 Palets | Paletizar y dar salida a los palets |
-| 🚚 Cartas de porte | Documentos de salida, imprimibles |
 | 🧾 Liquidaciones | Liquidar por fechas y generar facturas |
 | ⚙ Ajustes | Emisor, precios, IVA y series de numeración |
 | 🔎 Buscar campaña | Registros de todos los agricultores de una campaña |
 
-En la ficha de un agricultor, «🌱 Plantas retiradas», «🧱 Palets» y
-«🧾 Liquidaciones» abren lo mismo pero ya filtrado por él.
+En la ficha de un agricultor, «🌱 Plantas retiradas» y «🧾 Liquidaciones» abren lo mismo pero ya filtrado por él.
 
 Todos los listados tienen «⬇ Export» para bajarlos a Excel con los filtros
 que tengas puestos.
@@ -211,10 +223,12 @@ que tengas puestos.
 - **Ninguna fecha admite días futuros.** El calendario los bloquea y, si se
   escriben a mano, la app avisa y no guarda.
 - **La sesión se cierra a los 20 minutos sin actividad.** Es normal tener que
-  volver a entrar después de comer.
+  volver a entrar después de comer. (La tablet de la báscula no se cierra.)
 - **Cinco intentos fallidos de contraseña bloquean el acceso 24 horas.**
 - **Al cerrar un formulario con datos escritos sin guardar, pregunta antes de
   descartarlos.**
 - **Eliminar un agricultor borra todos sus registros.** No se puede deshacer.
-- **Eliminar una campaña no borra registros:** solo les deja el campo Campaña
-  en blanco.
+- **Todo va con campaña y ciclo.** Al anotar algo sale elegida la campaña
+  más reciente (ahora la 26/27) y el ciclo 1; cámbialos si no son esos.
+- **Una campaña con datos no se puede eliminar.** Solo se borran campañas
+  vacías.

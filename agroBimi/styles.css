@@ -606,6 +606,48 @@ button:disabled {
 .tabla-registros tr.falta-plantas td,
 .tabla-registros tr.falta-cajas td { background: rgba(217, 119, 6, .1); }
 .tabla-registros tr.palet-pendiente td { background: rgba(217, 119, 6, .07); }
+.tabla-registros tr.palet-salido td { color: var(--muted); }
+.tabla-registros .col-lineas { white-space: nowrap; line-height: 1.6; }
+
+/* ---- Cámara: ocupación ---- */
+.camara-ocupacion {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 14px;
+  --barra: var(--success);
+}
+.camara-ocupacion.casi-llena { --barra: #d97706; }
+.camara-ocupacion.llena { --barra: var(--danger); }
+.camara-ocupacion-cab {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 14px;
+  margin-bottom: 8px;
+}
+.camara-ocupacion-titulo { color: var(--muted); font-size: .78rem; text-transform: uppercase; letter-spacing: .03em; }
+.camara-ocupacion-cab b { font-size: 1.5rem; }
+.camara-libres { margin-left: auto; font-weight: 700; color: var(--barra); }
+.camara-barra { height: 12px; border-radius: 6px; background: var(--bg); overflow: hidden; }
+.camara-barra > div { height: 100%; width: 0; background: var(--barra); transition: width .3s; }
+
+/* ---- Paletizar: cajas por agricultor ---- */
+.tabla-lineas-palet { margin-bottom: 14px; }
+.tabla-lineas-palet tfoot th { text-align: left; border-top: 1px solid var(--border); padding: 8px 10px; }
+.tabla-lineas-palet tfoot th.col-num { text-align: right; font-size: 1.05rem; }
+.col-linea-palet { white-space: nowrap; }
+.input-linea-palet {
+  width: 80px;
+  font: inherit;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--card);
+  color: var(--text);
+  text-align: right;
+  margin-right: 6px;
+}
 .cajas-fila.cajas-descuadre b { color: var(--danger); }
 
 /* ---- Casillas en línea y bloques plegables de formulario ---- */
@@ -683,7 +725,7 @@ button:disabled {
 }
 
 /* =================================================================== */
-/*  Documentos imprimibles (factura y carta de porte)                  */
+/*  Documentos imprimibles (factura)                                   */
 /*  ------------------------------------------------------------------ */
 /*  #zonaImpresion está oculto en pantalla; al imprimir se oculta todo  */
 /*  lo demás y solo sale el documento. Desde el diálogo del navegador   */

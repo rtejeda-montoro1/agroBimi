@@ -158,10 +158,13 @@
         const liquidado = r.liquidacion_id
           ? '<span class="badge badge-ok badge-mini" title="Registro ya incluido en una liquidación">Liquidado</span>'
           : "";
+        const bascula = r.origen === "bascula"
+          ? ' <span class="badge badge-mini" title="Apuntado desde la tablet de la báscula">⚖ Báscula</span>'
+          : "";
 
         return `
         <tr${attrs}>
-          <td>${App.formatearFecha(r.fecha)}</td>
+          <td>${App.formatearFecha(r.fecha)}${bascula}</td>
           <td>${App.valor(App.campanaNombre(r.campana_id))}</td>
           <td>${App.valor(r.ciclo)}</td>
           <td class="col-cajas">${cajasBtn}</td>
@@ -196,15 +199,16 @@
       App.CAMPOS_REGISTRO.forEach(({ id }) => {
         App.$(id).value = registro[id] ?? "";
       });
-      // El ciclo es un desplegable (1/2/3): normalizamos lo que haya guardado
-      // para que valores antiguos no dejen el campo en blanco sin avisar.
-      App.$("ciclo").value = App.cicloValido(registro.ciclo);
-      App.$("campana_id").value = registro.campana_id ?? "";
+      // El ciclo es un desplegable (1/2/3, nunca vacío): normalizamos lo que
+      // haya guardado y, si no es válido, queda el ciclo 1.
+      App.$("ciclo").value = App.cicloValido(registro.ciclo) || "1";
+      App.ponerCampana(App.$("campana_id"), registro.campana_id);
     } else {
       App.$("modalRegistroTitulo").textContent = "Anadir registro";
       App.$("registroId").value = "";
       App.$("fecha").value = App.hoyISO();
-      App.$("campana_id").value = "";
+      App.$("ciclo").value = "1";
+      App.ponerCampana(App.$("campana_id"));
     }
 
     App.dom.modalRegistro.classList.add("open");
@@ -253,7 +257,11 @@
     }
 
     const campanaSel = App.$("campana_id").value;
-    registro.campana_id = campanaSel ? parseInt(campanaSel, 10) : null;
+    if (!campanaSel) {
+      App.toast("Crea primero una campaña: ningún registro puede ir sin campaña.");
+      return;
+    }
+    registro.campana_id = parseInt(campanaSel, 10);
 
     let error;
     if (id) {

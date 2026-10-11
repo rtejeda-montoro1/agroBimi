@@ -4,18 +4,17 @@
 
 (function initCampanasModule(App) {
   // Todos los desplegables de campaña de la app. Los de filtro llevan
-  // "Todas las campañas" y siguen usables aunque no haya ninguna creada;
-  // los de formulario se deshabilitan si no hay campañas que elegir.
+  // "Todas las campañas" y siguen usables aunque no haya ninguna creada.
+  // Los "obligatorios" no tienen opción vacía: nada se guarda sin campaña,
+  // así que salen con la campaña por defecto elegida (y se deshabilitan si
+  // no hay ninguna).
   const SELECTS_CAMPANA = [
-    { id: "campana_id",           textoVacio: "(Sin campaña)",          deshabilitarSiVacio: true },
-    { id: "selBuscarCampana",     textoVacio: "— Elige una campaña —",  deshabilitarSiVacio: true },
-    { id: "plantaCampana",        textoVacio: "(Sin campaña)" },
-    { id: "paletCampana",         textoVacio: "(Sin campaña)" },
-    { id: "liqCampana",           textoVacio: "(Todas las campañas)" },
+    { id: "campana_id",           obligatorio: true },
+    { id: "selBuscarCampana",     obligatorio: true },
+    { id: "plantaCampana",        obligatorio: true },
+    { id: "liqCampana",           obligatorio: true },
     { id: "filtroCampanaPlantas", textoVacio: "Todas las campañas" },
-    { id: "filtroCampanaRend",    textoVacio: "Todas las campañas" },
     { id: "filtroCampanaCajas",   textoVacio: "Todas las campañas" },
-    { id: "filtroCampanaPalets",  textoVacio: "Todas las campañas" },
     { id: "filtroCampanaLiq",     textoVacio: "Todas las campañas" },
   ];
 
@@ -34,22 +33,41 @@
     SELECTS_CAMPANA.forEach((cfg) => poblarSelectCampanas(App.$(cfg.id), cfg));
   }
 
-  function poblarSelectCampanas(sel, { textoVacio, deshabilitarSiVacio = false } = {}) {
+  // Campaña que se propone por defecto: la más reciente (la de mayor id,
+  // el mismo criterio que la báscula). "" si no hay ninguna.
+  function campanaPorDefecto() {
+    const ids = App.state.campanasActuales.map((c) => c.id);
+    return ids.length ? String(Math.max(...ids)) : "";
+  }
+
+  // Elige una campaña en un desplegable obligatorio; si no existe (o no se
+  // indica), deja la campaña por defecto.
+  function ponerCampana(sel, campanaId) {
+    if (!sel) return;
+    sel.value = campanaId == null ? "" : String(campanaId);
+    if (!sel.value) sel.value = campanaPorDefecto();
+  }
+
+  function poblarSelectCampanas(sel, { textoVacio, obligatorio = false } = {}) {
     if (!sel) return;
 
     const hay = App.state.campanasActuales.length > 0;
     // Conservamos la selección: recargar las campañas no debe perder el
     // filtro que el usuario tenía puesto.
     const anterior = sel.value;
-    const etiquetaVacia = hay ? (textoVacio || "(Sin campaña)") : "No hay campañas";
+    const opciones = App.state.campanasActuales
+      .map((c) => `<option value="${c.id}">${App.escapar(c.nombre)}</option>`)
+      .join("");
 
-    sel.innerHTML =
-      `<option value="">${App.escapar(etiquetaVacia)}</option>` +
-      App.state.campanasActuales
-        .map((c) => `<option value="${c.id}">${App.escapar(c.nombre)}</option>`)
-        .join("");
+    if (obligatorio) {
+      sel.innerHTML = hay ? opciones : '<option value="">No hay campañas</option>';
+      sel.disabled = !hay;
+      ponerCampana(sel, anterior);
+      return;
+    }
 
-    sel.disabled = deshabilitarSiVacio && !hay;
+    const etiquetaVacia = hay ? (textoVacio || "Todas las campañas") : "No hay campañas";
+    sel.innerHTML = `<option value="">${App.escapar(etiquetaVacia)}</option>` + opciones;
     if (anterior) sel.value = anterior;
   }
 
@@ -97,9 +115,6 @@
     // Si editamos desde el buscador, conservamos la campaña seleccionada.
     if (id && App.dom.modalBuscarCampana.classList.contains("open")) {
       App.$("selBuscarCampana").value = id;
-      const hay = Boolean(App.$("selBuscarCampana").value);
-      App.$("btnEditarCampana").disabled = !hay;
-      App.$("btnEliminarCampana").disabled = !hay;
       App.state.campanaBuscadaNombre = nombre; // refleja el nombre nuevo en el export
     }
   }
@@ -121,26 +136,28 @@
 
     const ok = confirm(
       `¿Eliminar la campaña "${campana.nombre}"?\n\n` +
-      "El campo Campaña quedará en blanco en todos los registros que la usaban. " +
-      "Esta acción no se puede deshacer."
+      "Solo se puede eliminar si no la usa ningún registro, retirada de plantas " +
+      "ni liquidación. Esta acción no se puede deshacer."
     );
     if (!ok) return;
 
     const { error } = await App.db.from("campanas").delete().eq("id", campana.id);
     if (error) {
-      App.toast("Error: " + error.message);
+      // 23514: la BD no admite datos sin campaña, así que no deja borrar
+      // una campaña que todavía se usa.
+      App.toast(error.code === "23514"
+        ? "No se puede eliminar: hay datos en esta campaña."
+        : "Error: " + error.message);
       return;
     }
 
     App.toast("Campaña eliminada");
-    await cargarCampanas();
-    resetearBuscador();
+    await mostrarCampanaPorDefecto();
   }
 
   function resetearBuscador() {
     App.$("cuerpoBuscarCampana").innerHTML = "";
     App.actualizarContador("countBuscarCampana", 0, "registro", "registros");
-    App.$("selBuscarCampana").value = "";
     App.state.registrosCampanaActuales = [];
     App.state.campanaBuscadaNombre = "";
     App.$("btnExportCampana").disabled = true;
@@ -148,12 +165,20 @@
     App.$("btnEliminarCampana").disabled = true;
   }
 
-  async function abrirBuscarCampana() {
+  // El buscador abre directamente con la campaña por defecto ya buscada.
+  async function mostrarCampanaPorDefecto() {
     resetearBuscador();
+    await cargarCampanas();
+    const sel = App.$("selBuscarCampana");
+    ponerCampana(sel, campanaPorDefecto());
+    await buscarPorCampana({ target: sel });
+  }
+
+  async function abrirBuscarCampana() {
     App.dom.modalBuscarCampana.classList.add("open");
     // Refrescamos las campañas por si la carga inicial (al iniciar sesión)
     // fue lenta o falló y el select quedó sin opciones.
-    await cargarCampanas();
+    await mostrarCampanaPorDefecto();
   }
 
   async function buscarPorCampana(e) {
@@ -253,6 +278,8 @@
   Object.assign(App, {
     cargarCampanas,
     poblarSelectCampanas,
+    campanaPorDefecto,
+    ponerCampana,
     configurarEventosCampanas,
   });
 })(window.App);

@@ -56,12 +56,9 @@
   // Desplegables de agricultor de la app (formularios y filtros).
   const SELECTS_AGRICULTOR = [
     { id: "plantaAgricultor",       textoVacio: "— Elige un agricultor —" },
-    { id: "paletAgricultor",        textoVacio: "— Elige un agricultor —" },
     { id: "liqAgricultor",          textoVacio: "— Elige un agricultor —" },
     { id: "filtroAgriPlantas",      textoVacio: "Todos los agricultores" },
-    { id: "filtroAgriRend",         textoVacio: "Todos los agricultores" },
     { id: "filtroAgriCajas",        textoVacio: "Todos los agricultores" },
-    { id: "filtroAgriPalets",       textoVacio: "Todos los agricultores" },
     { id: "filtroAgriLiq",          textoVacio: "Todos los agricultores" },
   ];
 

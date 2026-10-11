@@ -60,12 +60,8 @@
       <!-- Accesos a los informes y a la gestión que no dependen de un
            agricultor concreto. -->
       <nav class="barra-modulos">
-        <button class="btn-modulo" id="btnRendimiento">📈 Rendimientos</button>
         <button class="btn-modulo" id="btnPlantas">🌱 Plantas retiradas</button>
-        <button class="btn-modulo" id="btnCajasCamara">📦 Cajas en cámara</button>
         <button class="btn-modulo" id="btnControlCajas">⚖ Control de cajas</button>
-        <button class="btn-modulo" id="btnPalets">🧱 Palets</button>
-        <button class="btn-modulo" id="btnCartasPorte">🚚 Cartas de porte</button>
         <button class="btn-modulo" id="btnLiquidaciones">🧾 Liquidaciones</button>
         <button class="btn-modulo" id="btnAjustes">⚙ Ajustes</button>
       </nav>
@@ -91,7 +87,6 @@
 
       <div class="barra-modulos">
         <button class="btn-modulo" id="btnPlantasAgricultor">🌱 Plantas retiradas</button>
-        <button class="btn-modulo" id="btnPaletsAgricultor">🧱 Palets</button>
         <button class="btn-modulo" id="btnLiquidarAgricultor">🧾 Liquidaciones</button>
       </div>
 
@@ -236,7 +231,6 @@
             <label for="ciclo">Ciclo</label>
             <!-- Solo se admiten los ciclos 1, 2 y 3 -->
             <select id="ciclo">
-              <option value="">(Sin ciclo)</option>
               <option value="1">Ciclo 1</option>
               <option value="2">Ciclo 2</option>
               <option value="3">Ciclo 3</option>
@@ -390,7 +384,6 @@
           <div class="field">
             <label for="plantaCiclo">Ciclo</label>
             <select id="plantaCiclo">
-              <option value="">(Sin ciclo)</option>
               <option value="1">Ciclo 1</option>
               <option value="2">Ciclo 2</option>
               <option value="3">Ciclo 3</option>
@@ -418,75 +411,6 @@
           <button type="submit" class="btn-primary">Guardar</button>
         </div>
       </form>
-    </div>
-  </div>
-
-  <!-- ============================================================= -->
-  <!--  Modal: Informe de rendimiento                                -->
-  <!-- ============================================================= -->
-  <div class="modal-backdrop" id="modalRendimiento">
-    <div class="modal modal-xl">
-      <h2>📈 Rendimiento por agricultor y ciclo</h2>
-      <p class="sub-modal">
-        Rendimiento = cajas de bimi entradas ÷ plantas retiradas. Las filas en
-        ámbar tienen un lado del cálculo sin anotar todavía.
-      </p>
-
-      <div class="toolbar toolbar-filtros">
-        <div class="field">
-          <label for="filtroAgriRend">Agricultor</label>
-          <select id="filtroAgriRend"></select>
-        </div>
-        <div class="field">
-          <label for="filtroCampanaRend">Campaña</label>
-          <select id="filtroCampanaRend"></select>
-        </div>
-        <div class="field">
-          <label for="filtroCicloRend">Ciclo</label>
-          <select id="filtroCicloRend">
-            <option value="">Todos los ciclos</option>
-            <option value="1">Ciclo 1</option>
-            <option value="2">Ciclo 2</option>
-            <option value="3">Ciclo 3</option>
-          </select>
-        </div>
-      </div>
-
-      <div class="tarjetas-totales">
-        <div><span>Plantas</span><b id="rendTotalPlantas">0</b></div>
-        <div><span>Cajas</span><b id="rendTotalCajas">0</b></div>
-        <div class="destacada"><span>Cajas por planta</span><b id="rendMedio">—</b></div>
-      </div>
-
-      <div class="summary">
-        <span class="count" id="countRendimiento">0 ciclos</span>
-      </div>
-
-      <div class="tabla-wrap">
-        <table class="tabla-registros">
-          <thead>
-            <tr>
-              <th>Agricultor</th>
-              <th>Campaña</th>
-              <th>Ciclo</th>
-              <th class="col-num">Plantas</th>
-              <th>1ª Retirada</th>
-              <th class="col-num">Cajas</th>
-              <th class="col-num">Cajas netas</th>
-              <th>Última entrada</th>
-              <th class="col-num">Días</th>
-              <th class="col-num">Cajas/planta</th>
-              <th class="col-num">Plantas/caja</th>
-            </tr>
-          </thead>
-          <tbody id="cuerpoRendimiento"></tbody>
-        </table>
-      </div>
-
-      <div class="modal-actions">
-        <button type="button" class="btn-ghost" data-cerrar="modalRendimiento">Cerrar</button>
-        <button type="button" class="btn-primary" id="btnExportRendimiento" disabled>⬇ Export</button>
-      </div>
     </div>
   </div>
 
@@ -559,249 +483,6 @@
         <button type="button" class="btn-ghost" data-cerrar="modalCajas">Cerrar</button>
         <button type="button" class="btn-primary" id="btnExportCajas" disabled>⬇ Export</button>
       </div>
-    </div>
-  </div>
-
-  <!-- ============================================================= -->
-  <!--  Modal: Palets                                                -->
-  <!-- ============================================================= -->
-  <div class="modal-backdrop" id="modalPalets">
-    <div class="modal modal-xl">
-      <h2>🧱 Palets</h2>
-      <p class="sub-modal">
-        Las cajas se paletizan en la finca del agricultor. Un palet queda
-        <b>pendiente de carga</b> hasta que se marca y se le da salida en una
-        carta de porte.
-      </p>
-
-      <div class="toolbar toolbar-filtros">
-        <div class="field">
-          <label for="filtroAgriPalets">Agricultor</label>
-          <select id="filtroAgriPalets"></select>
-        </div>
-        <div class="field">
-          <label for="filtroCampanaPalets">Campaña</label>
-          <select id="filtroCampanaPalets"></select>
-        </div>
-        <div class="field">
-          <label for="filtroEstadoPalets">Estado</label>
-          <select id="filtroEstadoPalets">
-            <option value="">Todos</option>
-            <option value="pendiente">Pendientes de carga</option>
-            <option value="cargado">Cargados</option>
-          </select>
-        </div>
-        <div class="field">
-          <label for="filtroCartaPalets">Carta de porte</label>
-          <select id="filtroCartaPalets"></select>
-        </div>
-        <div class="field">
-          <label for="filtroDesdePalets">Desde</label>
-          <input type="date" id="filtroDesdePalets" />
-        </div>
-        <div class="field">
-          <label for="filtroHastaPalets">Hasta</label>
-          <input type="date" id="filtroHastaPalets" />
-        </div>
-      </div>
-
-      <div class="tarjetas-totales">
-        <div><span>Palets</span><b id="paletsTotalPalets">0</b></div>
-        <div><span>Cajas</span><b id="paletsTotalCajas">0</b></div>
-        <div class="destacada"><span>Pendientes de carga</span><b id="paletsPendientes">0</b></div>
-      </div>
-
-      <div class="campana-acciones">
-        <button type="button" class="btn-primary" id="btnNuevoPalet">+ Nuevo palet</button>
-        <button type="button" class="btn-ghost" id="btnMarcarTodosPalets">☑ Marcar / desmarcar</button>
-        <button type="button" class="btn-primary" id="btnAsignarCarta" disabled>🚚 Dar salida</button>
-        <button type="button" class="btn-ghost" id="btnCartasPorteDesdePalets">🚚 Cartas de porte</button>
-      </div>
-
-      <div class="summary">
-        <span class="count" id="countPalets">0 palets</span>
-      </div>
-
-      <div class="tabla-wrap">
-        <table class="tabla-registros">
-          <thead>
-            <tr>
-              <th class="col-check"></th>
-              <th>Palet</th>
-              <th>Fecha</th>
-              <th>Agricultor</th>
-              <th>Campaña</th>
-              <th>Ciclo</th>
-              <th class="col-num">Cajas</th>
-              <th>Salida</th>
-              <th class="col-acciones">Acciones</th>
-            </tr>
-          </thead>
-          <tbody id="cuerpoPalets"></tbody>
-        </table>
-      </div>
-
-      <div class="modal-actions">
-        <button type="button" class="btn-ghost" data-cerrar="modalPalets">Cerrar</button>
-        <button type="button" class="btn-primary" id="btnExportPalets" disabled>⬇ Export</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ============================================================= -->
-  <!--  Modal: Alta / edición de un palet                            -->
-  <!-- ============================================================= -->
-  <div class="modal-backdrop modal-nivel2" id="modalPalet">
-    <div class="modal">
-      <h2 id="modalPaletTitulo">Nuevo palet</h2>
-      <form id="formPalet">
-        <input type="hidden" id="paletId" />
-        <div class="grid-campos">
-          <div class="field campo-ancho">
-            <label for="paletAgricultor">Agricultor *</label>
-            <select id="paletAgricultor" required></select>
-          </div>
-          <div class="field">
-            <label for="paletCampana">Campaña</label>
-            <select id="paletCampana"></select>
-          </div>
-          <div class="field">
-            <label for="paletCiclo">Ciclo</label>
-            <select id="paletCiclo">
-              <option value="">(Sin ciclo)</option>
-              <option value="1">Ciclo 1</option>
-              <option value="2">Ciclo 2</option>
-              <option value="3">Ciclo 3</option>
-            </select>
-          </div>
-          <div class="field">
-            <label for="paletFecha">Fecha de paletizado *</label>
-            <input type="date" id="paletFecha" required />
-          </div>
-          <div class="field">
-            <label for="paletCajas">Nº Cajas *</label>
-            <input type="number" id="paletCajas" min="1" step="1" required placeholder="0" />
-          </div>
-          <div class="field" id="campoPaletRepetir">
-            <label for="paletRepetir">Crear varios palets iguales</label>
-            <input type="number" id="paletRepetir" min="1" max="50" step="1" value="1" />
-          </div>
-          <div class="field campo-ancho">
-            <label for="paletComentarios">Comentarios</label>
-            <textarea id="paletComentarios" rows="2" placeholder="Opcional"></textarea>
-          </div>
-        </div>
-        <div class="modal-actions">
-          <button type="button" class="btn-ghost" data-cerrar="modalPalet">Cancelar</button>
-          <button type="submit" class="btn-primary">Guardar</button>
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <!-- ============================================================= -->
-  <!--  Modal: Dar salida (asignar palets a una carta de porte)      -->
-  <!-- ============================================================= -->
-  <div class="modal-backdrop modal-nivel2" id="modalAsignarCarta">
-    <div class="modal">
-      <h2>🚚 Dar salida a los palets marcados</h2>
-      <p class="sub-modal">Se van a cargar: <b id="asignarResumen">—</b></p>
-      <div class="field">
-        <label for="selAsignarCarta">Carta de porte *</label>
-        <select id="selAsignarCarta"></select>
-      </div>
-      <div class="campana-acciones">
-        <button type="button" class="btn-ghost" id="btnNuevaCartaDesdeAsignar">+ Nueva carta de porte</button>
-      </div>
-      <div class="modal-actions">
-        <button type="button" class="btn-ghost" data-cerrar="modalAsignarCarta">Cancelar</button>
-        <button type="button" class="btn-primary" id="btnConfirmarAsignar">Dar salida</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ============================================================= -->
-  <!--  Modal: Cartas de porte (listado)                             -->
-  <!-- ============================================================= -->
-  <div class="modal-backdrop" id="modalCartasPorte">
-    <div class="modal modal-xl">
-      <h2>🚚 Cartas de porte</h2>
-      <p class="sub-modal">
-        Documento de salida de la mercancía. Una carta de porte puede llevar
-        palets de varios agricultores.
-      </p>
-
-      <div class="campana-acciones">
-        <button type="button" class="btn-primary" id="btnNuevaCartaPorte">+ Nueva carta de porte</button>
-      </div>
-
-      <div class="summary">
-        <span class="count" id="countCartasPorte">0 cartas de porte</span>
-      </div>
-
-      <div class="tabla-wrap">
-        <table class="tabla-registros">
-          <thead>
-            <tr>
-              <th>Nº</th>
-              <th>Fecha</th>
-              <th>Transportista</th>
-              <th>Matrícula</th>
-              <th>Destino</th>
-              <th class="col-num">Palets</th>
-              <th class="col-num">Cajas</th>
-              <th class="col-acciones">Acciones</th>
-            </tr>
-          </thead>
-          <tbody id="cuerpoCartasPorte"></tbody>
-        </table>
-      </div>
-
-      <div class="modal-actions">
-        <button type="button" class="btn-ghost" data-cerrar="modalCartasPorte">Cerrar</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ============================================================= -->
-  <!--  Modal: Alta / edición de una carta de porte                  -->
-  <!-- ============================================================= -->
-  <div class="modal-backdrop modal-nivel3" id="modalCartaPorte">
-    <div class="modal">
-      <h2 id="modalCartaPorteTitulo">Nueva carta de porte</h2>
-      <form id="formCartaPorte">
-        <input type="hidden" id="cartaId" />
-        <div class="grid-campos">
-          <div class="field">
-            <label for="cartaFecha">Fecha *</label>
-            <input type="date" id="cartaFecha" required />
-          </div>
-          <div class="field">
-            <label for="cartaTransportista">Transportista</label>
-            <input type="text" id="cartaTransportista" placeholder="Opcional" />
-          </div>
-          <div class="field">
-            <label for="cartaMatricula">Matrícula</label>
-            <input type="text" id="cartaMatricula" placeholder="Opcional" />
-          </div>
-          <div class="field">
-            <label for="cartaRemolque">Remolque</label>
-            <input type="text" id="cartaRemolque" placeholder="Opcional" />
-          </div>
-          <div class="field campo-ancho">
-            <label for="cartaDestino">Destino</label>
-            <input type="text" id="cartaDestino" placeholder="Opcional" />
-          </div>
-          <div class="field campo-ancho">
-            <label for="cartaObservaciones">Observaciones</label>
-            <textarea id="cartaObservaciones" rows="2" placeholder="Opcional"></textarea>
-          </div>
-        </div>
-        <div class="modal-actions">
-          <button type="button" class="btn-ghost" data-cerrar="modalCartaPorte">Cancelar</button>
-          <button type="submit" class="btn-primary">Guardar</button>
-        </div>
-      </form>
     </div>
   </div>
 
@@ -907,7 +588,7 @@
             <input type="date" id="liqHasta" required />
           </div>
           <div class="field campo-ancho">
-            <label for="liqCampana">Campaña (opcional: limita los registros)</label>
+            <label for="liqCampana">Campaña *</label>
             <select id="liqCampana"></select>
           </div>
           <div class="field">
@@ -1054,42 +735,6 @@
   </div>
 
   <!-- ============================================================= -->
-  <!--  Modal: Cajas en cámara (total por agricultor)                -->
-  <!-- ============================================================= -->
-  <div class="modal-backdrop" id="modalCamara">
-    <div class="modal modal-xl">
-      <h2>📦 Cajas en cámara por agricultor</h2>
-      <p class="sub-modal">
-        En cámara = Entradas − Salidas del registro − Salidas por carta de porte.
-        Los palets pendientes de carga siguen contando como stock en cámara.
-      </p>
-      <div class="total-destacado">
-        <span class="total-etiqueta">Total en cámara (todos los agricultores)</span>
-        <span class="total-valor" id="totalCamaraGlobal">0</span>
-      </div>
-      <div class="tabla-wrap">
-        <table class="tabla-registros">
-          <thead>
-            <tr>
-              <th>Código</th>
-              <th>Agricultor</th>
-              <th class="col-num">Entradas</th>
-              <th class="col-num">Salidas (registro)</th>
-              <th class="col-num">Salidas (carta porte)</th>
-              <th class="col-num">Palets sin cargar</th>
-              <th class="col-num">En cámara</th>
-            </tr>
-          </thead>
-          <tbody id="cuerpoCamara"></tbody>
-        </table>
-      </div>
-      <div class="modal-actions">
-        <button type="button" class="btn-ghost" data-cerrar="modalCamara">Cerrar</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ============================================================= -->
   <!--  Modal: Ajustes                                               -->
   <!-- ============================================================= -->
   <div class="modal-backdrop" id="modalAjustes">
@@ -1166,14 +811,6 @@
             <div class="field">
               <label for="aj_serie_factura">Facturas</label>
               <input type="text" id="aj_serie_factura" placeholder="F" />
-            </div>
-            <div class="field">
-              <label for="aj_serie_palet">Palets</label>
-              <input type="text" id="aj_serie_palet" placeholder="P" />
-            </div>
-            <div class="field">
-              <label for="aj_serie_carta_porte">Cartas de porte</label>
-              <input type="text" id="aj_serie_carta_porte" placeholder="CP" />
             </div>
           </div>
         </div>
@@ -1265,7 +902,7 @@
   <div class="toast" id="toast"></div>
 
   <!-- Contenedor de impresión: solo se ve al imprimir. Aquí se vuelcan las
-       facturas y las cartas de porte, y desde el diálogo del navegador se
+       facturas, y desde el diálogo del navegador se
        pueden guardar como PDF. -->
   <div id="zonaImpresion" aria-hidden="true"></div>
 
@@ -1282,7 +919,6 @@
   <script src="js/registros.js"></script>
   <script src="js/plantas.js"></script>
   <script src="js/cajas.js"></script>
-  <script src="js/palets.js"></script>
   <script src="js/liquidaciones.js"></script>
   <script src="js/facturas.js"></script>
   <script src="js/reportes.js"></script>
