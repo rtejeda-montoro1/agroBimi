@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <title>Báscula · Gestión de Bimi</title>
+  <link rel="icon" type="image/png" href="logo_web.png" />
+  <link rel="apple-touch-icon" href="logo_web.png" />
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="bascula.css" />
+</head>
+<!--
+  Puesto de la báscula: una tablet u ordenador junto al peso donde se
+  apuntan las cajas que entra cada agricultor y las vacías que se lleva.
+
+  - Entra con el usuario de báscula (ver schema.sql, sección 12). La sesión
+    no caduca: no hay cierre por inactividad como en la app principal.
+  - Ese usuario solo puede apuntar cajas y anular lo apuntado hoy; no ve
+    nada más de la base de datos.
+  - Cada entrada crea un registro con fecha de hoy y origen "bascula", que
+    luego se ve en la ficha del agricultor como cualquier otro.
+  - Sin red se sigue trabajando: las entradas se guardan en la tablet y se
+    envían solas al volver la conexión.
+  - Cada entrada se puede imprimir como justificante con hueco para firma.
+-->
+<body class="bascula">
+  <div class="login-screen" id="loginScreen">
+    <div class="login-box">
+      <h1>⚖ Báscula</h1>
+      <p class="sub">Entra con el usuario de la báscula. La sesión se queda abierta.</p>
+      <form id="loginForm">
+        <div class="field">
+          <label for="email">Email</label>
+          <input type="email" id="email" required autocomplete="username" placeholder="bascula@..." />
+        </div>
+        <div class="field">
+          <label for="password">Contraseña</label>
+          <input type="password" id="password" required autocomplete="current-password" placeholder="••••••••" />
+        </div>
+        <div class="login-error" id="loginError"></div>
+        <button type="submit" class="btn-primary" id="btnLogin">Entrar</button>
+      </form>
+    </div>
+  </div>
+
+  <header class="bascula-cab">
+    <div class="brand">
+      <img src="logo_web.png" alt="AgroBimi" class="logo" />
+      <div>
+        <h1>⚖ Báscula</h1>
+        <p id="fechaHoy"></p>
+      </div>
+    </div>
+    <div class="bascula-cab-dcha">
+      <label class="bascula-campana">
+        <span>Campaña</span>
+        <select id="selCampana"></select>
+      </label>
+      <span class="estado-red" id="estadoRed" title="Conexión y entradas pendientes de envío">● En línea</span>
+      <button class="btn-ghost-claro" id="btnSalir" title="Cerrar la sesión de la báscula">Salir</button>
+    </div>
+  </header>
+
+  <!-- Avisos de conexión y de entradas sin enviar -->
+  <div class="bascula-aviso" id="avisoRed" hidden></div>
+
+  <main class="bascula-main">
+    <!-- 1) Elegir agricultor -->
+    <section class="bascula-panel" id="panelAgricultores">
+      <div class="bascula-paso">1 · Agricultor</div>
+      <input type="search" id="buscar" class="bascula-buscar"
+             placeholder="Buscar por código o nombre…" autocomplete="off" />
+      <div class="agri-grid" id="gridAgricultores"></div>
+    </section>
+
+    <!-- 2) Ciclo y cajas -->
+    <section class="bascula-panel" id="panelEntrada">
+      <div class="bascula-paso">2 · Ciclo y cajas</div>
+
+      <div class="agri-elegido" id="agriElegido">
+        <span class="agri-elegido-vacio">Elige un agricultor</span>
+      </div>
+
+      <div class="ciclos" id="ciclos" role="radiogroup" aria-label="Ciclo">
+        <button type="button" class="ciclo-btn" data-ciclo="1" role="radio">Ciclo 1</button>
+        <button type="button" class="ciclo-btn" data-ciclo="2" role="radio">Ciclo 2</button>
+        <button type="button" class="ciclo-btn" data-ciclo="3" role="radio">Ciclo 3</button>
+      </div>
+
+      <!-- El teclado escribe en el contador marcado; se cambia tocándolo. -->
+      <div class="contadores" id="contadores">
+        <button type="button" class="cajas-display activo" data-campo="cajas" aria-pressed="true">
+          <small>Cajas entradas</small>
+          <span id="cajasValor" aria-live="polite">0</span>
+        </button>
+        <button type="button" class="cajas-display" data-campo="vacias" aria-pressed="false">
+          <small>Vacías que se lleva</small>
+          <span id="vaciasValor" aria-live="polite">0</span>
+        </button>
+      </div>
+
+      <div class="teclado" id="teclado">
+        <button type="button" data-tecla="7">7</button>
+        <button type="button" data-tecla="8">8</button>
+        <button type="button" data-tecla="9">9</button>
+        <button type="button" data-tecla="4">4</button>
+        <button type="button" data-tecla="5">5</button>
+        <button type="button" data-tecla="6">6</button>
+        <button type="button" data-tecla="1">1</button>
+        <button type="button" data-tecla="2">2</button>
+        <button type="button" data-tecla="3">3</button>
+        <button type="button" data-tecla="C" class="tecla-sec">C</button>
+        <button type="button" data-tecla="0">0</button>
+        <button type="button" data-tecla="⌫" class="tecla-sec" aria-label="Borrar">⌫</button>
+      </div>
+
+      <div class="bascula-error" id="errorEntrada" role="alert"></div>
+      <div class="botones-registrar">
+        <button type="button" class="btn-registrar" id="btnRegistrar" disabled>✓ Registrar</button>
+        <button type="button" class="btn-registrar btn-registrar-imp" id="btnRegistrarImprimir" disabled>🖨 Registrar e imprimir</button>
+      </div>
+    </section>
+
+    <!-- 3) Lo apuntado hoy -->
+    <section class="bascula-panel bascula-hoy">
+      <div class="bascula-paso">
+        Hoy
+        <span class="hoy-total" id="hoyTotal"></span>
+      </div>
+      <ul class="hoy-lista" id="hoyLista"></ul>
+    </section>
+  </main>
+
+  <div class="toast" id="toast"></div>
+
+  <!-- Justificante: oculto en pantalla, es lo único que sale al imprimir. -->
+  <div id="zonaImpresion" aria-hidden="true"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
+  <script src="js/bascula.js"></script>
+</body>
+</html>

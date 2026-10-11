@@ -1,0 +1,307 @@
+/* =====================================================================
+   Puesto de la báscula (bascula.html)
+   Se carga después de styles.css: reutiliza sus colores, el login, los
+   botones y el toast. Aquí solo va lo propio de la tablet: botones
+   grandes para usar con el dedo (o con guantes).
+   ===================================================================== */
+
+body.bascula { min-height: 100vh; }
+body.bascula:not(.authed) .bascula-cab,
+body.bascula:not(.authed) .bascula-main { display: none; }
+
+/* ---- Cabecera ---- */
+.bascula-cab {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 16px;
+}
+.bascula-cab .logo { height: 44px; }
+.bascula-cab p { text-transform: capitalize; }
+.bascula-cab-dcha { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.bascula-campana { display: flex; align-items: center; gap: 8px; font-size: .85rem; }
+.bascula-campana select {
+  font: inherit;
+  font-size: 1rem;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: none;
+  min-width: 140px;
+}
+.estado-red { font-size: .85rem; font-weight: 600; }
+.estado-red.sin-red { color: #fecaca; }
+.bascula-aviso {
+  margin: 14px 16px 0;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(217, 119, 6, .45);
+  background: rgba(217, 119, 6, .12);
+  color: var(--text);
+  font-weight: 600;
+}
+.bascula-aviso[hidden] { display: none; }
+.bascula-aviso.aviso-grave { border-color: rgba(220, 38, 38, .5); background: rgba(220, 38, 38, .1); }
+.bascula-aviso > div + div { margin-top: 4px; }
+
+.btn-ghost-claro {
+  background: rgba(255, 255, 255, .18);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, .4);
+}
+
+/* ---- Distribución: en horizontal tres columnas, en vertical apiladas ---- */
+.bascula-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, .9fr);
+  gap: 14px;
+  padding: 14px 16px;
+  align-items: start;
+}
+@media (max-width: 1100px) {
+  .bascula-main { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .bascula-hoy { grid-column: 1 / -1; }
+}
+@media (max-width: 720px) {
+  .bascula-main { grid-template-columns: minmax(0, 1fr); }
+}
+
+.bascula-panel {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 14px;
+  box-shadow: var(--shadow);
+  min-width: 0;
+}
+.bascula-paso {
+  font-size: .8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--muted);
+  margin-bottom: 10px;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+/* ---- 1 · Agricultores ---- */
+.bascula-buscar {
+  width: 100%;
+  font: inherit;
+  font-size: 1.15rem;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--text);
+  margin-bottom: 12px;
+}
+.agri-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px;
+  max-height: calc(100vh - 230px);
+  overflow-y: auto;
+  padding: 2px;
+}
+.agri-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-height: 72px;
+  padding: 10px 12px;
+  text-align: left;
+  background: var(--bg);
+  color: var(--text);
+  border: 2px solid var(--border);
+  border-radius: 10px;
+}
+.agri-tile-cod { font-size: .8rem; font-weight: 700; color: var(--primary); }
+.agri-tile-nombre { font-weight: 600; line-height: 1.2; overflow-wrap: anywhere; }
+.agri-tile.activo { border-color: var(--primary); background: rgba(37, 99, 235, .12); }
+
+/* ---- 2 · Ciclo y cajas ---- */
+.agri-elegido {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  min-height: 56px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--bg);
+  margin-bottom: 12px;
+}
+.agri-elegido-cod { font-weight: 800; color: var(--primary); font-size: 1.1rem; }
+.agri-elegido-nombre { font-weight: 700; font-size: 1.3rem; flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.agri-elegido-hoy { color: var(--muted); font-size: .85rem; }
+.agri-elegido-vacio { color: var(--muted); font-size: 1.1rem; }
+
+.ciclos { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
+.ciclo-btn {
+  padding: 16px 6px;
+  font-size: 1.1rem;
+  font-weight: 700;
+  background: var(--bg);
+  color: var(--text);
+  border: 2px solid var(--border);
+  border-radius: 10px;
+}
+.ciclo-btn.activo { background: var(--primary); border-color: var(--primary); color: #fff; }
+
+/* Dos contadores (entradas / vacías); el marcado recibe el teclado. */
+.contadores { display: grid; grid-template-columns: 1.4fr 1fr; gap: 8px; margin-bottom: 10px; }
+.cajas-display {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  padding: 8px 14px;
+  background: var(--card);
+  color: var(--text);
+  border: 2px solid var(--border);
+  border-radius: 10px;
+  font-variant-numeric: tabular-nums;
+  touch-action: manipulation;
+}
+.cajas-display small { align-self: flex-start; color: var(--muted); font-size: .85rem; font-weight: 600; }
+.cajas-display span { font-size: 2.6rem; font-weight: 800; line-height: 1.1; }
+.cajas-display[data-campo="vacias"] span { font-size: 2rem; }
+.cajas-display.vacio span { color: var(--muted); }
+.cajas-display.activo { border-color: var(--primary); box-shadow: 0 0 0 2px rgba(37, 99, 235, .25); }
+.cajas-display.activo small { color: var(--primary); }
+
+.teclado { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
+.teclado button {
+  padding: 16px 0;
+  font-size: 1.6rem;
+  font-weight: 700;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  touch-action: manipulation; /* sin zoom por doble toque */
+}
+.teclado button:active { background: var(--border); }
+.teclado .tecla-sec { color: var(--muted); }
+
+.bascula-error { color: var(--danger); font-weight: 600; min-height: 1.4em; margin-bottom: 6px; }
+
+.botones-registrar { display: grid; grid-template-columns: 1fr; gap: 8px; }
+.btn-registrar {
+  width: 100%;
+  padding: 20px;
+  font-size: 1.35rem;
+  font-weight: 800;
+  background: var(--success);
+  color: #fff;
+  border-radius: 12px;
+  touch-action: manipulation;
+}
+.btn-registrar:disabled { background: var(--border); color: var(--muted); }
+.btn-registrar-imp { padding: 14px; font-size: 1.05rem; background: var(--primary); }
+
+/* ---- 3 · Hoy ---- */
+.hoy-total { text-transform: none; letter-spacing: 0; color: var(--text); }
+.hoy-lista {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: calc(100vh - 190px);
+  overflow-y: auto;
+}
+.hoy-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto auto auto;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: .92rem;
+}
+.hoy-item:last-child { border-bottom: none; }
+.hoy-hora { color: var(--muted); font-variant-numeric: tabular-nums; }
+.hoy-agri { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hoy-agri b { color: var(--primary); }
+.hoy-ciclo { color: var(--muted); font-size: .8rem; }
+.hoy-cajas { font-weight: 800; font-variant-numeric: tabular-nums; min-width: 3ch; text-align: right; }
+.hoy-vacias { display: block; font-size: .72rem; font-weight: 600; color: var(--muted); white-space: nowrap; }
+
+/* Entradas guardadas en la tablet y aún sin enviar / rechazadas. */
+.hoy-nota { grid-column: 1 / -1; font-size: .8rem; color: var(--muted); }
+.hoy-pendiente { background: rgba(217, 119, 6, .08); }
+.hoy-pendiente .hoy-nota { color: #b45309; }
+.hoy-rechazada { background: rgba(220, 38, 38, .08); }
+.hoy-rechazada .hoy-nota { color: var(--danger); font-weight: 600; }
+.hoy-rechazada .hoy-nota button { margin-left: 6px; }
+.hoy-antiguas { padding: 8px 0; color: #b45309; font-weight: 600; }
+.hoy-pendiente, .hoy-rechazada { padding-left: 6px; padding-right: 6px; border-radius: 6px; }
+
+/* ---- Justificante impreso ----
+   Salen dos copias, cada una en su página: la 1 para el agricultor y la 2
+   para la empresa. En una impresora de tickets son dos tickets seguidos.
+
+   ===== TAMAÑO DEL PAPEL: ajustar cuando esté la impresora =====
+   Solo hay que tocar --ticket-ancho (abajo) y, si hace falta, el margen
+   de @page:
+     - Tickets de 80 mm ........ --ticket-ancho: 72mm;  margin: 4mm
+     - Tickets de 58 mm ........ --ticket-ancho: 50mm;  margin: 2mm
+     - Folio A4 / A5 ........... --ticket-ancho: 90mm;  margin: 10mm
+   Ahora está en 72 mm: sirve para tickets de 80 mm y en A4 ocupa una franja
+   a la izquierda. */
+:root { --ticket-ancho: 72mm; }
+
+@media print {
+  @page { size: auto; margin: 6mm; }
+
+  .ticket {
+    width: var(--ticket-ancho);
+    break-inside: avoid;
+    page-break-inside: avoid;
+    color: #000;
+    font-size: 10.5pt;
+    line-height: 1.35;
+  }
+  /* La segunda copia empieza en página nueva. */
+  .ticket + .ticket {
+    break-before: page;
+    page-break-before: always;
+  }
+  .ticket-emisor { font-weight: 700; text-align: center; font-size: 11pt; }
+  .ticket h1 {
+    margin: 2mm 0 1mm;
+    font-size: 12pt;
+    text-align: center;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    border-top: 1pt solid #000;
+    border-bottom: 1pt solid #000;
+    padding: 1.5mm 0;
+  }
+  .ticket-fecha { text-align: center; margin-bottom: 3mm; text-transform: capitalize; }
+  .ticket-datos {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 1mm 3mm;
+    margin: 0 0 3mm;
+  }
+  .ticket-datos dt { color: #444; }
+  .ticket-datos dd { margin: 0; text-align: right; overflow-wrap: anywhere; }
+  .ticket-cajas {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    border: 1pt solid #000;
+    padding: 1.5mm 3mm;
+    margin-bottom: 2mm;
+  }
+  /* Mismo tamaño para las cajas entradas y las vacías. */
+  .ticket-cajas b { font-size: 13pt; line-height: 1.2; }
+  .ticket-cajas + .ticket-firma { margin-top: 2mm; }
+  .ticket-firma { text-align: center; font-size: 9pt; color: #444; }
+  .ticket-firma-hueco { height: 22mm; border-bottom: .75pt solid #000; margin-bottom: 1mm; }
+}
