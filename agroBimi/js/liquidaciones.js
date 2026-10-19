@@ -166,11 +166,37 @@
     App.abrirModal(App.dom.modalLiquidacion);
   }
 
+  // Si se cambian los Ajustes con una liquidación NUEVA abierta, sus
+  // precios e IVA pasan a los nuevos valores. Solo se tocan los campos que
+  // seguían con el valor anterior de Ajustes: lo escrito a mano se respeta.
+  function aplicarAjustesALiquidacion(anteriores) {
+    if (!App.dom.modalLiquidacion.classList.contains("open") || App.$("liqId").value) return;
+
+    let cambiado = false;
+    [["liqPrecioCaja", "precio_caja"],
+     ["liqPrecioCajaPerdida", "precio_caja_perdida"],
+     ["liqIva", "iva_porcentaje"]].forEach(([id, clave]) => {
+      const input = App.$(id);
+      const previo = anteriores[clave] ?? App.PARAMETROS_DEFECTO[clave] ?? "";
+      const nuevo = App.param(clave);
+      if (App.num(input.value) === App.num(previo) && App.num(nuevo) !== App.num(previo)) {
+        input.value = nuevo;
+        cambiado = true;
+      }
+    });
+
+    if (cambiado) {
+      App.state.liquidacionPrevia = null;
+      limpiarCalculo();
+    }
+  }
+
   function limpiarCalculo() {
     App.$("cuerpoLiqLineas").innerHTML =
       App.filaMensaje(4, "Pulsa «Calcular» para ver las líneas de la liquidación.");
     App.$("liqResumenRegistros").textContent = "—";
     App.$("liqBase").textContent = "—";
+    App.$("liqIvaEtiqueta").textContent = "IVA / compensación";
     App.$("liqIvaImporte").textContent = "—";
     App.$("liqTotal").textContent = "—";
     App.$("btnGuardarLiquidacion").disabled = true;
@@ -199,6 +225,19 @@
       App.toast("Crea primero una campaña: la liquidación se hace por campaña.");
       return null;
     }
+
+    // Sin texto en «Concepto» la línea libre no se añade: si hay cantidad
+    // o precio, se avisa en vez de ignorarlos sin decir nada.
+    const otroConcepto = App.$("liqOtroConcepto").value.trim();
+    const hayOtraLinea = App.$("liqOtraCantidad").value.trim() !== ""
+      || App.$("liqOtroPrecio").value.trim() !== "";
+    if (!otroConcepto && hayOtraLinea) {
+      App.$("liqOtroConcepto").closest("details").open = true;
+      App.$("liqOtroConcepto").focus();
+      App.toast("Escribe el concepto de la línea libre, o borra su cantidad y precio.");
+      return null;
+    }
+
     return {
       id: App.$("liqId").value || null,
       agricultorId: parseInt(agricultorId, 10),
@@ -210,7 +249,7 @@
       iva: App.num(App.$("liqIva").value),
       incluirCajas: App.$("liqIncluirCajas").checked,
       incluirDescuento: App.$("liqIncluirDescuento").checked,
-      otroConcepto: App.$("liqOtroConcepto").value.trim(),
+      otroConcepto,
       otraCantidad: App.num(App.$("liqOtraCantidad").value),
       otroPrecio: App.num(App.$("liqOtroPrecio").value),
       observaciones: App.$("liqObservaciones").value.trim() || null,
@@ -330,7 +369,7 @@
       <tr>
         <td>${App.escapar(l.concepto)}</td>
         <td class="col-num">${App.fmtNum(l.cantidad, 0)}</td>
-        <td class="col-num">${App.fmtEuro(l.precio, 4)}</td>
+        <td class="col-num">${App.fmtEuro(l.precio)}</td>
         <td class="col-num ${l.importe < 0 ? "negativo" : ""}"><b>${App.fmtEuro(l.importe)}</b></td>
       </tr>`).join("");
 
@@ -339,6 +378,8 @@
       : `${numRegistros} registro/s · ${App.fmtNum(cajas)} cajas`;
 
     App.$("liqBase").textContent = App.fmtEuro(previa.base);
+    App.$("liqIvaEtiqueta").textContent =
+      `IVA / compensación (${App.fmtNum(previa.datos.iva, 2)} %)`;
     App.$("liqIvaImporte").textContent = App.fmtEuro(previa.ivaImporte);
     App.$("liqTotal").textContent = App.fmtEuro(previa.total);
     // Sin registros y sin líneas con importe no hay nada que liquidar.
@@ -346,8 +387,13 @@
       numRegistros === 0 && previa.lineas.every((l) => l.importe === 0);
   }
 
+  // Evita guardar dos veces a la vez (doble clic, Enter + clic): cada
+  // guardado borra e inserta las líneas, y dos en paralelo las duplicarían.
+  let guardando = false;
+
   async function guardarLiquidacion(e) {
     e.preventDefault();
+    if (guardando) return;
 
     const previa = App.state.liquidacionPrevia;
     if (!previa) {
@@ -355,6 +401,19 @@
       return;
     }
 
+    const boton = App.$("btnGuardarLiquidacion");
+    guardando = true;
+    boton.disabled = true;
+    try {
+      await guardarPrevia(previa);
+    } finally {
+      guardando = false;
+      // Si el modal sigue abierto (hubo un error) se puede reintentar.
+      if (App.state.liquidacionPrevia) boton.disabled = false;
+    }
+  }
+
+  async function guardarPrevia(previa) {
     const { datos, lineas } = previa;
     const cabecera = {
       agricultor_id: datos.agricultorId,
@@ -661,6 +720,7 @@
   Object.assign(App, {
     abrirModalLiquidaciones,
     abrirModalLiquidacion,
+    aplicarAjustesALiquidacion,
     liquidarRegistro,
     cargarLiquidaciones,
     configurarEventosLiquidaciones,

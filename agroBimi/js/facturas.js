@@ -81,7 +81,7 @@
       <tr>
         <td>${App.escapar(l.concepto)}</td>
         <td class="col-num">${App.fmtNum(l.cantidad, 0)}</td>
-        <td class="col-num">${App.fmtEuro(l.precio, 4)}</td>
+        <td class="col-num">${App.fmtEuro(l.precio)}</td>
         <td class="col-num ${App.num(l.importe) < 0 ? "negativo" : ""}"><b>${App.fmtEuro(l.importe)}</b></td>
       </tr>`).join("");
 
@@ -127,7 +127,7 @@
       <tr>
         <td>${App.escapar(linea.concepto)}</td>
         <td class="der">${App.fmtNum(linea.cantidad, 0)}</td>
-        <td class="der">${App.fmtEuro(linea.precio, 4)}</td>
+        <td class="der">${App.fmtEuro(linea.precio)}</td>
         <td class="der">${App.fmtEuro(linea.importe)}</td>
       </tr>`).join("");
 

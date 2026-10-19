@@ -62,7 +62,9 @@
       return;
     }
 
+    const anteriores = { ...App.state.parametros };
     await cargarParametros();
+    App.aplicarAjustesALiquidacion(anteriores);
     App.cerrarModal(App.dom.modalAjustes);
     App.toast("Ajustes guardados");
   }
