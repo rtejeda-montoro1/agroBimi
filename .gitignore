@@ -11,3 +11,10 @@ backups/
 
 # Copia local del código antes de simplificar la web (2026-10-10).
 respaldo/
+
+# Datos del cliente (emisor, CMR...) y documentos reales: el repo es público.
+agroBimi/privado/
+/*.pdf
+
+# Migraciones SQL: se ejecutan a mano en Supabase y no hace falta subirlas.
+agroBimi/migraciones/
