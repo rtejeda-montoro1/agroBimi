@@ -227,7 +227,7 @@
       return;
     }
 
-    App.descargarLibro(filas, "Cajas", "bimi_control_cajas.xlsx");
+    App.descargarLibro(filas, "Cajas", "Control de cajas");
     App.toast("Excel exportado");
   }
 

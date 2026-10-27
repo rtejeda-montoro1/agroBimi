@@ -60,6 +60,7 @@
     { id: "filtroAgriPlantas",      textoVacio: "Todos los agricultores" },
     { id: "filtroAgriCajas",        textoVacio: "Todos los agricultores" },
     { id: "filtroAgriLiq",          textoVacio: "Todos los agricultores" },
+    { id: "filtroAgriPalets",       textoVacio: "Todos los agricultores" },
   ];
 
   function poblarSelectAgricultores(sel, { textoVacio } = {}) {

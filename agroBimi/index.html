@@ -62,6 +62,8 @@
       <nav class="barra-modulos">
         <button class="btn-modulo" id="btnPlantas">🌱 Plantas retiradas</button>
         <button class="btn-modulo" id="btnControlCajas">⚖ Control de cajas</button>
+        <button class="btn-modulo" id="btnPaletizacion">🧱 Paletización</button>
+        <button class="btn-modulo" id="btnSalidas">🚚 Salidas</button>
         <button class="btn-modulo" id="btnLiquidaciones">🧾 Liquidaciones</button>
         <button class="btn-modulo" id="btnAjustes">⚙ Ajustes</button>
       </nav>
@@ -130,8 +132,6 @@
               <th>Cajas</th>
               <th>Fecha (CMR)</th>
               <th>Nº Factura</th>
-              <th>Nº Plantas</th>
-              <th>Fecha de Retirada</th>
               <th>Comentarios</th>
               <th class="col-acciones">Acciones</th>
             </tr>
@@ -264,24 +264,14 @@
             <label for="cajas_vacias_devueltas">Cajas Vacías devueltas</label>
             <input type="number" id="cajas_vacias_devueltas" min="0" step="1" placeholder="0" />
           </div>
-          <div class="field">
-            <label for="num_plantas">Nº Plantas</label>
-            <input type="number" id="num_plantas" min="0" step="1" placeholder="0" />
-          </div>
-          <div class="field">
-            <label for="fecha_retirada">Fecha de Retirada</label>
-            <input type="date" id="fecha_retirada" />
-          </div>
           <div class="field campo-ancho">
             <label for="comentarios">Comentarios</label>
             <textarea id="comentarios" rows="3" placeholder="Opcional"></textarea>
           </div>
         </div>
         <p class="aviso-campana">
-          💡 Las plantas del ciclo se llevan en <b>🌱 Plantas retiradas</b> (permite varias
-          retiradas por ciclo y es lo que usa el cálculo de rendimiento). Los campos
-          <b>Nº Plantas</b> y <b>Fecha de Retirada</b> de aquí se conservan por
-          compatibilidad con lo que ya estaba anotado.
+          💡 Las plantas del ciclo se anotan en <b>🌱 Plantas retiradas</b> (permite varias
+          retiradas por ciclo y es lo que usa el cálculo de rendimiento).
         </p>
         <div class="modal-actions">
           <button type="button" class="btn-ghost" data-cerrar="modalRegistro">Cancelar</button>
@@ -329,10 +319,6 @@
 
       <div class="campana-acciones">
         <button type="button" class="btn-primary" id="btnNuevaPlanta">+ Nueva retirada</button>
-        <button type="button" class="btn-ghost" id="btnImportarPlantas"
-          title="Crea retiradas a partir de las plantas anotadas en los registros antiguos">
-          ⬆ Importar de los registros
-        </button>
       </div>
 
       <div class="summary">
@@ -603,11 +589,15 @@
             <label for="liqIva">IVA / compensación (%)</label>
             <input type="number" id="liqIva" step="0.01" placeholder="0" />
           </div>
+          <div class="field">
+            <label for="liqRetencion">Retención IRPF (%)</label>
+            <input type="number" id="liqRetencion" step="0.01" min="0" placeholder="0" />
+          </div>
         </div>
 
         <div class="opciones-liq">
           <label class="check-inline">
-            <input type="checkbox" id="liqIncluirCajas" checked />
+            <input type="checkbox" id="liqIncluirCajas" />
             Descontar las cajas vacías no devueltas
           </label>
           <label class="check-inline">
@@ -661,6 +651,7 @@
         <div class="totales-doc">
           <div><span>Base</span><b id="liqBase">—</b></div>
           <div><span id="liqIvaEtiqueta">IVA / compensación</span><b id="liqIvaImporte">—</b></div>
+          <div><span id="liqRetencionEtiqueta">Retención IRPF</span><b id="liqRetencionImporte">—</b></div>
           <div class="total-final"><span>Total</span><b id="liqTotal">—</b></div>
         </div>
 
@@ -673,13 +664,60 @@
   </div>
 
   <!-- ============================================================= -->
+  <!--  Modal: Facturar una liquidación                              -->
+  <!--  Recibo de compensación propio (nº automático) o factura que   -->
+  <!--  trae el agricultor (su nº y su fecha, escritos a mano).       -->
+  <!-- ============================================================= -->
+  <div class="modal-backdrop modal-nivel2" id="modalFacturar">
+    <div class="modal">
+      <h2 id="modalFacturarTitulo">🧾 Facturar liquidación</h2>
+      <form id="formFacturar">
+        <input type="hidden" id="facturarLiqId" />
+        <p class="sub-modal" id="facturarResumen"></p>
+
+        <div class="opciones-facturar">
+          <label class="check-inline">
+            <input type="radio" name="facturarTipo" value="propia" checked />
+            <span>Generar <b>recibo de compensación</b> <span id="facturarNumPropio"></span></span>
+          </label>
+          <label class="check-inline">
+            <input type="radio" name="facturarTipo" value="agricultor" />
+            <span>El agricultor <b>trae su propia factura</b></span>
+          </label>
+        </div>
+
+        <div id="facturarDatosAgricultor" hidden>
+          <div class="field">
+            <label for="facturarNumAgricultor">Nº de la factura del agricultor *</label>
+            <input type="text" id="facturarNumAgricultor" maxlength="60" placeholder="Ej. 2026/015" />
+          </div>
+          <div class="field">
+            <label for="facturarFechaAgricultor">Fecha de su factura *</label>
+            <input type="date" id="facturarFechaAgricultor" />
+          </div>
+          <p class="aviso-campana">
+            No se genera recibo de compensación: el nº de su factura queda
+            apuntado en la liquidación y en sus registros. Comprueba que los
+            importes de su factura coinciden con la liquidación.
+          </p>
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" class="btn-ghost" data-cerrar="modalFacturar">Cancelar</button>
+          <button type="submit" class="btn-primary">Facturar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ============================================================= -->
   <!--  Modal: Liquidación / factura (documento)                     -->
   <!-- ============================================================= -->
   <div class="modal-backdrop modal-nivel2" id="modalFactura">
     <div class="modal modal-ancho">
-      <h2 id="modalFacturaTitulo">🧾 Factura</h2>
+      <h2 id="modalFacturaTitulo">🧾 Recibo de compensación</h2>
       <p class="aviso-campana" id="facturaAviso" hidden>
-        ⚙ Esta liquidación todavía no está facturada: no tiene número de factura.
+        ⚙ Esta liquidación todavía no está facturada: no tiene número de recibo.
         Puedes imprimirla como documento de liquidación y facturarla cuando quieras
         desde el listado.
       </p>
@@ -718,6 +756,7 @@
         <div class="totales-doc">
           <div><span>Base</span><b id="facturaBase">—</b></div>
           <div><span id="facturaIvaEtiqueta">IVA / compensación</span><b id="facturaIva">—</b></div>
+          <div><span id="facturaRetencionEtiqueta">Retención IRPF</span><b id="facturaRetencion">—</b></div>
           <div class="total-final"><span>Total</span><b id="facturaTotal">—</b></div>
         </div>
       </div>
@@ -735,6 +774,320 @@
   </div>
 
   <!-- ============================================================= -->
+  <!--  Modal: Paletización                                          -->
+  <!-- ============================================================= -->
+  <div class="modal-backdrop" id="modalPalets">
+    <div class="modal modal-xl">
+      <h2>🧱 Paletización</h2>
+      <p class="sub-modal">
+        Todas las cajas que pasan por la báscula van a la cámara y se reparten
+        solas en palets: cuando un palet llega a sus cajas se le pone la fecha
+        de llenado y queda listo para imprimir la etiqueta y darle salida. Lo
+        que todavía no forma un palet completo está <b>en cámara</b>.
+      </p>
+
+      <div class="tarjetas-totales">
+        <div class="destacada"><span>Cajas en cámara</span><b id="paletsEnCamara">0</b></div>
+        <div><span>Palets completos sin salida</span><b id="paletsCompletos">0</b></div>
+        <div><span>Cajas listas para salir</span><b id="paletsCajasListas">0</b></div>
+      </div>
+
+      <details class="bloque-plegable">
+        <summary>Cajas en cámara por agricultor</summary>
+        <div class="tabla-wrap">
+          <table class="tabla-registros">
+            <thead>
+              <tr>
+                <th>Agricultor</th>
+                <th class="col-num">En palet en progreso</th>
+                <th class="col-num">Sin palet</th>
+                <th class="col-num">Total en cámara</th>
+              </tr>
+            </thead>
+            <tbody id="cuerpoCamaraPalets"></tbody>
+          </table>
+        </div>
+      </details>
+
+      <div class="toolbar toolbar-filtros">
+        <div class="field">
+          <label for="filtroEstadoPalets">Estado</label>
+          <select id="filtroEstadoPalets">
+            <option value="pendientes">Sin salida</option>
+            <option value="formacion">En progreso</option>
+            <option value="completo">Completos</option>
+            <option value="salido">Con salida</option>
+            <option value="">Todos</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="filtroAgriPalets">Agricultor</label>
+          <select id="filtroAgriPalets"></select>
+        </div>
+        <div class="field">
+          <label for="filtroDesdePalets">Llenado desde</label>
+          <input type="date" id="filtroDesdePalets" />
+        </div>
+        <div class="field">
+          <label for="filtroHastaPalets">Llenado hasta</label>
+          <input type="date" id="filtroHastaPalets" />
+        </div>
+      </div>
+
+      <div class="campana-acciones">
+        <button type="button" class="btn-ghost" id="btnMarcarTodosPalets">☑ Marcar / desmarcar</button>
+        <button type="button" class="btn-primary" id="btnEtiquetasPalets" disabled>🏷 Imprimir etiquetas</button>
+        <button type="button" class="btn-primary" id="btnSalidaPalets" disabled>🚚 Dar salida</button>
+        <button type="button" class="btn-ghost" id="btnNuevoPalet">+ Nuevo palet</button>
+      </div>
+
+      <div class="summary">
+        <span class="count" id="countPalets">0 palets</span>
+      </div>
+
+      <div class="tabla-wrap">
+        <table class="tabla-registros">
+          <thead>
+            <tr>
+              <th class="col-check"></th>
+              <th>Palet</th>
+              <th>Llenado</th>
+              <th>Agricultores · cajas · entrada</th>
+              <th class="col-num">Cajas</th>
+              <th>Estado</th>
+              <th class="col-acciones">Acciones</th>
+            </tr>
+          </thead>
+          <tbody id="cuerpoPalets"></tbody>
+        </table>
+      </div>
+
+      <div class="modal-actions">
+        <button type="button" class="btn-ghost" data-cerrar="modalPalets">Cerrar</button>
+        <button type="button" class="btn-primary" id="btnExportPalets" disabled>⬇ Export</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================= -->
+  <!--  Modal: Editar un palet                                       -->
+  <!-- ============================================================= -->
+  <div class="modal-backdrop modal-nivel2" id="modalPalet">
+    <div class="modal modal-ancho">
+      <h2 id="modalPaletTitulo">Editar palet</h2>
+      <p class="sub-modal">
+        Cambia cuántas cajas de cada pesada lleva el palet. Para completarlo,
+        pon cajas de una pesada que esté en cámara (o pulsa «Completar»): se
+        toman de lo que esa pesada tenga sin palet o en otro palet en progreso.
+        Lo que quites vuelve a la cámara sin palet.
+      </p>
+      <p class="aviso-campana" id="paletAvisoAntiguo" hidden>
+        ⚙ Este palet tiene cajas de antes de la paletización automática (sin
+        pesada asociada): se mantienen tal cual.
+      </p>
+      <form id="formPalet">
+        <input type="hidden" id="paletId" />
+        <input type="hidden" id="paletTotalFijo" value="0" />
+        <div class="tabla-wrap">
+          <table class="tabla-registros tabla-lineas-palet">
+            <thead>
+              <tr>
+                <th>Entrada</th>
+                <th>Agricultor</th>
+                <th class="col-num">En cámara</th>
+                <th class="col-num">En este palet</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="paletLineas"></tbody>
+            <tfoot>
+              <tr>
+                <th colspan="3"><span id="paletFaltan"></span></th>
+                <th class="col-num" id="paletTotal">0</th>
+                <th></th>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn-ghost" data-cerrar="modalPalet">Cancelar</button>
+          <button type="submit" class="btn-primary">Guardar palet</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ============================================================= -->
+  <!--  Modal: Salidas (albaranes)                                   -->
+  <!-- ============================================================= -->
+  <div class="modal-backdrop" id="modalSalidas">
+    <div class="modal modal-xl">
+      <h2>🚚 Salidas</h2>
+      <p class="sub-modal">
+        Cada salida de palets genera un albarán con el destinatario, el
+        transporte y, por cada palet, los agricultores que lleva con sus cajas
+        y la fecha de entrada. Al anular un albarán sus palets vuelven a la cámara.
+      </p>
+
+      <div class="toolbar toolbar-filtros">
+        <div class="field">
+          <label for="filtroDestinoSalidas">Destinatario</label>
+          <input type="text" id="filtroDestinoSalidas" placeholder="Buscar..." />
+        </div>
+        <div class="field">
+          <label for="filtroDesdeSalidas">Desde</label>
+          <input type="date" id="filtroDesdeSalidas" />
+        </div>
+        <div class="field">
+          <label for="filtroHastaSalidas">Hasta</label>
+          <input type="date" id="filtroHastaSalidas" />
+        </div>
+      </div>
+
+      <div class="campana-acciones">
+        <button type="button" class="btn-primary" id="btnNuevaSalida">+ Nueva salida</button>
+      </div>
+
+      <div class="summary">
+        <span class="count" id="countAlbaranes">0 albaranes</span>
+      </div>
+
+      <div class="tabla-wrap">
+        <table class="tabla-registros">
+          <thead>
+            <tr>
+              <th>Albarán</th>
+              <th>Fecha</th>
+              <th>Destinatario</th>
+              <th>Matrícula</th>
+              <th class="col-num">Palets</th>
+              <th class="col-num">Cajas</th>
+              <th class="col-acciones">Acciones</th>
+            </tr>
+          </thead>
+          <tbody id="cuerpoAlbaranes"></tbody>
+        </table>
+      </div>
+
+      <div class="modal-actions">
+        <button type="button" class="btn-ghost" data-cerrar="modalSalidas">Cerrar</button>
+        <button type="button" class="btn-primary" id="btnExportSalidas">⬇ Export</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================= -->
+  <!--  Modal: Nueva salida                                          -->
+  <!-- ============================================================= -->
+  <div class="modal-backdrop modal-nivel2" id="modalSalida">
+    <div class="modal modal-ancho">
+      <h2>🚚 Nueva salida</h2>
+      <form id="formSalida">
+        <div class="grid-campos">
+          <div class="field">
+            <label for="salidaFecha">Fecha de salida *</label>
+            <input type="date" id="salidaFecha" required />
+          </div>
+          <div class="field">
+            <label for="salidaLugarCarga">Lugar de carga (CMR 4)</label>
+            <input type="text" id="salidaLugarCarga" placeholder="Granada" />
+          </div>
+          <div class="field campo-ancho">
+            <label for="salidaDestNombre">Destinatario * (CMR 2)</label>
+            <input type="text" id="salidaDestNombre" list="listaDestinatarios" required
+              placeholder="Nombre o razón social" />
+            <datalist id="listaDestinatarios"></datalist>
+          </div>
+          <div class="field">
+            <label for="salidaDestNif">NIF / CIF</label>
+            <input type="text" id="salidaDestNif" />
+          </div>
+          <div class="field campo-ancho">
+            <label for="salidaDestDireccion">Dirección y país</label>
+            <textarea id="salidaDestDireccion" rows="2" placeholder="Calle, CP, población, país"></textarea>
+          </div>
+          <div class="field campo-ancho">
+            <label for="salidaLugarEntrega">Lugar de entrega (CMR 3)</label>
+            <textarea id="salidaLugarEntrega" rows="2" placeholder="Si es distinto del destinatario"></textarea>
+          </div>
+        </div>
+
+        <h3 class="factura-titulo">Transporte</h3>
+        <div class="grid-campos">
+          <div class="field">
+            <label for="salidaMatricula">Matrícula tractora</label>
+            <input type="text" id="salidaMatricula" />
+          </div>
+          <div class="field">
+            <label for="salidaMatriculaRemolque">Matrícula remolque</label>
+            <input type="text" id="salidaMatriculaRemolque" />
+          </div>
+          <div class="field campo-ancho">
+            <label for="salidaTransportista">Transportista (para el albarán)</label>
+            <input type="text" id="salidaTransportista" />
+          </div>
+          <div class="field">
+            <label for="salidaTemperatura">Temperatura frigorífico (°C)</label>
+            <input type="number" id="salidaTemperatura" step="0.5" placeholder="4" />
+          </div>
+        </div>
+
+        <h3 class="factura-titulo">Mercancía (CMR 5 a 11)</h3>
+        <div class="grid-campos">
+          <div class="field">
+            <label for="salidaMarcas">Marcas y números</label>
+            <input type="text" id="salidaMarcas" placeholder="Negro" />
+          </div>
+          <div class="field">
+            <label for="salidaEmbalaje">Modo de embalaje</label>
+            <input type="text" id="salidaEmbalaje" placeholder="Plástico" />
+          </div>
+          <div class="field campo-ancho">
+            <label for="salidaNaturaleza">Naturaleza de la mercancía</label>
+            <input type="text" id="salidaNaturaleza" placeholder="Tsb loose 8kg" />
+          </div>
+          <div class="field">
+            <label for="salidaPeso">Peso bruto (kg)</label>
+            <input type="number" id="salidaPeso" min="0" step="0.01" />
+          </div>
+          <div class="field campo-ancho">
+            <label for="salidaDocumentos">Documentos anexos</label>
+            <input type="text" id="salidaDocumentos" placeholder="Opcional" />
+          </div>
+          <div class="field campo-ancho">
+            <label for="salidaObservaciones">Observaciones (salen en el albarán)</label>
+            <textarea id="salidaObservaciones" rows="2" placeholder="Opcional"></textarea>
+          </div>
+        </div>
+        <p class="nota-liq">
+          Los bultos (cajas) y los palets salen de los palets marcados. El peso
+          se propone con las cajas × el peso por caja de Ajustes; se puede cambiar.
+        </p>
+
+        <h3 class="factura-titulo">Palets que salen · <span id="salidaResumen">—</span></h3>
+        <div class="tabla-wrap">
+          <table class="tabla-registros">
+            <thead>
+              <tr>
+                <th class="col-check"></th>
+                <th>Palet</th>
+                <th>Estado</th>
+                <th class="col-num">Cajas</th>
+              </tr>
+            </thead>
+            <tbody id="salidaPalets"></tbody>
+          </table>
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" class="btn-ghost" data-cerrar="modalSalida">Cancelar</button>
+          <button type="submit" class="btn-primary">Dar salida e imprimir CMR y albarán</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ============================================================= -->
   <!--  Modal: Ajustes                                               -->
   <!-- ============================================================= -->
   <div class="modal-backdrop" id="modalAjustes">
@@ -746,7 +1099,7 @@
       </p>
       <form id="formAjustes">
         <div class="factura-bloque">
-          <h3 class="factura-titulo">Emisor de las facturas</h3>
+          <h3 class="factura-titulo">Emisor de los recibos</h3>
           <div class="grid-campos">
             <div class="field campo-ancho">
               <label for="aj_emisor_nombre">Nombre / Razón social</label>
@@ -780,6 +1133,10 @@
               <label for="aj_emisor_email">Email</label>
               <input type="email" id="aj_emisor_email" />
             </div>
+            <div class="field">
+              <label for="aj_emisor_registro">Registro de establecimiento</label>
+              <input type="text" id="aj_emisor_registro" placeholder="ESP 00000000" />
+            </div>
           </div>
         </div>
 
@@ -798,6 +1155,10 @@
               <label for="aj_iva_porcentaje">IVA / compensación (%)</label>
               <input type="number" id="aj_iva_porcentaje" step="0.01" />
             </div>
+            <div class="field">
+              <label for="aj_retencion_porcentaje">Retención IRPF (%)</label>
+              <input type="number" id="aj_retencion_porcentaje" step="0.01" min="0" />
+            </div>
           </div>
         </div>
 
@@ -811,6 +1172,62 @@
             <div class="field">
               <label for="aj_serie_factura">Facturas</label>
               <input type="text" id="aj_serie_factura" placeholder="F" />
+            </div>
+            <div class="field">
+              <label for="aj_serie_palet">Palets</label>
+              <input type="text" id="aj_serie_palet" placeholder="P" />
+            </div>
+            <div class="field">
+              <label for="aj_serie_albaran">Albaranes de salida</label>
+              <input type="text" id="aj_serie_albaran" placeholder="ALB" />
+            </div>
+          </div>
+        </div>
+
+        <div class="factura-bloque">
+          <h3 class="factura-titulo">Paletización</h3>
+          <div class="grid-campos">
+            <div class="field">
+              <label for="aj_cajas_por_palet">Cajas por palet</label>
+              <input type="number" id="aj_cajas_por_palet" min="1" step="1" placeholder="60" />
+            </div>
+            <div class="field">
+              <label for="aj_paletizado_desde">Paletizar pesadas desde</label>
+              <input type="date" id="aj_paletizado_desde" required />
+            </div>
+            <div class="field">
+              <label for="aj_etiqueta_ancho_mm">Etiqueta: ancho (mm)</label>
+              <input type="number" id="aj_etiqueta_ancho_mm" min="20" step="1" placeholder="105" />
+            </div>
+            <div class="field">
+              <label for="aj_etiqueta_alto_mm">Etiqueta: alto (mm)</label>
+              <input type="number" id="aj_etiqueta_alto_mm" min="20" step="1" placeholder="75" />
+            </div>
+          </div>
+          <p class="nota-liq">
+            Cambiar las cajas por palet o la fecha no reparte de nuevo lo que ya
+            está paletizado: se aplica a las pesadas siguientes.
+          </p>
+        </div>
+
+        <div class="factura-bloque">
+          <h3 class="factura-titulo">Carta de porte (CMR): datos fijos</h3>
+          <div class="grid-campos">
+            <div class="field campo-ancho">
+              <label for="aj_cmr_remitente">Remitente (casillas 1 y 22)</label>
+              <textarea id="aj_cmr_remitente" rows="4"></textarea>
+            </div>
+            <div class="field campo-ancho">
+              <label for="aj_cmr_porteador">Porteador (casillas 16 y 23)</label>
+              <textarea id="aj_cmr_porteador" rows="4"></textarea>
+            </div>
+            <div class="field campo-ancho">
+              <label for="aj_cmr_tipo_palet">Tipo de palet</label>
+              <input type="text" id="aj_cmr_tipo_palet" placeholder="palet industrial de madera 100 x 120" />
+            </div>
+            <div class="field">
+              <label for="aj_peso_bruto_caja_kg">Peso bruto por caja (kg)</label>
+              <input type="number" id="aj_peso_bruto_caja_kg" min="0" step="0.01" placeholder="9.25" />
             </div>
           </div>
         </div>
@@ -875,8 +1292,6 @@
               <th>Cajas</th>
               <th>Fecha (CMR)</th>
               <th>Nº Factura</th>
-              <th>Nº Plantas</th>
-              <th>Fecha de Retirada</th>
               <th>Comentarios</th>
             </tr>
           </thead>
@@ -921,6 +1336,8 @@
   <script src="js/cajas.js"></script>
   <script src="js/liquidaciones.js"></script>
   <script src="js/facturas.js"></script>
+  <script src="js/palets.js"></script>
+  <script src="js/salidas.js"></script>
   <script src="js/reportes.js"></script>
   <script src="js/ui.js"></script>
   <script src="app.js"></script>

@@ -197,7 +197,7 @@
       return;
     }
 
-    cuerpo.innerHTML = App.spinnerFila(10, "Buscando registros...");
+    cuerpo.innerHTML = App.spinnerFila(8, "Buscando registros...");
 
     const { data, error } = await App.db
       .from("registros")
@@ -207,7 +207,7 @@
       .order("fecha", { ascending: false, nullsFirst: false });
 
     if (error) {
-      cuerpo.innerHTML = `<tr><td colspan="10" class="error">Error: ${error.message}</td></tr>`;
+      cuerpo.innerHTML = `<tr><td colspan="8" class="error">Error: ${error.message}</td></tr>`;
       App.state.registrosCampanaActuales = [];
       App.$("btnExportCampana").disabled = true;
       return;
@@ -219,7 +219,7 @@
       e.target.options[e.target.selectedIndex]?.text || "";
     App.$("btnExportCampana").disabled = regs.length === 0;
     cuerpo.innerHTML = regs.length === 0
-      ? '<tr><td colspan="10" class="empty">No hay registros para esta campana.</td></tr>'
+      ? '<tr><td colspan="8" class="empty">No hay registros para esta campana.</td></tr>'
       : regs.map((r) => {
           const a = r.agricultores || {};
           const cajasBtn = App.botonCajas(r);
@@ -232,8 +232,6 @@
           <td class="col-cajas">${cajasBtn}</td>
           <td>${App.formatearFecha(r.fecha_cmr)}</td>
           <td>${App.valor(r.num_factura)}</td>
-          <td>${App.valor(r.num_plantas)}</td>
-          <td>${App.formatearFecha(r.fecha_retirada)}</td>
           <td class="col-coment">${App.valor(r.comentarios)}</td>
         </tr>`;
         }).join("");

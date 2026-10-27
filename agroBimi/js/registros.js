@@ -170,8 +170,6 @@
           <td class="col-cajas">${cajasBtn}</td>
           <td>${App.formatearFecha(r.fecha_cmr)}</td>
           <td class="${factCell}">${App.valor(r.num_factura)} ${liquidado}</td>
-          <td>${App.valor(r.num_plantas)}</td>
-          <td>${App.formatearFecha(r.fecha_retirada)}</td>
           <td class="col-coment">${App.valor(r.comentarios)}</td>
           <td class="col-acciones">
             <button class="btn-edit btn-sm" data-edit-reg="${r.id}">Editar</button>
@@ -323,44 +321,71 @@
   //  Popover de cajas (entradas / salidas / descuento / vacías)
   // ------------------------------------------------------------------
   let popoverBtnActivo = null;
+  let popoverEditando = false;
+
+  // Campos de cajas del registro: columna, clave en el dataset del botón
+  // (data-entradas → dataset.entradas) y etiqueta.
+  const CAMPOS_CAJAS = [
+    { col: "cajas_entradas", attr: "entradas", key: "entradas", label: "Nº Cajas Entradas" },
+    { col: "cajas_salidas", attr: "salidas", key: "salidas", label: "Nº Cajas Salidas" },
+    { col: "descuento_cajas", attr: "descuento", key: "descuento", label: "Descuento Cajas" },
+    { col: "cajas_vacias_retiradas", attr: "vacias", key: "vacias", label: "Cajas Vacías retiradas" },
+    { col: "cajas_vacias_devueltas", attr: "vacias-devueltas", key: "vaciasDevueltas", label: "Cajas Vacías devueltas" },
+  ];
 
   // Botón 📦 de la columna de cajas. Lo usan la tabla del agricultor y la
   // búsqueda por campaña, así que vive aquí para no duplicarlo.
   function botonCajas(r) {
+    const datos = CAMPOS_CAJAS.map((c) => `data-${c.attr}="${r[c.col] ?? ""}"`).join(" ");
     return `
       <button type="button" class="cajas-btn" title="Ver detalle de cajas"
-        data-cajas
-        data-entradas="${r.cajas_entradas ?? ""}"
-        data-salidas="${r.cajas_salidas ?? ""}"
-        data-descuento="${r.descuento_cajas ?? ""}"
-        data-vacias="${r.cajas_vacias_retiradas ?? ""}"
-        data-vacias-devueltas="${r.cajas_vacias_devueltas ?? ""}">📦</button>`;
+        data-cajas data-reg-id="${r.id}" ${datos}>📦</button>`;
   }
 
   function ocultarPopoverCajas() {
     const pop = App.$("cajasPopover");
     if (pop) pop.classList.remove("open");
     popoverBtnActivo = null;
+    popoverEditando = false;
   }
 
-  function mostrarPopoverCajas(btn) {
-    const pop = App.$("cajasPopover");
+  function htmlDetalleCajas(btn) {
     const val = (v) => (v === "" || v == null ? "—" : v);
     // Descuadre de este movimiento: lo que se llevó vacío menos lo que
     // ha vuelto (lleno o vacío). Solo se muestra si hay algo que cuadrar.
     const vacias = App.num(btn.dataset.vacias);
     const descuadre = vacias - App.num(btn.dataset.entradas) - App.num(btn.dataset.vaciasDevueltas);
 
-    pop.innerHTML = `
-      <div class="cajas-fila"><span>Nº Cajas Entradas</span><b>${val(btn.dataset.entradas)}</b></div>
-      <div class="cajas-fila"><span>Nº Cajas Salidas</span><b>${val(btn.dataset.salidas)}</b></div>
-      <div class="cajas-fila"><span>Descuento Cajas</span><b>${val(btn.dataset.descuento)}</b></div>
-      <div class="cajas-fila"><span>Cajas Vacías retiradas</span><b>${val(btn.dataset.vacias)}</b></div>
-      <div class="cajas-fila"><span>Cajas Vacías devueltas</span><b>${val(btn.dataset.vaciasDevueltas)}</b></div>
+    return `
+      ${CAMPOS_CAJAS.map((c) =>
+        `<div class="cajas-fila"><span>${c.label}</span><b>${val(btn.dataset[c.key])}</b></div>`).join("")}
       ${vacias > 0
         ? `<div class="cajas-fila ${descuadre > 0 ? "cajas-descuadre" : ""}">
              <span>Descuadre</span><b>${App.fmtNum(descuadre)}</b></div>`
-        : ""}`;
+        : ""}
+      <div class="cajas-pop-acciones">
+        <button type="button" class="btn-edit btn-sm" data-cajas-editar>✏ Editar</button>
+      </div>`;
+  }
+
+  function htmlEdicionCajas(btn) {
+    return `
+      <form id="formCajasPop">
+        ${CAMPOS_CAJAS.map((c) => `
+          <label class="cajas-fila cajas-fila-edit"><span>${c.label}</span>
+            <input type="number" min="0" step="1" placeholder="0"
+              name="${c.col}" value="${btn.dataset[c.key] ?? ""}" /></label>`).join("")}
+        <div class="cajas-pop-acciones">
+          <button type="button" class="btn-ghost btn-sm" data-cajas-cancelar>Cancelar</button>
+          <button type="submit" class="btn-primary btn-sm">Guardar</button>
+        </div>
+      </form>`;
+  }
+
+  function mostrarPopoverCajas(btn, editar = false) {
+    const pop = App.$("cajasPopover");
+    popoverEditando = editar;
+    pop.innerHTML = editar ? htmlEdicionCajas(btn) : htmlDetalleCajas(btn);
 
     // Posición fija anclada al icono (así no lo recorta el scroll de la tabla).
     pop.classList.add("open");
@@ -374,6 +399,51 @@
     pop.style.left = `${left}px`;
     pop.style.top = `${top}px`;
     popoverBtnActivo = btn;
+    if (editar) pop.querySelector("input")?.focus();
+  }
+
+  // Guarda solo las cajas del registro y actualiza el botón y el estado en
+  // memoria, sin recargar la tabla (la tabla no muestra estos números).
+  async function guardarCajasPopover(e) {
+    e.preventDefault();
+    const btn = popoverBtnActivo;
+    if (!btn) return;
+
+    const cambios = {};
+    for (const c of CAMPOS_CAJAS) {
+      const raw = e.target.elements[c.col].value.trim();
+      const n = raw === "" ? null : Number(raw);
+      if (n !== null && (!Number.isInteger(n) || n < 0)) {
+        App.toast(`"${c.label}" debe ser un número entero sin signo.`);
+        return;
+      }
+      cambios[c.col] = n;
+    }
+
+    const id = btn.dataset.regId;
+    const { error } = await App.db.from("registros").update(cambios).eq("id", id);
+    if (error) {
+      App.toast("Error: " + error.message);
+      return;
+    }
+
+    CAMPOS_CAJAS.forEach((c) => { btn.dataset[c.key] = cambios[c.col] ?? ""; });
+    [App.state.registrosActuales, App.state.registrosCampanaActuales].forEach((lista) => {
+      const r = (lista || []).find((x) => String(x.id) === id);
+      if (r) Object.assign(r, cambios);
+    });
+
+    App.toast("Cajas actualizadas");
+    mostrarPopoverCajas(btn);
+  }
+
+  function clickPopoverCajas(e) {
+    if (!popoverBtnActivo) return;
+    // Al repintar, el botón pulsado sale del DOM y el listener global lo
+    // tomaría por un clic fuera: cortamos aquí la propagación.
+    e.stopPropagation();
+    if (e.target.closest("[data-cajas-editar]")) mostrarPopoverCajas(popoverBtnActivo, true);
+    else if (e.target.closest("[data-cajas-cancelar]")) mostrarPopoverCajas(popoverBtnActivo);
   }
 
   function alternarPopoverCajas(btn) {
@@ -394,12 +464,19 @@
     App.$("filtroFechaHasta").addEventListener("change", refrescarVista);
     App.$("btnLimpiarFiltrosReg").addEventListener("click", limpiarFiltros);
 
+    const pop = App.$("cajasPopover");
+    pop.addEventListener("click", clickPopoverCajas);
+    pop.addEventListener("submit", guardarCajasPopover);
+
     // Cierre del popover de cajas: clic fuera, scroll, resize o Escape.
+    // Mientras se edita no se cierra por scroll/resize: en el móvil, abrir
+    // el teclado redimensiona la ventana y se perdería lo escrito.
     document.addEventListener("click", (e) => {
       if (popoverBtnActivo && !e.target.closest("#cajasPopover")) ocultarPopoverCajas();
     });
-    window.addEventListener("scroll", ocultarPopoverCajas, true);
-    window.addEventListener("resize", ocultarPopoverCajas);
+    const cerrarSiNoEdita = () => { if (!popoverEditando) ocultarPopoverCajas(); };
+    window.addEventListener("scroll", cerrarSiNoEdita, true);
+    window.addEventListener("resize", cerrarSiNoEdita);
     document.addEventListener("keydown", (e) => {
       if (e.key === "Escape") ocultarPopoverCajas();
     });

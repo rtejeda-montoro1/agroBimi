@@ -277,9 +277,26 @@
     App.abrirModal(App.dom.modalPlanta);
   }
 
+  // Evita guardar dos veces a la vez (doble clic, Enter + clic): el
+  // segundo envío llegaba antes de cerrar el modal y duplicaba la retirada.
+  let guardandoPlanta = false;
+
   async function guardarPlanta(e) {
     e.preventDefault();
+    if (guardandoPlanta) return;
 
+    const boton = App.dom.formPlanta.querySelector('button[type="submit"]');
+    guardandoPlanta = true;
+    boton.disabled = true;
+    try {
+      await guardarPlantaValidada();
+    } finally {
+      guardandoPlanta = false;
+      boton.disabled = false;
+    }
+  }
+
+  async function guardarPlantaValidada() {
     const agricultorId = App.$("plantaAgricultor").value;
     if (!agricultorId) {
       App.toast("Elige el agricultor que ha retirado las plantas.");
@@ -361,75 +378,6 @@
   }
 
   // ------------------------------------------------------------------
-  //  Importar las plantas que ya estaban anotadas en los registros
-  // ------------------------------------------------------------------
-  // Antes de existir esta tabla, las plantas se apuntaban en el propio
-  // registro (columnas num_plantas y fecha_retirada). Esto las pasa a
-  // retiradas_plantas sin duplicar: se salta las que ya existen con el
-  // mismo agricultor, campaña, ciclo, fecha e importe.
-  async function importarPlantasDeRegistros() {
-    const registros = await App.consultar(
-      App.db.from("registros")
-        .select("agricultor_id,campana_id,ciclo,num_plantas,fecha_retirada")
-        .not("num_plantas", "is", null)
-        .gt("num_plantas", 0),
-      "los registros"
-    );
-
-    if (registros === null) return;
-
-    const candidatos = registros.filter((r) => r.fecha_retirada);
-    const sinFecha = registros.length - candidatos.length;
-
-    if (candidatos.length === 0) {
-      App.toast(sinFecha > 0
-        ? "Hay plantas en los registros, pero sin fecha de retirada: no se pueden importar."
-        : "No hay plantas anotadas en los registros.");
-      return;
-    }
-
-    const yaExiste = new Set(
-      App.state.plantasActuales.map((r) =>
-        `${clave(r.agricultor_id, r.campana_id, r.ciclo)}|${r.fecha}|${App.num(r.num_plantas)}`)
-    );
-
-    const nuevas = [];
-    candidatos.forEach((r) => {
-      const k = `${clave(r.agricultor_id, r.campana_id, r.ciclo)}|${r.fecha_retirada}|${App.num(r.num_plantas)}`;
-      if (yaExiste.has(k)) return;
-      yaExiste.add(k); // dos registros idénticos solo generan una retirada
-      nuevas.push({
-        agricultor_id: r.agricultor_id,
-        campana_id: r.campana_id,
-        ciclo: App.cicloValido(r.ciclo) || "1",
-        fecha: r.fecha_retirada,
-        num_plantas: App.num(r.num_plantas),
-        comentarios: "Importado del registro",
-      });
-    });
-
-    if (nuevas.length === 0) {
-      App.toast("Todas las plantas de los registros estaban ya importadas.");
-      return;
-    }
-
-    const aviso = sinFecha > 0
-      ? `\n\n(${sinFecha} registro/s con plantas pero sin fecha de retirada quedarán fuera.)`
-      : "";
-    if (!confirm(`Se van a crear ${nuevas.length} retirada/s de plantas a partir de los registros.${aviso}`)) return;
-
-    const { error } = await App.db.from("retiradas_plantas").insert(nuevas);
-    if (error) {
-      App.toast("Error al importar: " + error.message);
-      return;
-    }
-
-    App.toast(`${nuevas.length} retirada/s importada/s`);
-    await cargarPlantas();
-    if (App.state.agricultorAbierto) await cargarRetiradasAgricultor();
-  }
-
-  // ------------------------------------------------------------------
   //  Exportaciones a Excel
   // ------------------------------------------------------------------
   function exportarPlantas() {
@@ -452,7 +400,7 @@
       return;
     }
 
-    App.descargarLibro(filas, "Plantas", "bimi_plantas_retiradas.xlsx");
+    App.descargarLibro(filas, "Plantas", "Plantas retiradas");
     App.toast("Excel exportado");
   }
 
@@ -466,7 +414,6 @@
       abrirModalPlantas(App.state.agricultorAbierto?.id));
 
     App.$("btnNuevaPlanta").addEventListener("click", () => abrirModalPlanta());
-    App.$("btnImportarPlantas").addEventListener("click", importarPlantasDeRegistros);
     App.dom.formPlanta.addEventListener("submit", guardarPlanta);
     App.$("cuerpoPlantas").addEventListener("click", clickPlantas);
     App.$("btnExportPlantas").addEventListener("click", exportarPlantas);

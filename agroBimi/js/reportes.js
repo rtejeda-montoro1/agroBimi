@@ -100,15 +100,25 @@
     return hoja;
   }
 
+  // nombreArchivo va sin extensión: se le añade la fecha de hoy, como en
+  // los PDF ("Palets 2026-10-20.xlsx"), para que dos exportaciones de días
+  // distintos no se llamen igual.
   function descargarLibro(filas, nombreHoja, nombreArchivo) {
     const hoja = construirHojaEstilizada(filas);
     const libro = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(libro, hoja, nombreHoja);
-    XLSX.writeFile(libro, nombreArchivo);
+    XLSX.writeFile(libro, `${limpiarNombre(nombreArchivo)} ${App.hoyISO()}.xlsx`);
   }
 
+  // Fuera solo lo que Windows no admite en un nombre de archivo ("26/27"
+  // pasa a "26-27"); se conservan los acentos, la ñ y los espacios.
   function limpiarNombre(txt) {
-    return String(txt || "").replace(/[^\w\-]+/g, "_").slice(0, 40);
+    return String(txt || "")
+      .replace(/[\\/]+/g, "-")
+      .replace(/[:*?"<>|]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 80);
   }
 
   // -------------------------------------------------------------------
@@ -135,15 +145,13 @@
       "Nº Factura": r.num_factura || "",
       "Cajas Vacías retiradas": r.cajas_vacias_retiradas ?? "",
       "Cajas Vacías devueltas": r.cajas_vacias_devueltas ?? "",
-      "Nº Plantas": r.num_plantas ?? "",
-      "Fecha de Retirada": r.fecha_retirada || "",
       "Comentarios": r.comentarios || "",
     }));
 
     descargarLibro(
       filas,
       "Registros",
-      `bimi_${codigo}_${limpiarNombre(App.state.agricultorAbierto.nombre)}.xlsx`
+      `Registros ${App.state.agricultorAbierto.nombre || "agricultor"}`
     );
     App.toast("Excel exportado");
   }
@@ -174,8 +182,6 @@
         "Nº Factura": r.num_factura || "",
         "Cajas Vacías retiradas": r.cajas_vacias_retiradas ?? "",
         "Cajas Vacías devueltas": r.cajas_vacias_devueltas ?? "",
-        "Nº Plantas": r.num_plantas ?? "",
-        "Fecha de Retirada": r.fecha_retirada || "",
         "Comentarios": r.comentarios || "",
       };
     });
@@ -183,7 +189,7 @@
     descargarLibro(
       filas,
       "Campaña",
-      `bimi_campana_${limpiarNombre(nombreCampana) || "sin_nombre"}.xlsx`
+      `Campaña ${nombreCampana || "sin nombre"}`
     );
     App.toast("Excel exportado");
   }

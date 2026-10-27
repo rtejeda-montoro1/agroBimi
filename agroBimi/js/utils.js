@@ -232,8 +232,17 @@
   // Vuelca un documento (factura) en #zonaImpresion y abre
   // el diálogo de impresión. Desde ahí el navegador permite "Guardar como
   // PDF", así que no hace falta ninguna librería extra.
-  function imprimirDocumento(html) {
+  // Al "Guardar como PDF" el navegador propone el título de la página como
+  // nombre del archivo: con nombreArchivo se cambia mientras dura la
+  // impresión (si no, saldría "Gestión de Bimi").
+  function imprimirDocumento(html, nombreArchivo = "") {
     App.dom.zonaImpresion.innerHTML = html;
+    if (nombreArchivo) {
+      const tituloOriginal = document.title;
+      // Fuera los caracteres que Windows no admite en un nombre de archivo.
+      document.title = nombreArchivo.replace(/[\\/:*?"<>|]+/g, " ").replace(/\s+/g, " ").trim();
+      window.addEventListener("afterprint", () => { document.title = tituloOriginal; }, { once: true });
+    }
     window.print();
   }
 

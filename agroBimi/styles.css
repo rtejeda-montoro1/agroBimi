@@ -295,6 +295,25 @@ button:disabled {
 }
 .cajas-fila + .cajas-fila { border-top: 1px solid var(--border); }
 .cajas-fila span { color: var(--muted); }
+.cajas-fila-edit { align-items: center; }
+.cajas-fila-edit input {
+  width: 80px;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  text-align: right;
+}
+.cajas-pop-acciones {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  margin-top: 4px;
+}
 
 /* Botón para ordenar en la cabecera de la tabla */
 .th-sort {
@@ -435,6 +454,11 @@ button:disabled {
   margin-top: 4px;
 }
 .toolbar-filtros .field { flex: 1 1 160px; }
+/* En los modales .field lleva margen inferior: aquí lo quitamos para que
+   campos, casillas y botones queden a la misma altura. */
+.modal .toolbar-filtros .field { margin-bottom: 0; }
+/* La casilla ocupa lo mismo que un input para centrarse con ellos. */
+.toolbar-filtros .check-inline { min-height: 38px; }
 
 /* ---- Footer ---- */
 .site-footer {
@@ -605,34 +629,12 @@ button:disabled {
 .tabla-registros tr.descuadre-negativo td { background: rgba(37, 99, 235, .07); }
 .tabla-registros tr.falta-plantas td,
 .tabla-registros tr.falta-cajas td { background: rgba(217, 119, 6, .1); }
-.tabla-registros tr.palet-pendiente td { background: rgba(217, 119, 6, .07); }
+.tabla-registros tr.palet-formacion td { background: rgba(217, 119, 6, .07); }
 .tabla-registros tr.palet-salido td { color: var(--muted); }
+.tabla-registros tr.fila-en-palet td { background: rgba(37, 99, 235, .06); }
 .tabla-registros .col-lineas { white-space: nowrap; line-height: 1.6; }
 
-/* ---- Cámara: ocupación ---- */
-.camara-ocupacion {
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 12px 14px;
-  margin-bottom: 14px;
-  --barra: var(--success);
-}
-.camara-ocupacion.casi-llena { --barra: #d97706; }
-.camara-ocupacion.llena { --barra: var(--danger); }
-.camara-ocupacion-cab {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 4px 14px;
-  margin-bottom: 8px;
-}
-.camara-ocupacion-titulo { color: var(--muted); font-size: .78rem; text-transform: uppercase; letter-spacing: .03em; }
-.camara-ocupacion-cab b { font-size: 1.5rem; }
-.camara-libres { margin-left: auto; font-weight: 700; color: var(--barra); }
-.camara-barra { height: 12px; border-radius: 6px; background: var(--bg); overflow: hidden; }
-.camara-barra > div { height: 100%; width: 0; background: var(--barra); transition: width .3s; }
-
-/* ---- Paletizar: cajas por agricultor ---- */
+/* ---- Editar palet: cajas por pesada ---- */
 .tabla-lineas-palet { margin-bottom: 14px; }
 .tabla-lineas-palet tfoot th { text-align: left; border-top: 1px solid var(--border); padding: 8px 10px; }
 .tabla-lineas-palet tfoot th.col-num { text-align: right; font-size: 1.05rem; }
@@ -661,6 +663,9 @@ button:disabled {
 }
 .check-inline input { width: 16px; height: 16px; }
 .opciones-liq { display: flex; flex-wrap: wrap; gap: 16px; margin: 4px 0 14px; }
+/* Facturar: recibo propio o factura del agricultor, una opción por línea. */
+.opciones-facturar { display: flex; flex-direction: column; gap: 10px; margin: 4px 0 14px; }
+.opciones-facturar .check-inline { white-space: normal; font-size: .92rem; }
 .nota-liq { color: var(--muted); font-size: .82rem; align-self: center; }
 
 .bloque-plegable {
@@ -746,6 +751,7 @@ button:disabled {
     font-size: 11pt;
   }
 
+  /* Recibo de compensación / liquidación: formato de la factura de siempre. */
   .doc { color: #000; }
   .doc-cab {
     display: flex;
@@ -809,7 +815,7 @@ button:disabled {
   .doc-totales {
     margin: 12pt 0 0;
     margin-left: auto;
-    width: 60mm;
+    width: 78mm;
     font-size: 10pt;
   }
   .doc-totales > div {
@@ -837,17 +843,221 @@ button:disabled {
   }
   .doc-pie { margin-top: 14pt; font-size: 9pt; color: #555; font-style: italic; }
 
-  .doc-firmas {
+  /* Cajas y tablas del albarán (formato del recibo en papel del cliente). */
+  .rec { color: #000; font-family: Arial, Helvetica, sans-serif; font-size: 10.5pt; }
+
+  .rec-cab {
     display: flex;
     gap: 12pt;
-    margin-top: 24pt;
-    font-size: 9pt;
+    align-items: flex-start;
+    margin-bottom: 12pt;
+  }
+  .rec-emisor {
+    flex: 1;
+    text-align: center;
+    line-height: 1.5;
+  }
+  .rec-emisor b { font-size: 12.5pt; }
+  .rec-agricultor {
+    flex: 1.15;
+    border: 1pt solid #000;
+    padding: 6pt 10pt;
+    line-height: 1.7;
+  }
+  .rec-agricultor b { font-size: 12.5pt; }
+
+  /* Bordes separados y no border-collapse: con collapse Chrome se come al
+     imprimir algunas líneas horizontales (bajo el total, bajo cabeceras).
+     La tabla pone arriba e izquierda y cada celda su derecha y su abajo. */
+  .rec-tabla {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    border-top: 1pt solid #000;
+    border-left: 1pt solid #000;
+  }
+  .rec-tabla th, .rec-tabla td {
+    border: solid #000;
+    border-width: 0 1pt 1pt 0;
+    padding: 4pt 7pt;
+    text-align: center;
+  }
+  .rec-tabla th { font-weight: 400; }
+  .rec-tabla .der { text-align: right; }
+
+  .rec-fila {
+    display: flex;
+    gap: 14pt;
+    align-items: flex-start;
+    margin-bottom: 12pt;
+  }
+
+  .rec-obs {
+    margin-top: 12pt;
+    border: 1pt solid #000;
+    padding: 6pt 10pt;
+  }
+
+  /* Albarán de salida: reutiliza la cabecera y las tablas del recibo. */
+  .alb-doc { flex: 1.15; }
+  .alb-doc td:first-child { width: 45%; }
+  .alb-caja { flex: 1; line-height: 1.5; }
+  .alb-etiqueta {
+    font-size: 8pt;
+    text-transform: uppercase;
+    letter-spacing: .06em;
     color: #555;
   }
-  .doc-firmas > div {
-    flex: 1;
-    border-top: .75pt solid #000;
-    padding-top: 4pt;
-    min-height: 18mm;
+  .alb-multilinea { white-space: pre-line; }
+  .alb-detalle, .alb-resumen { font-size: 9.5pt; }
+  .alb-detalle th, .alb-resumen th { font-weight: 700; }
+  .alb-detalle td, .alb-resumen td { text-align: left; }
+  .alb-detalle .der, .alb-resumen .der { text-align: right; }
+  .alb-detalle tfoot th { background: #eee; }
+  .alb-palet { vertical-align: top; white-space: nowrap; }
+  .alb-subtitulo { margin: 14pt 0 4pt; font-size: 10pt; }
+  .alb-firmas {
+    display: flex;
+    gap: 14pt;
+    margin-top: 26mm;
+    font-size: 9pt;
+    color: #555;
+    text-align: center;
   }
+  .alb-firmas > div { flex: 1; border-top: .75pt solid #000; padding-top: 4pt; }
+
+  /* Etiqueta del palet: cada una en su propia página del tamaño de la
+     pegatina (el @page lo escribe js/palets.js con las medidas de Ajustes). */
+  .etq {
+    break-after: page;
+    font-family: Arial, Helvetica, sans-serif;
+    color: #000;
+  }
+  .etq:last-child { break-after: auto; }
+  .etq-cabecera {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 2mm;
+  }
+  /* Pegatina de 105 × 75 mm (apaisada): letra ajustada para que quepan
+     unos 7 agricultores sin pasar a una segunda pegatina. */
+  .etq-numero { font-size: 13pt; font-weight: 700; }
+  .etq-codigo { font-size: 8pt; color: #333; }
+  .etq-tabla { width: 100%; border-collapse: collapse; font-size: 12pt; }
+  /* Sin líneas entre agricultores, como la etiqueta a mano del cliente. */
+  .etq-tabla td { padding: .8mm 1mm; }
+  .etq-tabla .der { text-align: right; font-weight: 700; white-space: nowrap; }
+  .etq-fecha { margin-top: 3mm; font-size: 15pt; font-weight: 700; text-align: center; }
+
+  /* Carta de porte (CMR): copia la disposición del impreso del cliente.
+     Cada ejemplar es una página A4 con márgenes estrechos. Lo que en papel
+     va a bolígrafo (.cmr-dato) sale en azul, para que se distinga igual. */
+  @page cmr { size: A4; margin: 7mm 8mm; }
+  .cmr {
+    page: cmr;
+    break-after: page;
+    font-family: Arial, Helvetica, sans-serif;
+    color: #000;
+    font-size: 8pt;
+  }
+  .cmr-cab {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 1mm 1.5mm;
+  }
+  .cmr-ejemplar { display: flex; align-items: center; gap: 2mm; font-size: 7.5pt; line-height: 1.2; }
+  .cmr-ejemplar > span { font-size: 20pt; font-weight: 800; }
+  .cmr-tipo { display: flex; align-items: center; gap: 2mm; font-size: 10pt; }
+  .cmr-check {
+    width: 6mm; height: 6mm;
+    border: 1pt solid #000;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 12pt; color: #1f3fa8; margin-left: 3mm;
+  }
+  .cmr-sello {
+    border: 1.2pt solid #000; border-radius: 50%;
+    padding: .5mm 2mm; font-weight: 800; font-size: 10pt;
+  }
+
+  .cmr-fila { display: flex; border-left: 1pt solid #000; }
+  .cmr-cab + .cmr-fila { border-top: 1pt solid #000; }
+  .cmr-col { flex: 1; display: flex; flex-direction: column; }
+  .cmr-fila > .cmr-c, .cmr-col { flex: 1; min-width: 0; }
+  .cmr-c {
+    border-right: 1pt solid #000;
+    border-bottom: 1pt solid #000;
+    padding: 1mm 1.5mm;
+    overflow: hidden;
+  }
+  .cmr-l { font-size: 6.3pt; line-height: 1.2; }
+  .cmr-l b { font-size: 9pt; }
+  .cmr-v { margin-top: 1mm; }
+  .cmr-fijo { white-space: pre-line; font-size: 9pt; line-height: 1.35; }
+  .cmr-fijo:first-line { font-weight: 700; }
+  .cmr-peq { font-size: 7pt; }
+  .cmr-dato {
+    white-space: pre-line;
+    color: #1f3fa8;
+    font-size: 10.5pt;
+    line-height: 1.35;
+  }
+  .cmr-centro { text-align: center; }
+
+  .cmr-a { min-height: 27mm; }
+  .cmr-titulo p { margin: 1.5mm 0 0; font-size: 6.8pt; line-height: 1.3; }
+  .cmr-titulo-cab { display: flex; justify-content: space-between; align-items: center; font-size: 9pt; }
+  .cmr-b { min-height: 22mm; }
+  .cmr-porteador { display: flex; gap: 2mm; justify-content: space-between; }
+  .cmr-matriculas { text-align: right; font-weight: 700; white-space: pre; flex-shrink: 0; }
+  .cmr-c3 { min-height: 15mm; }
+  .cmr-c4 { min-height: 11mm; }
+  .cmr-c5 { min-height: 13mm; }
+
+  .cmr-mercancia {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+  }
+  .cmr-mercancia th, .cmr-mercancia td {
+    border: 1pt solid #000;
+    border-top: none;
+    padding: 1mm 1.2mm;
+    vertical-align: top;
+    text-align: left;
+  }
+  .cmr-mercancia th { font-weight: 400; font-size: 6.3pt; line-height: 1.2; border-bottom: none; }
+  .cmr-mercancia th b { font-size: 9pt; }
+  .cmr-mercancia th:nth-child(4) { width: 22%; }
+  .cmr-mercancia td { color: #1f3fa8; font-size: 10.5pt; }
+  .cmr-mercancia-datos td { height: 27mm; border-bottom: none; }
+  .cmr-mercancia-palets td { height: 14mm; vertical-align: middle; }
+  .cmr-mercancia-palets td + td { text-align: center; font-size: 12pt; }
+  .cmr-mercancia-palets td:first-child, .cmr-mercancia-palets td:last-child { border-top: none; }
+
+  .cmr-c13 { min-height: 24mm; }
+  .cmr-instrucciones { font-weight: 400; font-size: 8.5pt; }
+  .cmr-instrucciones:first-line { font-weight: 400; }
+  .cmr-c14 { min-height: 14mm; }
+  .cmr-c19 { min-height: 7mm; border-bottom: none; }
+  .cmr-pagar { width: 100%; border-collapse: collapse; font-size: 6.3pt; }
+  .cmr-pagar th, .cmr-pagar td {
+    border-right: 1pt solid #000;
+    border-bottom: 1pt solid #000;
+    padding: .6mm 1.2mm;
+    text-align: left;
+    font-weight: 400;
+    height: 4.6mm;
+  }
+  .cmr-pagar th:first-child, .cmr-pagar td:first-child { border-left: 1pt solid #000; width: 34%; }
+  .cmr-pagar th { border-top: 1pt solid #000; }
+  .cmr-pagar th b { font-size: 9pt; }
+
+  .cmr-c21 { min-height: 14mm; }
+  .cmr-formalizado { display: flex; align-items: center; gap: 3mm; }
+  .cmr-firmas { min-height: 30mm; display: flex; flex-direction: column; }
+  .cmr-firmas .cmr-v { flex: 1; display: flex; flex-direction: column; justify-content: space-between; }
+  .cmr-firma { font-size: 6.3pt; line-height: 1.2; margin-top: 2mm; }
+  .cmr-recibidas { display: flex; justify-content: space-between; margin-top: 2mm; padding-right: 15mm; }
 }

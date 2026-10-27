@@ -8,7 +8,10 @@
 //      − descuento de cajas            × precio por caja
 //      − cajas vacías no devueltas     × precio de caja perdida
 //      ± concepto libre
-//      = base  →  + IVA / compensación  →  total
+//      = base  →  + IVA / compensación  →  − retención IRPF  →  total
+//
+//  La retención se aplica sobre base + IVA, igual que en los recibos de
+//  compensación en papel del cliente.
 //
 //  Las líneas se guardan calculadas, así que una liquidación ya cerrada
 //  no cambia de importe si después se editan los registros.
@@ -107,7 +110,8 @@
           <td class="col-num">${App.fmtEuro(l.base)}</td>
           <td class="col-num"><b>${App.fmtEuro(l.total)}</b></td>
           <td><span class="${estado.clase}">${estado.texto}</span></td>
-          <td>${App.valor(l.num_factura)}</td>
+          <td>${App.valor(l.num_factura)}${l.factura_agricultor
+            ? ' <span class="badge badge-mini" title="Factura que trajo el agricultor">del agricultor</span>' : ""}</td>
           <td class="col-acciones">
             <button class="btn-ghost btn-sm" data-ver-liq="${l.id}">Ver</button>
             ${esBorrador ? `<button class="btn-edit btn-sm" data-edit-liq="${l.id}">Editar</button>` : ""}
@@ -142,7 +146,12 @@
       App.$("liqPrecioCaja").value = liquidacion.precio_caja ?? "";
       App.$("liqPrecioCajaPerdida").value = liquidacion.precio_caja_perdida ?? "";
       App.$("liqIva").value = liquidacion.iva_porcentaje ?? "";
+      App.$("liqRetencion").value = liquidacion.retencion_porcentaje ?? "";
       App.$("liqObservaciones").value = liquidacion.observaciones ?? "";
+      // Las cajas vacías se descuentan normalmente a final de campaña: al
+      // editar se respeta si esta liquidación ya las llevaba.
+      App.$("liqIncluirCajas").checked = (liquidacion.liquidacion_lineas || [])
+        .some((l) => l.tipo === "cajas_perdidas");
       // El agricultor no se cambia al editar: los registros ya están
       // vinculados a esta liquidación.
       App.$("liqAgricultor").disabled = true;
@@ -159,7 +168,8 @@
       App.$("liqPrecioCaja").value = App.param("precio_caja");
       App.$("liqPrecioCajaPerdida").value = App.param("precio_caja_perdida");
       App.$("liqIva").value = App.param("iva_porcentaje");
-      App.$("liqIncluirCajas").checked = true;
+      App.$("liqRetencion").value = App.param("retencion_porcentaje");
+      App.$("liqIncluirCajas").checked = false;
       App.$("liqIncluirDescuento").checked = true;
     }
 
@@ -175,7 +185,8 @@
     let cambiado = false;
     [["liqPrecioCaja", "precio_caja"],
      ["liqPrecioCajaPerdida", "precio_caja_perdida"],
-     ["liqIva", "iva_porcentaje"]].forEach(([id, clave]) => {
+     ["liqIva", "iva_porcentaje"],
+     ["liqRetencion", "retencion_porcentaje"]].forEach(([id, clave]) => {
       const input = App.$(id);
       const previo = anteriores[clave] ?? App.PARAMETROS_DEFECTO[clave] ?? "";
       const nuevo = App.param(clave);
@@ -198,6 +209,8 @@
     App.$("liqBase").textContent = "—";
     App.$("liqIvaEtiqueta").textContent = "IVA / compensación";
     App.$("liqIvaImporte").textContent = "—";
+    App.$("liqRetencionEtiqueta").textContent = "Retención IRPF";
+    App.$("liqRetencionImporte").textContent = "—";
     App.$("liqTotal").textContent = "—";
     App.$("btnGuardarLiquidacion").disabled = true;
   }
@@ -247,6 +260,7 @@
       precioCaja: App.num(App.$("liqPrecioCaja").value),
       precioCajaPerdida: App.num(App.$("liqPrecioCajaPerdida").value),
       iva: App.num(App.$("liqIva").value),
+      retencion: App.num(App.$("liqRetencion").value),
       incluirCajas: App.$("liqIncluirCajas").checked,
       incluirDescuento: App.$("liqIncluirDescuento").checked,
       otroConcepto,
@@ -347,7 +361,8 @@
 
     const base = App.redondear(lineas.reduce((s, l) => s + l.importe, 0));
     const ivaImporte = App.redondear(base * datos.iva / 100);
-    const total = App.redondear(base + ivaImporte);
+    const retencionImporte = App.redondear((base + ivaImporte) * datos.retencion / 100);
+    const total = App.redondear(base + ivaImporte - retencionImporte);
 
     App.state.liquidacionPrevia = {
       datos,
@@ -355,6 +370,7 @@
       registrosIds: registros.map((r) => r.id),
       base,
       ivaImporte,
+      retencionImporte,
       total,
       cajas,
     };
@@ -381,6 +397,9 @@
     App.$("liqIvaEtiqueta").textContent =
       `IVA / compensación (${App.fmtNum(previa.datos.iva, 2)} %)`;
     App.$("liqIvaImporte").textContent = App.fmtEuro(previa.ivaImporte);
+    App.$("liqRetencionEtiqueta").textContent =
+      `Retención IRPF (${App.fmtNum(previa.datos.retencion, 2)} %)`;
+    App.$("liqRetencionImporte").textContent = App.fmtEuro(-previa.retencionImporte);
     App.$("liqTotal").textContent = App.fmtEuro(previa.total);
     // Sin registros y sin líneas con importe no hay nada que liquidar.
     App.$("btnGuardarLiquidacion").disabled =
@@ -426,6 +445,8 @@
       iva_porcentaje: datos.iva,
       base: previa.base,
       iva: previa.ivaImporte,
+      retencion_porcentaje: datos.retencion,
+      retencion: previa.retencionImporte,
       total: previa.total,
       observaciones: datos.observaciones,
     };
@@ -509,11 +530,13 @@
     await cargarLiquidaciones();
   }
 
-  async function facturarLiquidacion(id) {
+  // Facturar abre una ventana con dos opciones: generar nuestro recibo de
+  // compensación (nº automático de la serie) o apuntar la factura que trae
+  // el agricultor (su nº y su fecha, a mano, sin gastar nº de la serie).
+  async function abrirModalFacturar(id) {
     const l = App.state.liquidacionesActuales.find((x) => String(x.id) === String(id));
     if (!l) return;
 
-    const serie = App.param("serie_factura");
     let secuencia;
     try {
       secuencia = await App.siguienteSecuencia("liquidaciones", "factura_secuencia");
@@ -522,26 +545,88 @@
       return;
     }
 
-    const numFactura = App.fmtDocumento(serie, secuencia, ANCHO_NUMERO);
-    const fecha = App.hoyISO();
+    const form = App.$("formFacturar");
+    form.reset();
+    App.$("facturarLiqId").value = l.id;
+    App.$("modalFacturarTitulo").textContent = `🧾 Facturar ${l.numero || "liquidación"}`;
+    App.$("facturarResumen").textContent =
+      `${App.agricultorPorId(l.agricultor_id)?.nombre || ""} · Total: ${App.fmtEuro(l.total)}`;
+    App.$("facturarNumPropio").textContent =
+      `(${App.fmtDocumento(App.param("serie_factura"), secuencia, ANCHO_NUMERO)})`;
+    App.$("facturarFechaAgricultor").value = App.hoyISO();
+    mostrarDatosFacturaAgricultor();
+    App.abrirModal(App.dom.modalFacturar);
+  }
 
-    if (!confirm(
-      `¿Generar la factura ${numFactura} para la liquidación ${l.numero}?\n\n` +
-      `Total: ${App.fmtEuro(l.total)}\n\n` +
-      "El nº de factura se copiará también a los registros incluidos."
-    )) return;
+  function tipoFacturaElegido() {
+    return App.$("formFacturar").querySelector('input[name="facturarTipo"]:checked')?.value || "propia";
+  }
 
-    const { error } = await App.db.from("liquidaciones").update({
-      estado: "facturada",
-      factura_secuencia: secuencia,
-      num_factura: numFactura,
-      fecha_factura: fecha,
-    }).eq("id", l.id);
+  function mostrarDatosFacturaAgricultor() {
+    const deAgricultor = tipoFacturaElegido() === "agricultor";
+    App.$("facturarDatosAgricultor").hidden = !deAgricultor;
+    App.$("facturarNumAgricultor").required = deAgricultor;
+    App.$("facturarFechaAgricultor").required = deAgricultor;
+  }
+
+  async function guardarFacturar(e) {
+    e.preventDefault();
+    const l = App.state.liquidacionesActuales.find((x) => String(x.id) === App.$("facturarLiqId").value);
+    if (!l) return;
+
+    const deAgricultor = tipoFacturaElegido() === "agricultor";
+    let cambios;
+
+    if (deAgricultor) {
+      const numFactura = App.$("facturarNumAgricultor").value.trim();
+      const fecha = App.$("facturarFechaAgricultor").value;
+      if (!numFactura || !fecha) {
+        App.toast("Escribe el nº y la fecha de la factura del agricultor.");
+        return;
+      }
+      // El mismo nº ya apuntado a otra liquidación de este agricultor suele
+      // ser un error al teclear.
+      const repetida = App.state.liquidacionesActuales.find((x) =>
+        x.id !== l.id && x.agricultor_id === l.agricultor_id &&
+        (x.num_factura || "").trim().toLowerCase() === numFactura.toLowerCase());
+      if (repetida &&
+          !confirm(`La factura ${numFactura} ya está apuntada en la liquidación ${repetida.numero}. ¿Apuntarla también aquí?`)) {
+        return;
+      }
+      cambios = {
+        estado: "facturada",
+        factura_agricultor: true,
+        factura_secuencia: null,
+        num_factura: numFactura,
+        fecha_factura: fecha,
+      };
+    } else {
+      // Se vuelve a pedir el nº al guardar: otra persona puede haber
+      // facturado mientras la ventana estaba abierta.
+      let secuencia;
+      try {
+        secuencia = await App.siguienteSecuencia("liquidaciones", "factura_secuencia");
+      } catch (err) {
+        App.toast("Error al numerar la factura: " + err.message);
+        return;
+      }
+      cambios = {
+        estado: "facturada",
+        factura_agricultor: false,
+        factura_secuencia: secuencia,
+        num_factura: App.fmtDocumento(App.param("serie_factura"), secuencia, ANCHO_NUMERO),
+        fecha_factura: App.hoyISO(),
+      };
+    }
+
+    const numFactura = cambios.num_factura;
+    const { error } = await App.db.from("liquidaciones").update(cambios).eq("id", l.id);
 
     if (error) {
       App.toast("Error al facturar: " + error.message);
       return;
     }
+    App.cerrarModal(App.dom.modalFacturar);
 
     // El nº de factura también va a los registros: así la tabla del
     // agricultor sigue agrupándolos por factura como hasta ahora.
@@ -552,14 +637,18 @@
     if (errorRegs) {
       App.toast("Factura creada, pero no se pudo copiar el nº a los registros: " + errorRegs.message);
     } else {
-      App.toast(`Factura ${numFactura} generada`);
+      App.toast(deAgricultor
+        ? `Factura del agricultor ${numFactura} apuntada`
+        : `Recibo ${numFactura} generado`);
     }
 
     await cargarLiquidaciones();
     if (App.state.agricultorAbierto) await App.cargarRegistros();
 
+    // Solo el recibo propio se abre para imprimirlo: la factura del
+    // agricultor ya la tiene él en papel.
     const actualizada = App.state.liquidacionesActuales.find((x) => String(x.id) === String(l.id));
-    if (actualizada) App.abrirModalFactura(actualizada);
+    if (actualizada && !deAgricultor) App.abrirModalFactura(actualizada);
   }
 
   async function eliminarLiquidacion(id) {
@@ -617,7 +706,7 @@
       return;
     }
     if (cerrar) return cerrarLiquidacion(cerrar.dataset.cerrarLiq);
-    if (facturar) return facturarLiquidacion(facturar.dataset.facturarLiq);
+    if (facturar) return abrirModalFacturar(facturar.dataset.facturarLiq);
     if (eliminar) return eliminarLiquidacion(eliminar.dataset.delLiq);
   }
 
@@ -670,10 +759,13 @@
         "Base": App.num(l.base),
         "IVA %": App.num(l.iva_porcentaje),
         "IVA": App.num(l.iva),
+        "Retención %": App.num(l.retencion_porcentaje),
+        "Retención": App.num(l.retencion),
         "Total": App.num(l.total),
         "Estado": ESTADOS[l.estado]?.texto || l.estado,
         "Nº Factura": l.num_factura || "",
         "Fecha Factura": l.fecha_factura || "",
+        "Factura del agricultor": l.factura_agricultor ? "Sí" : "No",
       };
     });
 
@@ -682,7 +774,7 @@
       return;
     }
 
-    App.descargarLibro(filas, "Liquidaciones", "bimi_liquidaciones.xlsx");
+    App.descargarLibro(filas, "Liquidaciones", "Liquidaciones");
     App.toast("Excel exportado");
   }
 
@@ -700,6 +792,9 @@
     App.$("btnCalcularLiquidacion").addEventListener("click", calcular);
     App.dom.formLiquidacion.addEventListener("submit", guardarLiquidacion);
     App.$("cuerpoLiquidaciones").addEventListener("click", clickLiquidaciones);
+    App.$("formFacturar").addEventListener("submit", guardarFacturar);
+    App.$("formFacturar").querySelectorAll('input[name="facturarTipo"]').forEach((r) =>
+      r.addEventListener("change", mostrarDatosFacturaAgricultor));
     App.$("btnExportLiquidaciones").addEventListener("click", exportarLiquidaciones);
 
     ["filtroAgriLiq", "filtroCampanaLiq", "filtroEstadoLiq",
@@ -709,7 +804,7 @@
     // Cambiar cualquier dato del cálculo invalida el resultado anterior:
     // hay que volver a pulsar «Calcular».
     ["liqAgricultor", "liqCampana", "liqDesde", "liqHasta", "liqPrecioCaja",
-     "liqPrecioCajaPerdida", "liqIva", "liqIncluirCajas", "liqIncluirDescuento",
+     "liqPrecioCajaPerdida", "liqIva", "liqRetencion", "liqIncluirCajas", "liqIncluirDescuento",
      "liqOtroConcepto", "liqOtraCantidad", "liqOtroPrecio"].forEach((id) =>
       App.$(id).addEventListener("change", () => {
         App.state.liquidacionPrevia = null;

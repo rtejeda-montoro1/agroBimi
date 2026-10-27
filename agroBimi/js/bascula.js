@@ -4,6 +4,8 @@
 //  entra cada agricultor y las vacías que se lleva.
 //  Toda la escritura pasa por las funciones bascula_* de schema.sql
 //  (sección 14), que validan los datos.
+//  Cada entrada es una pesada; en el servidor, las del mismo día de un
+//  agricultor (misma campaña y ciclo) se suman en un único registro.
 //
 //  Sin red:
 //  Cada entrada se guarda PRIMERO en la tablet (cola de "pendientes" en
@@ -535,10 +537,14 @@
   function elegirAgricultor(id) {
     const a = state.agricultores.find((x) => x.id === id);
     if (!a) return;
+    // Si ya había otro agricultor elegido es que se está corrigiendo la
+    // selección: se mantiene el ciclo marcado (igual que las cajas tecleadas).
+    // Si se empieza de cero, proponemos el último ciclo que se le apuntó en
+    // esta campaña; si no tiene ninguno, el ciclo 1.
+    if (!state.elegido) {
+      state.ciclo = ["1", "2", "3"].includes(a.ultimo_ciclo) ? a.ultimo_ciclo : "1";
+    }
     state.elegido = a;
-    // Proponemos el último ciclo que se le apuntó en esta campaña; si no
-    // tiene ninguno, el ciclo 1.
-    state.ciclo = ["1", "2", "3"].includes(a.ultimo_ciclo) ? a.ultimo_ciclo : "1";
     state.campo = "cajas";
     $("errorEntrada").textContent = "";
     pintarAgricultores();
@@ -597,7 +603,11 @@
     guardarPendientes();
 
     a.ultimo_ciclo = state.ciclo;
-    toast(`✓ ${a.nombre} · Ciclo ${state.ciclo} · ${resumenCajas({ cajas, vacias })}`);
+    // Las pesadas del mismo día se suman en un único registro: se enseña
+    // también lo que lleva hoy en total.
+    const totalHoy = cajasHoyDe(a.id);
+    toast(`✓ ${a.nombre} · Ciclo ${state.ciclo} · ${resumenCajas({ cajas, vacias })}` +
+      (totalHoy !== cajas ? ` · hoy ${totalHoy} cajas` : ""));
     // Listo para el siguiente agricultor.
     state.elegido = null;
     state.ciclo = "1";
@@ -618,7 +628,7 @@
   async function anular(id) {
     const h = state.hoy.find((x) => x.id === id);
     if (!h) return;
-    if (!confirm(`¿Anular la entrada de las ${hora(h.creado)}?\n${h.nombre} · Ciclo ${h.ciclo} · ${resumenCajas(h)}`)) return;
+    if (!confirm(`¿Anular la entrada de las ${hora(h.creado)}?\n${h.nombre} · Ciclo ${h.ciclo} · ${resumenCajas(h)}\n\nSe resta del total del día.`)) return;
 
     const { data, error } = await db.rpc("bascula_anular", { p_id: id });
     if (error) {

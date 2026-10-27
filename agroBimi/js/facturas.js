@@ -1,9 +1,10 @@
 // =====================================================================
-//  Liquidación / factura: documento
+//  Liquidación / recibo de compensación: documento
 //  ---------------------------------------------------------------------
 //  El mismo modal sirve para las dos cosas: mientras la liquidación no
 //  está facturada se ve como "Liquidación", y en cuanto se le asigna un
-//  nº de factura pasa a verse como "Factura".
+//  nº pasa a verse como "Recibo de compensación" (el documento que el
+//  cliente entrega al agricultor, con IVA de compensación y retención).
 //
 //  La descarga en PDF se hace con el propio navegador: al imprimir se
 //  puede elegir "Guardar como PDF", así que no hace falta ninguna
@@ -40,21 +41,25 @@
     if (!liquidacion) return;
 
     liquidacionVista = liquidacion;
-    const facturada = liquidacion.estado === "facturada";
+    // Con factura del agricultor no hay recibo propio: se ve como
+    // liquidación, con el nº de su factura en los datos del documento.
+    const deAgricultor = liquidacion.estado === "facturada" && liquidacion.factura_agricultor;
+    const facturada = liquidacion.estado === "facturada" && !deAgricultor;
     const agricultor = App.agricultorPorId(liquidacion.agricultor_id) || {};
     const emisor = App.datosEmisor();
 
     App.$("modalFacturaTitulo").textContent = facturada
-      ? `🧾 Factura ${liquidacion.num_factura || ""}`.trim()
+      ? `🧾 Recibo de compensación ${liquidacion.num_factura || ""}`.trim()
       : `📄 Liquidación ${liquidacion.numero || ""}`.trim();
 
-    App.$("facturaAviso").hidden = facturada;
+    App.$("facturaAviso").hidden = facturada || deAgricultor;
     App.$("facturaRegistroId").value = liquidacion.id;
 
     pintarDatos("facturaEmisor", {
       "Nombre": emisor.nombre,
       "NIF / CIF": emisor.nif,
       "Dirección": direccionCompleta(emisor),
+      "Registro de establecimiento": emisor.registro,
       "Teléfono": emisor.telefono,
       "Email": emisor.email,
     });
@@ -73,8 +78,8 @@
       "Fecha": App.formatearFecha(liquidacion.fecha),
       "Periodo": `${App.formatearFecha(liquidacion.fecha_desde)} — ${App.formatearFecha(liquidacion.fecha_hasta)}`,
       "Campaña": liquidacion.campana_id ? App.campanaNombre(liquidacion.campana_id) : "—",
-      "Nº Factura": liquidacion.num_factura,
-      "Fecha Factura": App.formatearFecha(liquidacion.fecha_factura),
+      [deAgricultor ? "Nº Factura del agricultor" : "Nº Recibo"]: liquidacion.num_factura,
+      [deAgricultor ? "Fecha de su factura" : "Fecha Recibo"]: App.formatearFecha(liquidacion.fecha_factura),
     });
 
     App.$("cuerpoFacturaLineas").innerHTML = lineasOrdenadas(liquidacion).map((l) => `
@@ -89,11 +94,14 @@
     App.$("facturaIvaEtiqueta").textContent =
       `IVA / compensación (${App.fmtNum(liquidacion.iva_porcentaje, 2)} %)`;
     App.$("facturaIva").textContent = App.fmtEuro(liquidacion.iva);
+    App.$("facturaRetencionEtiqueta").textContent =
+      `Retención IRPF (${App.fmtNum(App.num(liquidacion.retencion_porcentaje), 2)} %)`;
+    App.$("facturaRetencion").textContent = App.fmtEuro(-App.num(liquidacion.retencion));
     App.$("facturaTotal").textContent = App.fmtEuro(liquidacion.total);
     App.$("facturaObservaciones").textContent = liquidacion.observaciones || "";
     App.$("facturaObservacionesBloque").hidden = !liquidacion.observaciones;
 
-    App.$("btnImprimirFactura").textContent = facturada ? "🖨 Imprimir factura" : "🖨 Imprimir liquidación";
+    App.$("btnImprimirFactura").textContent = facturada ? "🖨 Imprimir recibo" : "🖨 Imprimir liquidación";
 
     App.dom.modalFactura.classList.add("open");
   }
@@ -101,6 +109,10 @@
   // ------------------------------------------------------------------
   //  Documento imprimible
   // ------------------------------------------------------------------
+  //  Formato de la factura de siempre (cabecera con título y nº, emisor y
+  //  agricultor en dos recuadros, tabla de conceptos y totales a la
+  //  derecha), pero titulado "Recibo de compensación" y con la retención
+  //  IRPF restada antes del total.
   function bloqueParte(titulo, datos) {
     return `
       <div class="doc-parte">
@@ -109,6 +121,7 @@
         ${datos.nif ? `<div>NIF: ${App.escapar(datos.nif)}</div>` : ""}
         ${datos.direccion ? `<div>${App.escapar(datos.direccion)}</div>` : ""}
         <div>${App.escapar([datos.codigo_postal, datos.poblacion, datos.provincia].filter(Boolean).join(" "))}</div>
+        ${datos.registro ? `<div>Reg. establecimiento: ${App.escapar(datos.registro)}</div>` : ""}
         ${datos.telefono ? `<div>Tel.: ${App.escapar(datos.telefono)}</div>` : ""}
         ${datos.email ? `<div>${App.escapar(datos.email)}</div>` : ""}
         ${datos.iban ? `<div>IBAN: ${App.escapar(datos.iban)}</div>` : ""}
@@ -119,9 +132,14 @@
     const l = liquidacionVista;
     if (!l) return;
 
-    const facturada = l.estado === "facturada";
+    // Con factura del agricultor se imprime la liquidación (el documento
+    // fiscal es su factura), indicando su nº y su fecha.
+    const deAgricultor = l.estado === "facturada" && l.factura_agricultor;
+    const facturada = l.estado === "facturada" && !deAgricultor;
     const agricultor = App.agricultorPorId(l.agricultor_id) || {};
     const emisor = App.datosEmisor();
+    // 12 % y no 12,00 %, pero sin perder decimales si los hay (2,5 %).
+    const pct = (v) => App.fmtNum(App.num(v), Number.isInteger(App.num(v)) ? 0 : 2);
 
     const filas = lineasOrdenadas(l).map((linea) => `
       <tr>
@@ -135,7 +153,7 @@
       <div class="doc">
         <div class="doc-cab">
           <div>
-            <h1>${facturada ? "Factura" : "Liquidación"}</h1>
+            <h1>${facturada ? "Recibo de compensación" : "Liquidación"}</h1>
             <p class="doc-num">${App.escapar((facturada ? l.num_factura : l.numero) || "")}</p>
           </div>
           <div class="doc-datos-cab">
@@ -143,13 +161,15 @@
             <div><span>Periodo</span><b>${App.formatearFecha(l.fecha_desde)} — ${App.formatearFecha(l.fecha_hasta)}</b></div>
             ${l.campana_id ? `<div><span>Campaña</span><b>${App.escapar(App.campanaNombre(l.campana_id))}</b></div>` : ""}
             ${facturada && l.numero ? `<div><span>Liquidación</span><b>${App.escapar(l.numero)}</b></div>` : ""}
+            ${deAgricultor ? `<div><span>Factura del agricultor</span><b>${App.escapar(l.num_factura || "")}</b></div>` : ""}
+            ${deAgricultor && l.fecha_factura ? `<div><span>Fecha de su factura</span><b>${App.formatearFecha(l.fecha_factura)}</b></div>` : ""}
           </div>
         </div>
 
         <div class="doc-partes">
           ${bloqueParte("Emisor", emisor)}
           ${bloqueParte("Agricultor", {
-            nombre: `${App.fmtCodigo(agricultor.codigo)} · ${agricultor.nombre || ""}`,
+            nombre: agricultor.nombre,
             nif: agricultor.nif,
             direccion: agricultor.direccion,
             codigo_postal: agricultor.codigo_postal,
@@ -173,7 +193,8 @@
 
         <div class="doc-totales">
           <div><span>Base</span><b>${App.fmtEuro(l.base)}</b></div>
-          <div><span>IVA / compensación (${App.fmtNum(l.iva_porcentaje, 2)} %)</span><b>${App.fmtEuro(l.iva)}</b></div>
+          <div><span>IVA / compensación (${pct(l.iva_porcentaje)} %)</span><b>${App.fmtEuro(l.iva)}</b></div>
+          <div><span>Retención IRPF (${pct(l.retencion_porcentaje)} %)</span><b>${App.fmtEuro(-App.num(l.retencion))}</b></div>
           <div class="doc-total"><span>Total</span><b>${App.fmtEuro(l.total)}</b></div>
         </div>
 
@@ -181,10 +202,21 @@
           ? `<div class="doc-obs"><b>Observaciones:</b> ${App.escapar(l.observaciones)}</div>`
           : ""}
 
-        ${!facturada
-          ? '<p class="doc-pie">Documento de liquidación: todavía no tiene número de factura.</p>'
+        ${!facturada && !deAgricultor
+          ? '<p class="doc-pie">Documento de liquidación: todavía no tiene número de recibo.</p>'
           : ""}
-      </div>`);
+      </div>`, nombreArchivo(l, agricultor, facturada));
+  }
+
+  // "Recibo de compensación RC-0001 José Pérez 2026-10-20" (o
+  // "Liquidación ..." con su número si todavía no está facturada).
+  function nombreArchivo(l, a, facturada) {
+    return [
+      facturada ? "Recibo de compensación" : "Liquidación",
+      facturada ? l.num_factura : l.numero,
+      a.nombre,
+      facturada ? l.fecha_factura : l.fecha,
+    ].filter(Boolean).join(" ");
   }
 
   function configurarEventosFacturas() {

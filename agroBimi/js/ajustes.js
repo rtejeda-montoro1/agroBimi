@@ -31,7 +31,11 @@
   // Lectura de un parámetro como texto o como número.
   function param(clave) {
     const valor = App.state.parametros[clave];
-    return valor === null || valor === undefined ? (App.PARAMETROS_DEFECTO[clave] ?? "") : valor;
+    // Un ajuste vacío también toma el valor por defecto: así los datos fijos
+    // del emisor salen aunque en la tabla se guardasen en blanco.
+    return valor === null || valor === undefined || String(valor).trim() === ""
+      ? (App.PARAMETROS_DEFECTO[clave] ?? "")
+      : valor;
   }
 
   function paramNum(clave) {
@@ -78,6 +82,7 @@
       codigo_postal: param("emisor_codigo_postal"),
       poblacion: param("emisor_poblacion"),
       provincia: param("emisor_provincia"),
+      registro: param("emisor_registro"),
       telefono: param("emisor_telefono"),
       email: param("emisor_email"),
     };

@@ -58,6 +58,8 @@
     App.configurarEventosCajas();
     App.configurarEventosLiquidaciones();
     App.configurarEventosFacturas();
+    App.configurarEventosPalets();
+    App.configurarEventosSalidas();
     App.configurarEventosAjustes();
     configurarEventosInterfaz();
     App.initAuth();

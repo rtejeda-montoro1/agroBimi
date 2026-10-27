@@ -36,8 +36,8 @@ dentro de su propia carpeta.
 - agroBimi/js/registros.js: logica CRUD de registros.
 - agroBimi/js/plantas.js: retiradas de plantas por ciclo y calculo de rendimiento.
 - agroBimi/js/cajas.js: control de cajas vacias y descuadres.
-- agroBimi/js/camara.js y agroBimi/js/palets.js: camara y palets. **Fuera de
-  la web por ahora** (ver "Camara y palets").
+- agroBimi/js/palets.js: paletizacion (camara, palets y etiquetas).
+- agroBimi/js/salidas.js: salidas de palets y albaranes de salida.
 - agroBimi/js/liquidaciones.js: liquidaciones por fechas y generacion de facturas.
 - agroBimi/js/facturas.js: documento de liquidacion / factura e impresion.
 - agroBimi/js/reportes.js: exportacion a Excel.
@@ -50,11 +50,22 @@ Ejecuta `agroBimi/schema.sql` completo en el editor SQL de Supabase. Es
 idempotente: se puede volver a ejecutar tantas veces como haga falta, crea
 solo lo que falte y no borra datos.
 
-**Una sola vez, antes de `schema.sql`:** ejecuta
-`agroBimi/migraciones/2026-10-11_campana_26-27.sql`. Deja la campana 26/27
-como unica (pasa a ella todo lo de las demas campanas y lo que no tenia
-campana, y borra las otras) y pone ciclo 1 a lo que no tenia ciclo. Lee la
-cabecera del archivo antes de ejecutarlo.
+**Datos del cliente:** el repositorio es publico, asi que los datos reales
+del emisor de los recibos (nombre, NIF, direccion, registro de
+establecimiento) y del CMR (remitente y porteador) no estan en el codigo
+ni en `schema.sql`: salen vacios. Viven en `agroBimi/privado/datos_cliente.sql`,
+que esta en `.gitignore` y se guarda aparte (por ejemplo, en el repositorio
+privado de backups). En una instalacion nueva, ejecutalo despues de
+`schema.sql` o rellena esos datos en Ajustes. No subas al repo documentos
+reales (recibos, facturas en PDF) ni datos de agricultores.
+
+**Migraciones:** los scripts SQL que actualizan una base de datos que ya
+tiene datos (pasar datos antiguos al formato nuevo, juntar registros, etc.)
+no estan en el repositorio: se guardan aparte, junto a los datos privados.
+Cada cambio de este README que necesita una lo indica con "requiere
+migracion". Leela antes de ejecutarla en Supabase. La de la campana 26/27
+(deja esa campana como unica y pone ciclo 1 a lo que no tenia) va **una
+sola vez, antes de `schema.sql`**.
 
 ### Campana y ciclo obligatorios
 
@@ -103,40 +114,43 @@ vacia perdida* de Ajustes.
 Se anota en el propio registro: *Cajas Vacias retiradas* (lo que se lleva) y
 *Cajas Vacias devueltas* (lo que devuelve sin usar).
 
-### Camara y palets
+### Camara, paletizacion y salidas
 
-**Fuera de la web por ahora.** Para simplificar la vista a lo que pide el
-cliente (cajas de la bascula, descuentos, liquidaciones y plantas por ciclo)
-se quitaron de `index.html` los botones y modales de Camara y Palets y no se
-cargan `camara.js` ni `palets.js`. El codigo, las tablas y la vista
-`camara_saldos` siguen ahi: para recuperarlo basta con volver a poner en
-`index.html` lo que hay en `respaldo/2026-10-10/index.html`, los dos
-`<script>` y las llamadas en `ui.js`. Lo que sigue describe como funcionaba.
+Todas las cajas que pasan por la bascula van a la camara y **la base de datos
+las reparte sola en palets** de `cajas_por_palet` (60) al apuntar la pesada
+(trigger `registros_paletizar`, `schema.sql` seccion 16; requiere
+migracion en una base de datos existente). Rellena el palet abierto mas
+antiguo de la campana y lo que sobra abre el siguiente. Al estar en la base de
+datos vale igual para la bascula (tambien al sincronizar sin red) y para la
+oficina.
 
-Ya no hay cartas de porte ni datos de transportista: `schema.sql` borra la
-tabla `cartas_porte`. Los palets que ya habian salido en una carta conservan
-la fecha de esa carta como `fecha_salida`.
+- Cada linea de palet esta ligada a su pesada (`palet_lineas.registro_id`):
+  de ahi salen el agricultor y la fecha de entrada.
+- Estados: *en formacion* (menos de 60, sus cajas estan "en camara"),
+  *completo* (`fecha_completo`, etiqueta y salida) y *con salida*
+  (`fecha_salida` + `albaran_id`).
+- Corregir una pesada a la baja o borrarla quita sus cajas de sus palets sin
+  salida (del mas reciente al mas antiguo). Si ya salieron, la base de datos
+  lo impide.
+- Edicion manual: `palet_guardar_lineas(palet, lineas)` toma las cajas de lo
+  que la pesada tenga sin palet o en otros palets en formacion.
+- Salida: `albaran_crear(datos, palets)` numera el albaran (`serie_albaran`),
+  da salida a los palets y pone la fecha de salida en `registros.fecha_cmr`
+  de sus pesadas, todo a la vez; `albaran_anular` los devuelve y deja en
+  `fecha_cmr` la de otra salida suya (o vacia).
+- Se imprime la carta de porte (CMR, 3 ejemplares) y el albaran. Los datos
+  fijos del CMR son parametros (`cmr_remitente`, `cmr_porteador`,
+  `cmr_tipo_palet`, `peso_bruto_caja_kg`); lo variable va en
+  `albaranes_salida`.
+- La vista `paletizado_entradas` dice, por pesada, cuantas cajas estan en
+  palets en formacion, sin palet, en palets completos o ya salidas.
+- Solo se paletizan las pesadas desde `paletizado_desde` (Ajustes). Los palets
+  de la version anterior (sin pesadas detras) no se rellenan.
 
-Flujo: las cajas se guardan en la camara (`camara_entradas`, paso aparte de
-la bascula), se agrupan en palets y los palets salen.
-
-- Un palet puede llevar cajas de varios agricultores: lo de cada uno va en
-  `palet_lineas`. `palets.num_cajas` es la suma de sus lineas y lo mantiene
-  un trigger. Al crearlo recibe su codigo (serie `serie_palet` + contador).
-- Solo se paletizan cajas sueltas: por agricultor, lo paletizado no puede
-  pasar de lo guardado en camara.
-- El palet sigue en la camara hasta que se le da salida (`fecha_salida`).
-
-      ocupacion = cajas guardadas - cajas de palets con salida
-                = cajas sueltas + cajas en palets sin salida
-
-  La vista `camara_saldos` lo calcula por agricultor. La capacidad es el
-  parametro `capacidad_camara` (22 por defecto); pasarse avisa pero no
-  bloquea, porque la app tiene que reflejar lo que hay de verdad.
-
-Los palets anteriores a este cambio (uno por agricultor) se pasan solos a
-lineas. Como no tienen cajas guardadas en camara detras, "sueltas" nunca
-baja de 0.
+La etiqueta se imprime con un `@page` (sin nombre) del tamano de Ajustes
+(`etiqueta_ancho_mm` x `etiqueta_alto_mm`, 105 x 75 por defecto). La tabla
+`camara_entradas` y la vista `camara_saldos` (guardar cajas en camara a mano)
+ya no las usa la web.
 
 ### Liquidaciones y facturas
 
@@ -161,6 +175,12 @@ edita) -> **facturada** (tiene numero de factura). Al facturar, el numero se
 copia tambien al campo `num_factura` de cada registro incluido, asi que la
 agrupacion por factura de la tabla del agricultor sigue funcionando igual.
 
+Si el agricultor trae su propia factura, al facturar se elige esa opcion y
+se escriben su numero y su fecha: quedan en `num_factura` / `fecha_factura`
+con `factura_agricultor = true` y `factura_secuencia` vacia (no gasta numero
+de la serie). El documento se imprime como liquidacion, no como recibo de
+compensacion. Requiere migracion (columna `factura_agricultor`).
+
 El PDF se obtiene imprimiendo y eligiendo "Guardar como PDF" en el dialogo
 del navegador: no hace falta ninguna libreria externa.
 
@@ -168,9 +188,15 @@ del navegador: no hace falta ninguna libreria externa.
 
 La bascula no exporta los pesos, asi que junto a ella se pone una tablet u
 ordenador con `agroBimi/bascula.html`. Ahi se elige el agricultor, el ciclo
-el numero de cajas y las cajas vacias que se lleva (0 por defecto), y cada
-entrada crea un registro con fecha de hoy, `cajas_entradas`,
-`cajas_vacias_retiradas` y `origen = 'bascula'`. A partir de ahi cuenta como
+el numero de cajas y las cajas vacias que se lleva (0 por defecto). Las
+pesadas del mismo dia de un agricultor (misma campana y ciclo) se suman en
+un unico registro con fecha de hoy, `cajas_entradas`,
+`cajas_vacias_retiradas` y `origen = 'bascula'`; si ese registro ya esta
+liquidado se abre otro. Cada pesada suelta queda en `bascula_pesadas`
+(ligada a su registro): la tablet lista las de hoy y `bascula_anular` resta
+una sola del registro del dia (si se queda a 0, lo borra). Requiere
+migracion: crea `bascula_pesadas` y junta los registros que ya estaban
+repetidos. A partir de ahi cuenta como
 cualquier otro registro: rendimiento y liquidaciones. Guardar las cajas en
 la camara es un paso aparte (ver "Camara y palets").
 
@@ -186,7 +212,8 @@ cualquiera con la URL podria apuntar cajas a un agricultor.
 Sin red: cada entrada se guarda primero en la tablet (localStorage) y
 despues se envia; si no hay conexion se queda en cola y se reintenta sola
 al volver la red. Cada entrada lleva un uuid generado en la tablet
-(`registros.client_uuid`, unico), asi que un reintento nunca la duplica.
+(`bascula_pesadas.client_uuid`, unico; antes `registros.client_uuid`), asi
+que un reintento nunca la suma dos veces.
 Tambien guarda la hora de la pesada (`registros.pesada_en`): la fecha del
 registro es el dia en que se peso (hora de Madrid), aunque llegue al
 servidor despues. El servidor rechaza pesadas futuras o de hace mas de 7

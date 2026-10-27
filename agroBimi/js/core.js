@@ -13,6 +13,7 @@
     modalAgricultor: $("modalAgricultor"),
     modalRegistro: $("modalRegistro"),
     modalFactura: $("modalFactura"),
+    modalFacturar: $("modalFacturar"),
     modalCampana: $("modalCampana"),
     modalBuscarCampana: $("modalBuscarCampana"),
     modalPlantas: $("modalPlantas"),
@@ -21,12 +22,18 @@
     modalLiquidaciones: $("modalLiquidaciones"),
     modalLiquidacion: $("modalLiquidacion"),
     modalAjustes: $("modalAjustes"),
+    modalPalets: $("modalPalets"),
+    modalPalet: $("modalPalet"),
+    modalSalidas: $("modalSalidas"),
+    modalSalida: $("modalSalida"),
     formAgricultor: $("formAgricultor"),
     formRegistro: $("formRegistro"),
     formCampana: $("formCampana"),
     formPlanta: $("formPlanta"),
     formLiquidacion: $("formLiquidacion"),
     formAjustes: $("formAjustes"),
+    formPalet: $("formPalet"),
+    formSalida: $("formSalida"),
     loginForm: $("loginForm"),
     loginError: $("loginError"),
     zonaImpresion: $("zonaImpresion"),
@@ -59,6 +66,9 @@
     cajasActuales: [],
     liquidacionesActuales: [],
     liquidacionPrevia: null,   // borrador calculado antes de guardar
+    paletsActuales: [],
+    entradasPaletizado: [],    // vista paletizado_entradas
+    albaranesActuales: [],
     parametros: {},
   };
 
@@ -72,8 +82,6 @@
     { id: "num_factura", tipo: "texto" },
     { id: "cajas_vacias_retiradas", tipo: "num" },
     { id: "cajas_vacias_devueltas", tipo: "num" },
-    { id: "num_plantas", tipo: "num" },
-    { id: "fecha_retirada", tipo: "fecha" },
     { id: "comentarios", tipo: "texto" },
   ];
 
@@ -85,19 +93,39 @@
 
   // Claves de la tabla "parametros" con su valor por defecto.
   const PARAMETROS_DEFECTO = {
+    // Emisor de los recibos: se rellena en Ajustes. Los datos reales del
+    // cliente no van en el código (el repo es público): están en
+    // privado/datos_cliente.sql, fuera del repositorio.
     emisor_nombre: "",
     emisor_nif: "",
     emisor_direccion: "",
     emisor_codigo_postal: "",
     emisor_poblacion: "",
     emisor_provincia: "",
+    emisor_registro: "",
     emisor_telefono: "",
     emisor_email: "",
     precio_caja: "0",
     precio_caja_perdida: "0",
-    iva_porcentaje: "0",
+    iva_porcentaje: "12",
+    retencion_porcentaje: "2",
     serie_liquidacion: "LIQ",
     serie_factura: "F",
+    // Paletización: el reparto lo hace la base de datos al pesar.
+    cajas_por_palet: "60",
+    serie_palet: "P",
+    serie_albaran: "ALB",
+    paletizado_desde: "",
+    // Tamaño de la etiqueta del palet (impresora de pegatinas).
+    etiqueta_ancho_mm: "105",
+    etiqueta_alto_mm: "75",
+    // Carta de porte (CMR): remitente y porteador se rellenan en Ajustes
+    // (igual que el emisor, los reales están en privado/datos_cliente.sql).
+    cmr_remitente: "",
+    cmr_porteador: "",
+    cmr_tipo_palet: "palet industrial de madera 100 x 120",
+    // Para proponer el peso bruto: cajas × kg por caja (300 cajas = 2.775 kg).
+    peso_bruto_caja_kg: "9.25",
   };
 
   const CICLOS = ["1", "2", "3"];
