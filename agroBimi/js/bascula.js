@@ -596,7 +596,11 @@
 
   function pintarPalets() {
     const palets = state.palets?.palets || [];
-    const completos = palets.filter(paletCompleto);
+    // Completos por fecha de completado, el más reciente primero (criterio
+    // provisional hasta que el cliente diga otro). Sin fecha, al final.
+    const fechaMs = (p) => (p.fecha_completo ? new Date(p.fecha_completo).getTime() : -Infinity);
+    const completos = palets.filter(paletCompleto)
+      .sort((x, y) => fechaMs(y) - fechaMs(x) || (y.secuencia ?? 0) - (x.secuencia ?? 0));
     const enCurso = palets.filter((p) => !paletCompleto(p));
     const cajasCompletos = completos.reduce((s, p) => s + (p.num_cajas || 0), 0);
 
