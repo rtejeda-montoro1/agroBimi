@@ -119,7 +119,9 @@
             ${l.estado !== "facturada"
               ? `<button class="btn-fact btn-sm" data-facturar-liq="${l.id}">🧾 Facturar</button>`
               : `<button class="btn-fact btn-sm" data-ver-liq="${l.id}">🧾 Factura</button>`}
-            <button class="btn-del btn-sm" data-del-liq="${l.id}">Eliminar</button>
+            ${tieneReciboPropio(l)
+              ? `<button class="btn-del btn-sm" disabled title="Tiene recibo emitido (${App.escapar(l.num_factura || "")}): no se puede eliminar">Eliminar</button>`
+              : `<button class="btn-del btn-sm" data-del-liq="${l.id}">Eliminar</button>`}
           </td>
         </tr>`;
         }).join("");
@@ -437,6 +439,8 @@
     const cabecera = {
       agricultor_id: datos.agricultorId,
       campana_id: datos.campanaId,
+      // A propósito también al reeditar un borrador: la fecha de la
+      // liquidación es la del último cambio, no la de su creación.
       fecha: App.hoyISO(),
       fecha_desde: datos.desde,
       fecha_hasta: datos.hasta,
@@ -451,77 +455,24 @@
       observaciones: datos.observaciones,
     };
 
-    let liquidacionId = datos.id;
+    // Todo en una transacción (liquidacion_guardar, schema.sql sección 18):
+    // número, cabecera, líneas y registros, o nada si algo falla.
+    const { error } = await App.db.rpc("liquidacion_guardar", {
+      p_id: datos.id ? Number(datos.id) : null,
+      p_datos: cabecera,
+      p_lineas: lineas,
+      p_registros: previa.registrosIds,
+    });
 
-    if (liquidacionId) {
-      // Reedición de un borrador: se sueltan sus registros y se borran sus
-      // líneas antes de volver a guardarlas recalculadas.
-      const pasos = [
-        App.db.from("liquidaciones").update(cabecera).eq("id", liquidacionId),
-        App.db.from("liquidacion_lineas").delete().eq("liquidacion_id", liquidacionId),
-        App.db.from("registros").update({ liquidacion_id: null }).eq("liquidacion_id", liquidacionId),
-      ];
-      for (const paso of pasos) {
-        const { error } = await paso;
-        if (error) {
-          App.toast("Error al guardar: " + error.message);
-          return;
-        }
+    if (error) {
+      App.toast("No se ha guardado: " + error.message);
+      // Si otra persona ha liquidado alguno de los registros, el cálculo ya
+      // no vale: hay que volver a calcular antes de guardar.
+      if (/otra liquidación|ya no es un borrador/.test(error.message)) {
+        App.state.liquidacionPrevia = null;
+        App.$("btnGuardarLiquidacion").disabled = true;
       }
-    } else {
-      let secuencia;
-      try {
-        secuencia = await App.siguienteSecuencia("liquidaciones");
-      } catch (err) {
-        App.toast("Error al numerar la liquidación: " + err.message);
-        return;
-      }
-
-      const { data, error } = await App.db.from("liquidaciones").insert({
-        ...cabecera,
-        secuencia,
-        numero: App.fmtDocumento(App.param("serie_liquidacion"), secuencia, ANCHO_NUMERO),
-        estado: "borrador",
-      }).select("id").single();
-
-      if (error) {
-        App.toast("Error al guardar: " + error.message);
-        return;
-      }
-      liquidacionId = data.id;
-    }
-
-    const { error: errorLineas } = await App.db.from("liquidacion_lineas")
-      .insert(lineas.map((l) => ({ ...l, liquidacion_id: liquidacionId })));
-
-    if (errorLineas) {
-      App.toast("Error al guardar las líneas: " + errorLineas.message);
       return;
-    }
-
-    if (previa.registrosIds.length > 0) {
-      // Solo se marcan los registros que siguen libres (o ya son de esta
-      // liquidación): si otra persona los liquidó mientras tanto, no se le
-      // quitan ni se pagan dos veces.
-      const { data: marcados, error } = await App.db.from("registros")
-        .update({ liquidacion_id: liquidacionId })
-        .in("id", previa.registrosIds)
-        .or(`liquidacion_id.is.null,liquidacion_id.eq.${liquidacionId}`)
-        .select("id");
-      if (error || (marcados || []).length !== previa.registrosIds.length) {
-        // La ventana se queda abierta para que no parezca que todo fue bien.
-        // Se guarda el id: al reintentar se reedita esta misma liquidación
-        // en vez de crear otra.
-        datos.id = liquidacionId;
-        App.$("liqId").value = liquidacionId;
-        App.toast(error
-          ? "La liquidación se guardó, pero no se pudieron marcar sus registros: " + error.message +
-            ". Vuelve a pulsar Guardar."
-          : "Algunos registros ya están en otra liquidación. Vuelve a pulsar «Calcular» antes de guardar.");
-        if (!error) App.state.liquidacionPrevia = null;
-        await cargarLiquidaciones();
-        return;
-      }
     }
 
     App.state.liquidacionPrevia = null;
@@ -684,9 +635,23 @@
     if (actualizada && !deAgricultor) App.abrirModalFactura(actualizada);
   }
 
+  // Recibo de compensación emitido por nosotros (con nº de nuestra serie).
+  // La factura que trae el agricultor no gasta número y sí se puede borrar.
+  function tieneReciboPropio(l) {
+    return l.factura_secuencia !== null && l.factura_secuencia !== undefined;
+  }
+
   async function eliminarLiquidacion(id) {
     const l = App.state.liquidacionesActuales.find((x) => String(x.id) === String(id));
     if (!l) return;
+
+    // Con recibo propio no se borra: su número podría volver a darse a otro
+    // recibo. La base de datos también lo impide.
+    if (tieneReciboPropio(l)) {
+      alert(`La liquidación ${l.numero} no se puede eliminar: ya se emitió el recibo ${l.num_factura}.\n\n` +
+        "Los números de recibo son correlativos y no se pueden reutilizar.");
+      return;
+    }
 
     const aviso = l.estado === "facturada"
       ? `\n\n⚠ Esta liquidación ya está FACTURADA (${l.num_factura}). Al eliminarla se borra también el nº de factura de sus registros.`

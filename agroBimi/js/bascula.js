@@ -143,6 +143,30 @@
     if (!almacen.guardar(KEY_PENDIENTES, state.pendientes)) almacen.disponible = false;
   }
 
+  // La cola guardada en la tablet es la buena: puede haber otra pestaña de
+  // la báscula abierta que también apunta y envía entradas. Cada cambio la
+  // vuelve a leer y toca solo su entrada; así una pestaña no borra lo que
+  // apuntó la otra al guardar su copia vieja.
+  function leerCola() {
+    if (!almacen.disponible) return state.pendientes;
+    let raw;
+    try { raw = localStorage.getItem(KEY_PENDIENTES); } catch { return state.pendientes; }
+    if (raw == null) return [];
+    try {
+      const v = JSON.parse(raw);
+      if (Array.isArray(v)) return v;
+    } catch { /* se guarda abajo */ }
+    // Algo ilegible: se aparta una copia antes de que se sobrescriba, por
+    // si hubiera que recuperar entradas a mano.
+    try { localStorage.setItem(`${KEY_PENDIENTES}_ilegible_${Date.now()}`, raw); } catch { /* sin sitio */ }
+    return [];
+  }
+
+  function modificarCola(cambio) {
+    state.pendientes = cambio(leerCola());
+    guardarPendientes();
+  }
+
   function guardarCache() {
     almacen.guardar(KEY_CACHE, {
       agricultores: state.agricultores,
@@ -255,9 +279,20 @@
   // ------------------------------------------------------------------
   //  Envío de la cola de pendientes
   // ------------------------------------------------------------------
-  async function enviarPendientes() {
+  // Con varias pestañas abiertas, solo una envía a la vez (si el navegador
+  // lo permite; si no, el servidor ya ignora un uuid repetido).
+  function enviarPendientes() {
     if (state.enviando || !document.body.classList.contains("authed")) return;
     if (!state.pendientes.some((p) => !p.error)) return;
+    if (navigator.locks) {
+      return navigator.locks.request("bascula_envio", { ifAvailable: true },
+        (lock) => (lock ? enviarCola() : undefined));
+    }
+    return enviarCola();
+  }
+
+  async function enviarCola() {
+    if (state.enviando) return;
 
     state.enviando = true;
     pintarEstadoRed();
@@ -268,8 +303,10 @@
       const { data: { session } } = await db.auth.getSession();
       if (!session) return;
 
-      for (const p of [...state.pendientes]) {
+      for (const p of leerCola()) {
         if (p.error) continue;
+        // Otra pestaña puede haberla enviado o descartado mientras tanto.
+        if (!leerCola().some((x) => x.uuid === p.uuid)) continue;
         const { error } = await db.rpc("bascula_registrar", {
           p_client_uuid: p.uuid,
           p_agricultor_id: p.agricultor_id,
@@ -288,12 +325,11 @@
         state.sinRed = false;
         if (error) {
           // Rechazada: se queda a la vista para que alguien decida.
-          p.error = error.message;
+          modificarCola((cola) => cola.map((x) => (x.uuid === p.uuid ? { ...x, error: error.message } : x)));
         } else {
-          state.pendientes = state.pendientes.filter((x) => x.uuid !== p.uuid);
+          modificarCola((cola) => cola.filter((x) => x.uuid !== p.uuid));
           enviadas++;
         }
-        guardarPendientes();
       }
     } finally {
       state.enviando = false;
@@ -305,8 +341,8 @@
       if (state.datosDeCache) cargarTodo();
       else cargarHoy().catch(() => {});
       // Lo que se apuntó mientras se enviaba sale ya, sin esperar al
-      // siguiente reintento.
-      if (state.pendientes.some((p) => !p.error)) enviarPendientes();
+      // siguiente reintento (fuera de este envío, que aún tiene el turno).
+      if (state.pendientes.some((p) => !p.error)) setTimeout(enviarPendientes, 0);
     }
   }
 
@@ -773,8 +809,7 @@
 
     // Primero a la tablet; el envío viene después y puede fallar sin
     // que se pierda nada.
-    state.pendientes.push(entrada);
-    guardarPendientes();
+    modificarCola((cola) => [...cola, entrada]);
 
     a.ultimo_ciclo = state.ciclo;
     // Las pesadas del mismo día se suman en un único registro: se enseña
@@ -821,18 +856,28 @@
       return;
     }
     if (!confirm(`¿Anular esta entrada sin enviar?\n${p.nombre} · Ciclo ${p.ciclo} · ${resumenCajas(p)}`)) return;
-    state.pendientes = state.pendientes.filter((x) => x.uuid !== uuid);
-    guardarPendientes();
-    pintarHoy();
-    pintarEntrada();
-    pintarEstadoRed();
+    const quitar = () => {
+      modificarCola((cola) => cola.filter((x) => x.uuid !== uuid));
+      pintarHoy();
+      pintarEntrada();
+      pintarEstadoRed();
+    };
+    // Si otra pestaña la está enviando justo ahora, descartarla aquí no la
+    // pararía: llegaría a la oficina igualmente.
+    if (navigator.locks && !p.error) {
+      navigator.locks.request("bascula_envio", { ifAvailable: true }, (lock) => {
+        if (lock) quitar();
+        else toast("Se está enviando: espera un momento y vuelve a intentarlo.");
+      });
+      return;
+    }
+    quitar();
   }
 
   function reintentarPendiente(uuid) {
     const p = state.pendientes.find((x) => x.uuid === uuid);
     if (!p) return;
-    p.error = null;
-    guardarPendientes();
+    modificarCola((cola) => cola.map((x) => (x.uuid === uuid ? { ...x, error: null } : x)));
     pintarHoy();
     enviarPendientes();
   }
@@ -1027,13 +1072,26 @@
     });
     // Si se intenta cerrar la pestaña con entradas sin enviar, avisamos.
     // (No se pierden, pero así nadie cree que ya están en la oficina.)
+    // Otra pestaña ha cambiado la cola: se ve aquí también. Si ha enviado
+    // algo, se trae el día para que no "desaparezca" de la lista.
+    window.addEventListener("storage", (e) => {
+      if (e.key !== KEY_PENDIENTES && e.key !== null) return;
+      const antes = state.pendientes.length;
+      state.pendientes = leerCola();
+      pintarHoy();
+      pintarEntrada();
+      pintarEstadoRed();
+      if (state.pendientes.length < antes && document.body.classList.contains("authed")) {
+        cargarHoy().catch(() => {});
+      }
+    });
     window.addEventListener("beforeunload", (e) => {
       if (state.pendientes.length) e.preventDefault();
     });
   }
 
   async function iniciar() {
-    state.pendientes = almacen.leer(KEY_PENDIENTES, []);
+    state.pendientes = leerCola();
     pintarFecha();
     pintarEstadoRed();
     pintarEntrada();

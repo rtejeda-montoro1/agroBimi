@@ -255,6 +255,29 @@
     }
   }
 
+  // Las líneas de una liquidación se guardan con sus cantidades: si se
+  // cambia o borra un registro ya liquidado, la liquidación (y su recibo)
+  // deja de cuadrar con los registros. No se bloquea, pero se avisa.
+  async function confirmarSiLiquidado(registroId, accion) {
+    // El popover de cajas también se usa en la vista de campaña.
+    const r = [...(App.state.registrosActuales || []), ...(App.state.registrosCampanaActuales || [])]
+      .find((x) => String(x.id) === String(registroId));
+    if (!r || !r.liquidacion_id) return true;
+    // Las liquidaciones solo están en memoria si se ha abierto su ventana.
+    let l = (App.state.liquidacionesActuales || []).find((x) => String(x.id) === String(r.liquidacion_id));
+    if (!l) {
+      const { data } = await App.db.from("liquidaciones")
+        .select("numero,num_factura").eq("id", r.liquidacion_id).maybeSingle();
+      l = data;
+    }
+    const cual = l?.numero ? `la liquidación ${l.numero}` : "una liquidación";
+    const factura = l?.num_factura ? ` (facturada: ${l.num_factura})` : "";
+    return confirm(
+      `⚠ Este registro ya está incluido en ${cual}${factura}.\n\n` +
+      `Si lo ${accion}, la liquidación y su recibo no cambian y dejarán de cuadrar con los registros.\n\n` +
+      "¿Continuar igualmente?");
+  }
+
   async function guardarRegistroDatos() {
 
     const id = App.$("registroId").value;
@@ -282,6 +305,8 @@
       return;
     }
     registro.campana_id = parseInt(campanaSel, 10);
+
+    if (id && !(await confirmarSiLiquidado(id, "modificas"))) return;
 
     let error;
     if (id) {
@@ -326,7 +351,8 @@
     }
 
     if (eliminar) {
-      if (!confirm("Eliminar este registro? Esta accion no se puede deshacer.")) return;
+      if (!(await confirmarSiLiquidado(eliminar.dataset.delReg, "eliminas"))) return;
+      if (!confirm("¿Eliminar este registro? Esta acción no se puede deshacer.")) return;
 
       const { error } = await App.db.from("registros").delete().eq("id", eliminar.dataset.delReg);
       if (error) {
@@ -443,6 +469,7 @@
     }
 
     const id = btn.dataset.regId;
+    if (!(await confirmarSiLiquidado(id, "modificas"))) return;
     const { error } = await App.db.from("registros").update(cambios).eq("id", id);
     if (error) {
       App.toast("Error: " + error.message);

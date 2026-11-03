@@ -317,6 +317,34 @@ create index if not exists liquidaciones_agricultor_idx on liquidaciones (agricu
 create index if not exists liquidaciones_fecha_idx      on liquidaciones (fecha);
 create index if not exists liquidaciones_periodo_idx    on liquidaciones (fecha_desde, fecha_hasta);
 
+-- Un recibo propio emitido no se puede borrar ni perder su número: la
+-- numeración es max + 1 y, si desapareciera el último, su número se
+-- volvería a dar a otro recibo (dos documentos fiscales con el mismo nº).
+-- Esto también para el borrado en cascada al eliminar un agricultor.
+create or replace function public.liquidaciones_proteger_recibo_trg()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  if old.factura_secuencia is not null then
+    if tg_op = 'DELETE' then
+      raise exception 'No se puede eliminar la liquidación %: ya tiene emitido el recibo %.',
+        old.numero, old.num_factura;
+    elsif new.factura_secuencia is distinct from old.factura_secuencia then
+      raise exception 'No se puede cambiar el nº del recibo % de la liquidación %.',
+        old.num_factura, old.numero;
+    end if;
+  end if;
+  return case when tg_op = 'DELETE' then old else new end;
+end;
+$$;
+
+drop trigger if exists liquidaciones_proteger_recibo on liquidaciones;
+create trigger liquidaciones_proteger_recibo
+  before delete or update of factura_secuencia on liquidaciones
+  for each row execute function public.liquidaciones_proteger_recibo_trg();
+
 -- Vínculo registro -> liquidación: marca el registro como ya liquidado para
 -- que no se vuelva a incluir en otra liquidación.
 alter table registros add column if not exists liquidacion_id bigint
@@ -924,6 +952,35 @@ as $$
   where p.id = p_palet_id;
 $$;
 
+-- Al cambiar las cajas por palet en Ajustes, los palets que siguen en la
+-- cámara pasan a medirse con la nueva cifra: si sube, los que estaban
+-- completos vuelven a "en formación" (pierden la fecha de llenado) y se
+-- siguen llenando con las próximas pesadas; si baja, los que ya llegan
+-- quedan completos. Los palets con salida ya están en destino: no se tocan.
+create or replace function public.parametros_cajas_por_palet_trg()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  perform public.palet_actualizar_total(p.id)
+  from palets p
+  where p.fecha_salida is null;
+  return null;
+end;
+$$;
+
+drop trigger if exists parametros_cajas_por_palet on parametros;
+create trigger parametros_cajas_por_palet
+  after update of valor on parametros
+  for each row
+  when (new.clave = 'cajas_por_palet' and old.valor is distinct from new.valor)
+  execute function public.parametros_cajas_por_palet_trg();
+
+-- Por si la cifra se cambió antes de existir este trigger: se ponen al día
+-- los palets en cámara (no cambia nada si ya cuadraban).
+select public.palet_actualizar_total(id) from palets where fecha_salida is null;
+
 -- ---------------------------------------------------------------------
 -- 4) Reparto automático
 -- ---------------------------------------------------------------------
@@ -1375,3 +1432,92 @@ $$;
 
 revoke all on function public.bascula_palets() from public, anon;
 grant execute on function public.bascula_palets() to authenticated;
+
+-- 18) GUARDAR UNA LIQUIDACIÓN DE UNA VEZ
+--     Cabecera, número, líneas y registros en una sola transacción: si algo
+--     falla no se guarda nada (antes podía quedar una liquidación sin líneas
+--     o con sus registros sin marcar). Solo se marcan registros libres: si
+--     otra persona los liquidó mientras tanto, no se guarda.
+--     p_id null = nueva; si no, reedición de un borrador.
+--     Sin security definer: la báscula sigue sin poder usarla (RLS).
+create or replace function public.liquidacion_guardar(
+  p_id bigint, p_datos jsonb, p_lineas jsonb, p_registros bigint[])
+returns bigint
+language plpgsql
+set search_path = public
+as $$
+declare
+  v_id    bigint := p_id;
+  v_sec   integer;
+  v_serie text;
+  v_regs  bigint[] := array(select distinct x from unnest(coalesce(p_registros, '{}')) x);
+  v_n     integer;
+begin
+  if p_id is not null then
+    perform 1 from liquidaciones where id = p_id and estado = 'borrador' for update;
+    if not found then
+      raise exception 'Esta liquidación ya no es un borrador (o se ha eliminado): no se puede editar.';
+    end if;
+
+    update liquidaciones set
+      agricultor_id        = (p_datos->>'agricultor_id')::bigint,
+      campana_id           = (p_datos->>'campana_id')::bigint,
+      fecha                = (p_datos->>'fecha')::date,
+      fecha_desde          = (p_datos->>'fecha_desde')::date,
+      fecha_hasta          = (p_datos->>'fecha_hasta')::date,
+      precio_caja          = (p_datos->>'precio_caja')::numeric,
+      precio_caja_perdida  = (p_datos->>'precio_caja_perdida')::numeric,
+      iva_porcentaje       = (p_datos->>'iva_porcentaje')::numeric,
+      base                 = (p_datos->>'base')::numeric,
+      iva                  = (p_datos->>'iva')::numeric,
+      retencion_porcentaje = (p_datos->>'retencion_porcentaje')::numeric,
+      retencion            = (p_datos->>'retencion')::numeric,
+      total                = (p_datos->>'total')::numeric,
+      observaciones        = p_datos->>'observaciones'
+    where id = p_id;
+
+    delete from liquidacion_lineas where liquidacion_id = p_id;
+    update registros set liquidacion_id = null where liquidacion_id = p_id;
+  else
+    -- Dos personas a la vez no pueden sacar el mismo número.
+    perform pg_advisory_xact_lock(hashtext('agrobimi_liquidacion'));
+    v_sec := coalesce((select max(secuencia) from liquidaciones), 0) + 1;
+    v_serie := coalesce((select nullif(trim(valor), '') from parametros where clave = 'serie_liquidacion'), 'LIQ');
+
+    insert into liquidaciones (
+      secuencia, numero, estado, agricultor_id, campana_id, fecha, fecha_desde, fecha_hasta,
+      precio_caja, precio_caja_perdida, iva_porcentaje, base, iva,
+      retencion_porcentaje, retencion, total, observaciones)
+    values (
+      v_sec, public.numero_documento(v_serie, v_sec, 4), 'borrador',
+      (p_datos->>'agricultor_id')::bigint, (p_datos->>'campana_id')::bigint,
+      (p_datos->>'fecha')::date, (p_datos->>'fecha_desde')::date, (p_datos->>'fecha_hasta')::date,
+      (p_datos->>'precio_caja')::numeric, (p_datos->>'precio_caja_perdida')::numeric,
+      (p_datos->>'iva_porcentaje')::numeric, (p_datos->>'base')::numeric, (p_datos->>'iva')::numeric,
+      (p_datos->>'retencion_porcentaje')::numeric, (p_datos->>'retencion')::numeric,
+      (p_datos->>'total')::numeric, p_datos->>'observaciones')
+    returning id into v_id;
+  end if;
+
+  insert into liquidacion_lineas (liquidacion_id, tipo, concepto, cantidad, precio, importe, orden)
+  select v_id, l.tipo, l.concepto, coalesce(l.cantidad, 0), coalesce(l.precio, 0),
+         coalesce(l.importe, 0), coalesce(l.orden, 0)
+  from jsonb_to_recordset(coalesce(p_lineas, '[]'::jsonb))
+       as l(tipo text, concepto text, cantidad numeric, precio numeric, importe numeric, orden integer);
+
+  if cardinality(v_regs) > 0 then
+    perform 1 from registros where id = any(v_regs) for update;
+    update registros set liquidacion_id = v_id
+    where id = any(v_regs) and liquidacion_id is null;
+    get diagnostics v_n = row_count;
+    if v_n <> cardinality(v_regs) then
+      raise exception 'Algunos registros ya están en otra liquidación (o se han borrado). Vuelve a pulsar «Calcular».';
+    end if;
+  end if;
+
+  return v_id;
+end;
+$$;
+
+revoke all on function public.liquidacion_guardar(bigint, jsonb, jsonb, bigint[]) from public, anon;
+grant execute on function public.liquidacion_guardar(bigint, jsonb, jsonb, bigint[]) to authenticated;
