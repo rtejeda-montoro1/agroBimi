@@ -47,6 +47,8 @@
     enviando: false,
     sinRed: !navigator.onLine,
     datosDeCache: false,
+    vista: "bascula",  // "bascula" o "palets"
+    palets: null,      // lo último que devolvió bascula_palets()
   };
 
   let temporizadores = [];
@@ -532,6 +534,135 @@
   }
 
   // ------------------------------------------------------------------
+  //  Palets (vista aparte, solo lectura)
+  //  Los palets sin salida, para ver cómo van y pegar su etiqueta. Se
+  //  corrigen desde la oficina (js/palets.js). La etiqueta es la misma
+  //  que allí: sus estilos .etq están en styles.css.
+  // ------------------------------------------------------------------
+  function fechaCorta(iso) {
+    if (!iso) return "—";
+    const [y, m, d] = String(iso).split("-");
+    return `${d}/${m}/${y}`;
+  }
+
+  function cajasPorPalet() {
+    return state.palets?.cajas_por_palet || 60;
+  }
+
+  function paletCompleto(p) {
+    return (p.num_cajas || 0) >= cajasPorPalet();
+  }
+
+  async function cargarPalets() {
+    if (!state.palets) $("listaPalets").innerHTML = '<div class="empty">Cargando palets…</div>';
+    const { data, error } = await db.rpc("bascula_palets");
+    if (error) {
+      // Si ya había palets a la vista se dejan: solo se avisa.
+      if (state.palets) toast("No se han podido actualizar los palets.");
+      else {
+        $("listaPalets").innerHTML =
+          `<div class="error">No se pudieron cargar los palets.<br>${escapar(error.message)}<br>` +
+          "¿Hay conexión? ¿Se ha ejecutado el último schema.sql en Supabase?</div>";
+      }
+      return;
+    }
+    state.palets = data || { palets: [] };
+    pintarPalets();
+  }
+
+  function tarjetaPalet(p) {
+    const cap = cajasPorPalet();
+    const completo = paletCompleto(p);
+    const pct = Math.min(100, Math.round(((p.num_cajas || 0) / cap) * 100));
+    const agris = (p.lineas || []).map((l) => `
+        <li><span>${escapar(l.nombre)}</span><b>${l.cajas}</b></li>`).join("");
+    return `
+      <article class="palet-card${completo ? " completo" : ""}">
+        <div class="palet-card-cab">
+          <span class="palet-card-num">Palet nº ${escapar(p.secuencia ?? "—")}</span>
+          <span class="palet-card-cod">${escapar(p.codigo || "")}</span>
+        </div>
+        <div class="palet-barra-cajas"><span style="width:${pct}%"></span></div>
+        <div class="palet-card-total">
+          <span><b>${p.num_cajas || 0}</b> / ${cap} cajas</span>
+          ${completo
+            ? `<span class="badge badge-ok">Completo · ${fechaCorta(p.fecha_completo)}</span>`
+            : `<span class="badge badge-aviso">Faltan ${cap - (p.num_cajas || 0)}</span>`}
+        </div>
+        <ul class="palet-card-agris">${agris || '<li><span>Vacío</span></li>'}</ul>
+        <button type="button" class="btn-etiqueta" data-etiqueta="${p.id}">🏷 Imprimir etiqueta</button>
+      </article>`;
+  }
+
+  function pintarPalets() {
+    const palets = state.palets?.palets || [];
+    const completos = palets.filter(paletCompleto);
+    const enCurso = palets.filter((p) => !paletCompleto(p));
+    const cajasCompletos = completos.reduce((s, p) => s + (p.num_cajas || 0), 0);
+
+    $("paletsResumen").innerHTML = `
+      <span><b>${completos.length}</b> ${completos.length === 1 ? "palet completo" : "palets completos"}</span>
+      <span><b>${cajasCompletos}</b> cajas en cámara paletizadas pendientes de salir</span>
+      <span><b>${state.palets?.en_camara ?? 0}</b> cajas en cámara sin palet completo</span>`;
+
+    const grupo = (titulo, lista) => lista.length
+      ? `<section class="palets-grupo">
+           <div class="bascula-paso">${titulo}</div>
+           <div class="palets-grid">${lista.map(tarjetaPalet).join("")}</div>
+         </section>`
+      : "";
+    $("listaPalets").innerHTML = palets.length
+      ? grupo("Completos · listos para salir", completos) + grupo("En progreso", enCurso)
+      : '<div class="empty">No hay palets pendientes de salida.</div>';
+  }
+
+  // Igual que la etiqueta de la oficina (js/palets.js, etiquetaHTML).
+  function etiquetaHTML(p) {
+    const filas = (p.lineas || []).map((l) => `
+        <tr>
+          <td>${escapar(l.nombre)}</td>
+          <td class="der">${l.cajas}</td>
+        </tr>`).join("");
+    return `
+      <div class="etq">
+        <div class="etq-cabecera">
+          <span class="etq-numero">${p.secuencia != null ? `Palet nº ${escapar(p.secuencia)}` : ""}</span>
+          <span class="etq-codigo">${escapar(p.codigo || "")}</span>
+        </div>
+        <table class="etq-tabla"><tbody>${filas}</tbody></table>
+        <div class="etq-fecha">${p.fecha_completo ? fechaCorta(p.fecha_completo) : "En progreso"}</div>
+      </div>`;
+  }
+
+  function imprimirEtiqueta(id) {
+    const p = (state.palets?.palets || []).find((x) => String(x.id) === String(id));
+    if (!p) return;
+    if (!paletCompleto(p) &&
+        !confirm(`El palet ${p.codigo || ""} todavía no está completo. ¿Imprimir la etiqueta igualmente?`)) {
+      return;
+    }
+    const ancho = state.palets.etiqueta_ancho_mm || 105;
+    const alto = state.palets.etiqueta_alto_mm || 75;
+    // Este @page va después de bascula.css: manda sobre el del justificante.
+    $("zonaImpresion").innerHTML =
+      `<style>@page { size: ${ancho}mm ${alto}mm; margin: 4mm; }</style>${etiquetaHTML(p)}`;
+
+    const tituloOriginal = document.title;
+    document.title = `Etiqueta ${p.codigo || "palet"}`;
+    window.addEventListener("afterprint", () => { document.title = tituloOriginal; }, { once: true });
+    window.print();
+  }
+
+  function cambiarVista(vista) {
+    state.vista = vista;
+    const palets = vista === "palets";
+    document.querySelector(".bascula-main").hidden = palets;
+    $("vistaPalets").hidden = !palets;
+    $("btnVista").textContent = palets ? "⚖ Báscula" : "📦 Palets";
+    if (palets) cargarPalets();
+  }
+
+  // ------------------------------------------------------------------
   //  Acciones
   // ------------------------------------------------------------------
   function elegirAgricultor(id) {
@@ -688,6 +819,8 @@
     if (!session) {
       state.cargado = false;
       state.elegido = null;
+      state.palets = null;
+      cambiarVista("bascula");
       return;
     }
     if (!state.cargado) {
@@ -699,6 +832,7 @@
       setInterval(() => cargarAgricultores().catch(() => {}), REFRESCO_AGRICULTORES_MS),
       setInterval(enviarPendientes, REINTENTO_ENVIO_MS),
       setInterval(pintarFecha, REFRESCO_HOY_MS),
+      setInterval(() => { if (state.vista === "palets") cargarPalets(); }, REFRESCO_HOY_MS),
     );
   }
 
@@ -778,6 +912,8 @@
     // de contador y Enter para registrar.
     document.addEventListener("keydown", (e) => {
       if (!document.body.classList.contains("authed")) return;
+      // En la vista de palets el teclado no apunta nada.
+      if (state.vista !== "bascula") return;
       if (e.target.matches("input, select, textarea")) return;
       if (/^\d$/.test(e.key)) pulsarTecla(e.key);
       else if (e.key === "Backspace") pulsarTecla("⌫");
@@ -805,6 +941,14 @@
         const entrada = buscarEntrada(b.dataset.imprimir);
         if (entrada) imprimirJustificante(entrada);
       }
+    });
+
+    $("btnVista").addEventListener("click", () =>
+      cambiarVista(state.vista === "palets" ? "bascula" : "palets"));
+    $("btnRecargarPalets").addEventListener("click", cargarPalets);
+    $("listaPalets").addEventListener("click", (e) => {
+      const b = e.target.closest("[data-etiqueta]");
+      if (b) imprimirEtiqueta(b.dataset.etiqueta);
     });
 
     window.addEventListener("online", () => {

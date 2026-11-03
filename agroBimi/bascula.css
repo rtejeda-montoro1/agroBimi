@@ -7,7 +7,10 @@
 
 body.bascula { min-height: 100vh; }
 body.bascula:not(.authed) .bascula-cab,
-body.bascula:not(.authed) .bascula-main { display: none; }
+body.bascula:not(.authed) .bascula-main,
+body.bascula:not(.authed) .bascula-palets,
+.bascula-main[hidden],
+.bascula-palets[hidden] { display: none; }
 
 /* ---- Cabecera ---- */
 .bascula-cab {
@@ -241,6 +244,62 @@ body.bascula:not(.authed) .bascula-main { display: none; }
 .hoy-antiguas { padding: 8px 0; color: #b45309; font-weight: 600; }
 .hoy-pendiente, .hoy-rechazada { padding-left: 6px; padding-right: 6px; border-radius: 6px; }
 
+/* ---- Vista de palets ----
+   Una tarjeta por palet: completos primero (son los que se etiquetan),
+   después los que se están llenando. */
+.bascula-palets { padding: 14px 16px; }
+.palets-barra {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.palets-resumen { display: flex; gap: 8px 18px; flex-wrap: wrap; font-size: .95rem; color: var(--muted); }
+.palets-resumen b { color: var(--text); font-size: 1.15rem; }
+.palets-barra .btn-ghost { padding: 12px 18px; font-size: 1rem; }
+.palets-grupo { margin: 0 0 18px; }
+.palets-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+}
+.palet-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--card);
+  border: 2px solid var(--border);
+  border-radius: 14px;
+  padding: 14px;
+  box-shadow: var(--shadow);
+}
+.palet-card.completo { border-color: rgba(22, 163, 74, .55); }
+.palet-card-cab { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.palet-card-num { font-size: 1.35rem; font-weight: 800; }
+.palet-card-cod { font-size: .8rem; color: var(--muted); }
+.palet-barra-cajas { height: 10px; border-radius: 5px; background: var(--bg); overflow: hidden; }
+.palet-barra-cajas span { display: block; height: 100%; background: #d97706; }
+.palet-card.completo .palet-barra-cajas span { background: var(--success); }
+.palet-card-total { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: .9rem; }
+.palet-card-total b { font-size: 1.1rem; font-variant-numeric: tabular-nums; }
+.palet-card-agris { list-style: none; margin: 0; padding: 0; font-size: .92rem; flex: 1 1 auto; }
+.palet-card-agris li { display: flex; justify-content: space-between; gap: 8px; padding: 3px 0; border-bottom: 1px solid var(--border); }
+.palet-card-agris li:last-child { border-bottom: none; }
+.palet-card-agris b { font-variant-numeric: tabular-nums; }
+.btn-etiqueta {
+  width: 100%;
+  padding: 14px;
+  font-size: 1.05rem;
+  font-weight: 700;
+  background: var(--primary);
+  color: #fff;
+  border-radius: 10px;
+  touch-action: manipulation;
+}
+.palet-card:not(.completo) .btn-etiqueta { background: transparent; color: var(--primary); border: 1px solid var(--border); }
+
 /* ---- Justificante impreso ----
    Salen dos copias, cada una en su página: la 1 para el agricultor y la 2
    para la empresa. En una impresora de tickets son dos tickets seguidos.
@@ -257,6 +316,10 @@ body.bascula:not(.authed) .bascula-main { display: none; }
 
 @media print {
   @page { size: auto; margin: 6mm; }
+
+  /* El alto de pantalla (100vh) no vale al imprimir: en una pegatina de
+     75 mm la página seguía en blanco hasta cubrirlo y salían 4 hojas. */
+  body.bascula { min-height: 0; }
 
   .ticket {
     width: var(--ticket-ancho);

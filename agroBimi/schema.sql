@@ -1316,3 +1316,48 @@ begin
     perform public.paletizar_registro(v_id);
   end loop;
 end $$;
+
+-- 17) PALETS EN LA BÁSCULA
+--     La tablet de la báscula no puede leer las tablas de palets (ver
+--     sección 13): esta función le da lo que necesita para verlos e
+--     imprimir sus etiquetas. Solo lectura y solo palets sin salida
+--     (en formación y completos), con las cajas de cada agricultor
+--     sumadas como en la etiqueta. Devuelve además las cajas por palet,
+--     el tamaño de la etiqueta (Ajustes) y las cajas en cámara.
+create or replace function public.bascula_palets()
+returns jsonb
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select jsonb_build_object(
+    'cajas_por_palet', public.cajas_por_palet(),
+    'etiqueta_ancho_mm', (select trim(valor)::numeric from parametros
+                          where clave = 'etiqueta_ancho_mm' and trim(valor) ~ '^\d+(\.\d+)?$'),
+    'etiqueta_alto_mm',  (select trim(valor)::numeric from parametros
+                          where clave = 'etiqueta_alto_mm' and trim(valor) ~ '^\d+(\.\d+)?$'),
+    'en_camara', (select coalesce(sum(en_formacion + sin_palet), 0) from paletizado_entradas),
+    'palets', coalesce((
+      select jsonb_agg(jsonb_build_object(
+               'id', p.id,
+               'secuencia', p.secuencia,
+               'codigo', p.codigo,
+               'num_cajas', p.num_cajas,
+               'fecha_completo', p.fecha_completo,
+               'lineas', coalesce((
+                 select jsonb_agg(jsonb_build_object('nombre', a.nombre, 'codigo', a.codigo, 'cajas', x.cajas)
+                                  order by x.primera)
+                 from (select l.agricultor_id, sum(l.num_cajas)::integer as cajas, min(l.id) as primera
+                       from palet_lineas l
+                       where l.palet_id = p.id
+                       group by l.agricultor_id) x
+                 join agricultores a on a.id = x.agricultor_id), '[]'::jsonb))
+             order by p.secuencia desc nulls last, p.id desc)
+      from palets p
+      where p.fecha_salida is null), '[]'::jsonb))
+  where auth.uid() is not null;
+$$;
+
+revoke all on function public.bascula_palets() from public, anon;
+grant execute on function public.bascula_palets() to authenticated;

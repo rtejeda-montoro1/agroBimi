@@ -24,6 +24,8 @@
   - Sin red se sigue trabajando: las entradas se guardan en la tablet y se
     envían solas al volver la conexión.
   - Cada entrada se puede imprimir como justificante con hueco para firma.
+  - Con «📦 Palets» se ven los palets sin salida y se imprime su etiqueta
+    (bascula_palets(), sección 17). Para corregirlos, desde la oficina.
 -->
 <body class="bascula">
   <div class="login-screen" id="loginScreen">
@@ -59,6 +61,7 @@
         <select id="selCampana"></select>
       </label>
       <span class="estado-red" id="estadoRed" title="Conexión y entradas pendientes de envío">● En línea</span>
+      <button class="btn-ghost-claro" id="btnVista" title="Cambiar entre la báscula y los palets">📦 Palets</button>
       <button class="btn-ghost-claro" id="btnSalir" title="Cerrar la sesión de la báscula">Salir</button>
     </div>
   </header>
@@ -131,6 +134,15 @@
       </div>
       <ul class="hoy-lista" id="hoyLista"></ul>
     </section>
+  </main>
+
+  <!-- Palets sin salida, para verlos e imprimir su etiqueta (solo lectura) -->
+  <main class="bascula-palets" id="vistaPalets" hidden>
+    <div class="palets-barra">
+      <div class="palets-resumen" id="paletsResumen"></div>
+      <button type="button" class="btn-ghost" id="btnRecargarPalets">⟳ Actualizar</button>
+    </div>
+    <div id="listaPalets"></div>
   </main>
 
   <div class="toast" id="toast"></div>
