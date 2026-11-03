@@ -979,7 +979,11 @@ create trigger parametros_cajas_por_palet
 
 -- Por si la cifra se cambió antes de existir este trigger: se ponen al día
 -- los palets en cámara (no cambia nada si ya cuadraban).
-select public.palet_actualizar_total(id) from palets where fecha_salida is null;
+-- (En un bloque para que el editor de Supabase no muestre una fila NULL
+-- por cada palet.)
+do $$ begin
+  perform public.palet_actualizar_total(id) from palets where fecha_salida is null;
+end $$;
 
 -- ---------------------------------------------------------------------
 -- 4) Reparto automático
