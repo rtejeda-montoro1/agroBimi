@@ -384,8 +384,8 @@
     App.$("cuerpoLiqLineas").innerHTML = previa.lineas.map((l) => `
       <tr>
         <td>${App.escapar(l.concepto)}</td>
-        <td class="col-num">${App.fmtNum(l.cantidad, 0)}</td>
-        <td class="col-num">${App.fmtEuro(l.precio)}</td>
+        <td class="col-num">${App.fmtCantidad(l.cantidad)}</td>
+        <td class="col-num">${App.fmtPrecio(l.precio)}</td>
         <td class="col-num ${l.importe < 0 ? "negativo" : ""}"><b>${App.fmtEuro(l.importe)}</b></td>
       </tr>`).join("");
 
@@ -500,11 +500,27 @@
     }
 
     if (previa.registrosIds.length > 0) {
-      const { error } = await App.db.from("registros")
+      // Solo se marcan los registros que siguen libres (o ya son de esta
+      // liquidación): si otra persona los liquidó mientras tanto, no se le
+      // quitan ni se pagan dos veces.
+      const { data: marcados, error } = await App.db.from("registros")
         .update({ liquidacion_id: liquidacionId })
-        .in("id", previa.registrosIds);
-      if (error) {
-        App.toast("Aviso: la liquidación se guardó, pero no se pudieron marcar los registros: " + error.message);
+        .in("id", previa.registrosIds)
+        .or(`liquidacion_id.is.null,liquidacion_id.eq.${liquidacionId}`)
+        .select("id");
+      if (error || (marcados || []).length !== previa.registrosIds.length) {
+        // La ventana se queda abierta para que no parezca que todo fue bien.
+        // Se guarda el id: al reintentar se reedita esta misma liquidación
+        // en vez de crear otra.
+        datos.id = liquidacionId;
+        App.$("liqId").value = liquidacionId;
+        App.toast(error
+          ? "La liquidación se guardó, pero no se pudieron marcar sus registros: " + error.message +
+            ". Vuelve a pulsar Guardar."
+          : "Algunos registros ya están en otra liquidación. Vuelve a pulsar «Calcular» antes de guardar.");
+        if (!error) App.state.liquidacionPrevia = null;
+        await cargarLiquidaciones();
+        return;
       }
     }
 
@@ -569,8 +585,25 @@
     App.$("facturarFechaAgricultor").required = deAgricultor;
   }
 
+  // Un doble clic no puede pedir dos números de recibo: el segundo
+  // sobrescribiría al primero y dejaría un hueco en la serie.
+  let facturando = false;
+
   async function guardarFacturar(e) {
     e.preventDefault();
+    if (facturando) return;
+    const boton = e.submitter || App.$("formFacturar").querySelector('[type="submit"]');
+    facturando = true;
+    if (boton) boton.disabled = true;
+    try {
+      await facturar();
+    } finally {
+      facturando = false;
+      if (boton) boton.disabled = false;
+    }
+  }
+
+  async function facturar() {
     const l = App.state.liquidacionesActuales.find((x) => String(x.id) === App.$("facturarLiqId").value);
     if (!l) return;
 

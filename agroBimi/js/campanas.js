@@ -207,7 +207,7 @@
       .order("fecha", { ascending: false, nullsFirst: false });
 
     if (error) {
-      cuerpo.innerHTML = `<tr><td colspan="8" class="error">Error: ${error.message}</td></tr>`;
+      cuerpo.innerHTML = `<tr><td colspan="8" class="error">Error: ${App.escapar(error.message)}</td></tr>`;
       App.state.registrosCampanaActuales = [];
       App.$("btnExportCampana").disabled = true;
       return;

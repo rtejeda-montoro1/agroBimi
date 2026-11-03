@@ -336,8 +336,24 @@
     actualizarTotalPalet();
   }
 
+  // Un doble clic en «Guardar» no puede crear dos palets con las mismas cajas.
+  let guardandoPalet = false;
+
   async function guardarPalet(e) {
     e.preventDefault();
+    if (guardandoPalet) return;
+    const boton = e.submitter || App.$("formPalet")?.querySelector('[type="submit"]');
+    guardandoPalet = true;
+    if (boton) boton.disabled = true;
+    try {
+      await guardarPaletDatos();
+    } finally {
+      guardandoPalet = false;
+      if (boton) boton.disabled = false;
+    }
+  }
+
+  async function guardarPaletDatos() {
 
     const ls = lineasDelEditor();
     const mal = ls.find((l) => l.num_cajas < 0 || l.num_cajas > l.max);
@@ -459,12 +475,14 @@
       const p = paletPorId(eliminar.dataset.delPalet);
       if (!p) return;
       if (!confirm(`¿Eliminar el palet ${p.codigo || ""}?\n\nSus ${App.fmtNum(p.num_cajas)} cajas vuelven a la cámara sin palet. Esta acción no se puede deshacer.`)) return;
-      const { error } = await App.db.from("palets").delete().eq("id", p.id).is("fecha_salida", null);
+      const { data: borrados, error } = await App.db.from("palets").delete()
+        .eq("id", p.id).is("fecha_salida", null).select("id");
       if (error) {
         App.toast("Error: " + error.message);
         return;
       }
-      App.toast("Palet eliminado");
+      // Si ya tenía salida (otra pestaña, la lista estaba vieja) no se borra.
+      App.toast((borrados || []).length ? "Palet eliminado" : "No se ha eliminado: el palet ya tiene salida.");
       await refrescarPalets();
     }
   }

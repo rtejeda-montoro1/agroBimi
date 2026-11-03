@@ -71,7 +71,12 @@ set campana_id = (
   where lower(trim(c2.nombre)) = lower(trim(c1.nombre))
 )
 from campanas c1
-where r.campana_id = c1.id;
+where r.campana_id = c1.id
+  -- Solo los que apuntan a una campaña duplicada: así no se reescribe toda
+  -- la tabla en cada despliegue (ni se revalidan sus restricciones).
+  and exists (select 1 from campanas c3
+              where lower(trim(c3.nombre)) = lower(trim(c1.nombre))
+                and c3.id < c1.id);
 
 --   b) Borramos las campañas duplicadas sobrantes (conservando la de menor id).
 delete from campanas c
@@ -708,7 +713,9 @@ begin
     raise exception 'Sesión no iniciada';
   end if;
 
-  select * into bp from bascula_pesadas where id = p_id;
+  -- Bloqueada: si dos tablets anulan la misma pesada a la vez, la segunda
+  -- espera, ya no la encuentra y no resta las cajas otra vez.
+  select * into bp from bascula_pesadas where id = p_id for update;
   if not found then return false; end if;
 
   select * into r from registros
@@ -1032,6 +1039,9 @@ begin
 
   if coalesce(new.cajas_entradas, 0) > coalesce(old.cajas_entradas, 0) then
     perform public.paletizar_registro(new.id, new.cajas_entradas - coalesce(old.cajas_entradas, 0));
+  elsif old.fecha is null and new.fecha is not null then
+    -- Sin fecha no se paletiza: al ponérsela, entran ahora sus cajas.
+    perform public.paletizar_registro(new.id);
   end if;
   return null;
 end;
@@ -1039,7 +1049,7 @@ $$;
 
 drop trigger if exists registros_paletizar on registros;
 create trigger registros_paletizar
-  after insert or update of cajas_entradas, agricultor_id on registros
+  after insert or update of cajas_entradas, agricultor_id, fecha on registros
   for each row execute function public.registros_paletizar_trg();
 
 -- No se puede borrar una pesada cuyas cajas ya salieron en un palet.
@@ -1311,6 +1321,10 @@ begin
     select id from registros
     where fecha >= coalesce(public.paletizado_desde(), fecha)
       and coalesce(cajas_entradas, 0) > 0
+      -- Solo las que nunca se han paletizado. Las que la oficina dejó sin
+      -- palet a propósito (quitando cajas o borrando un palet) no se tocan
+      -- al volver a ejecutar este script.
+      and not exists (select 1 from palet_lineas l where l.registro_id = registros.id)
     order by fecha, coalesce(pesada_en, created_at), id
   loop
     perform public.paletizar_registro(v_id);

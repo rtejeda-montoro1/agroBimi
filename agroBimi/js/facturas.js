@@ -85,8 +85,8 @@
     App.$("cuerpoFacturaLineas").innerHTML = lineasOrdenadas(liquidacion).map((l) => `
       <tr>
         <td>${App.escapar(l.concepto)}</td>
-        <td class="col-num">${App.fmtNum(l.cantidad, 0)}</td>
-        <td class="col-num">${App.fmtEuro(l.precio)}</td>
+        <td class="col-num">${App.fmtCantidad(l.cantidad)}</td>
+        <td class="col-num">${App.fmtPrecio(l.precio)}</td>
         <td class="col-num ${App.num(l.importe) < 0 ? "negativo" : ""}"><b>${App.fmtEuro(l.importe)}</b></td>
       </tr>`).join("");
 
@@ -144,8 +144,8 @@
     const filas = lineasOrdenadas(l).map((linea) => `
       <tr>
         <td>${App.escapar(linea.concepto)}</td>
-        <td class="der">${App.fmtNum(linea.cantidad, 0)}</td>
-        <td class="der">${App.fmtEuro(linea.precio)}</td>
+        <td class="der">${App.fmtCantidad(linea.cantidad)}</td>
+        <td class="der">${App.fmtPrecio(linea.precio)}</td>
         <td class="der">${App.fmtEuro(linea.importe)}</td>
       </tr>`).join("");
 

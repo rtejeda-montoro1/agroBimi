@@ -8,7 +8,10 @@
 
     const buscar = App.$("buscarAgricultor").value.trim();
     if (buscar) {
-      const filtros = [`nombre.ilike.%${buscar}%`];
+      // Entre comillas: una coma o un paréntesis en el nombre ("García, José")
+      // rompería el filtro de Supabase.
+      const literal = `%${buscar}%`.replace(/["\\]/g, "\\$&");
+      const filtros = [`nombre.ilike."${literal}"`];
       const num = parseInt(buscar, 10);
       if (/^\d+$/.test(buscar) && !Number.isNaN(num)) filtros.push(`codigo.eq.${num}`);
       query = query.or(filtros.join(","));
@@ -16,7 +19,7 @@
 
     const { data, error } = await query;
     if (error) {
-      App.dom.listaAgricultores.innerHTML = `<div class="error">Error al cargar: ${error.message}</div>`;
+      App.dom.listaAgricultores.innerHTML = `<div class="error">Error al cargar: ${App.escapar(error.message)}</div>`;
       return;
     }
 

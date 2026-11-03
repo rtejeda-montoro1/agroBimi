@@ -49,6 +49,11 @@
     datosDeCache: false,
     vista: "bascula",  // "bascula" o "palets"
     palets: null,      // lo último que devolvió bascula_palets()
+    paletsJSON: "",    // el mismo dato en texto, para no repintar si no cambia
+    paletsHora: null,  // cuándo se recibieron
+    paletsFallo: false, // la última carga falló (sin red o error)
+    paletsReq: 0,      // nº de la última carga pedida: las viejas se ignoran
+    cargaFallida: false, // la primera carga falló sin datos guardados: se reintenta
   };
 
   let temporizadores = [];
@@ -226,8 +231,12 @@
       await cargarCampanas();
       await Promise.all([cargarAgricultores(), cargarHoy(), cargarEmisor()]);
       state.sinRed = false;
+      state.cargaFallida = false;
     } catch (error) {
       if (esRechazo(error) || !usarCache()) {
+        // Sin nada con lo que trabajar: se reintenta al volver la red y
+        // cada minuto, para no tener que recargar la página a mano.
+        state.cargaFallida = true;
         $("gridAgricultores").innerHTML =
           `<div class="error">No se pudieron cargar los datos.<br>${escapar(error.message)}<br>` +
           "¿Hay conexión? ¿Se ha ejecutado el último schema.sql en Supabase?</div>";
@@ -553,21 +562,51 @@
     return (p.num_cajas || 0) >= cajasPorPalet();
   }
 
-  async function cargarPalets() {
+  // «Actualizado a las 10:42», y si no hay red, que se vea que es de antes.
+  function pintarActualizado() {
+    const sinRed = state.paletsFallo || !navigator.onLine;
+    $("paletsActualizado").textContent = state.paletsHora
+      ? `Actualizado a las ${hora(state.paletsHora)}${sinRed ? " · sin conexión" : ""}`
+      : sinRed ? "Sin conexión" : "";
+    $("paletsActualizado").classList.toggle("sin-red", sinRed);
+  }
+
+  // manual = lo ha pedido alguien (botón o entrar en la vista). El refresco
+  // automático no avisa de fallos ni lo intenta sin red: no llenaría la
+  // pantalla de avisos cada minuto.
+  async function cargarPalets(manual = false) {
+    if (!manual && !navigator.onLine) { pintarActualizado(); return; }
     if (!state.palets) $("listaPalets").innerHTML = '<div class="empty">Cargando palets…</div>';
+    // Si se piden dos cargas a la vez (botón, minuto, vuelta de la red), solo
+    // vale la última; y nada que llegue después de cerrar la sesión.
+    const n = ++state.paletsReq;
     const { data, error } = await db.rpc("bascula_palets");
+    if (n !== state.paletsReq || !document.body.classList.contains("authed")) return;
+    state.paletsFallo = !!error;
     if (error) {
       // Si ya había palets a la vista se dejan: solo se avisa.
-      if (state.palets) toast("No se han podido actualizar los palets.");
-      else {
+      if (state.palets) {
+        if (manual) toast("No se han podido actualizar los palets.");
+        pintarActualizado();
+      } else {
         $("listaPalets").innerHTML =
           `<div class="error">No se pudieron cargar los palets.<br>${escapar(error.message)}<br>` +
           "¿Hay conexión? ¿Se ha ejecutado el último schema.sql en Supabase?</div>";
+        pintarActualizado();
       }
       return;
     }
-    state.palets = data || { palets: [] };
-    pintarPalets();
+    const nuevo = data || { palets: [] };
+    const json = JSON.stringify(nuevo);
+    state.paletsHora = new Date().toISOString();
+    // Si nada ha cambiado no se repinta: así no se pierde un toque en
+    // «Imprimir etiqueta» ni se mueven las tarjetas bajo el dedo.
+    if (json !== state.paletsJSON) {
+      state.palets = nuevo;
+      state.paletsJSON = json;
+      pintarPalets();
+    }
+    pintarActualizado();
   }
 
   function tarjetaPalet(p) {
@@ -663,7 +702,7 @@
     document.querySelector(".bascula-main").hidden = palets;
     $("vistaPalets").hidden = !palets;
     $("btnVista").textContent = palets ? "⚖ Báscula" : "📦 Palets";
-    if (palets) cargarPalets();
+    if (palets) cargarPalets(true);
   }
 
   // ------------------------------------------------------------------
@@ -824,6 +863,11 @@
       state.cargado = false;
       state.elegido = null;
       state.palets = null;
+      state.paletsJSON = "";
+      state.paletsHora = null;
+      state.paletsFallo = false;
+      state.paletsReq++;
+      state.cargaFallida = false;
       cambiarVista("bascula");
       return;
     }
@@ -832,7 +876,10 @@
       cargarTodo().then(enviarPendientes);
     }
     temporizadores.push(
-      setInterval(() => cargarHoy().catch(() => {}), REFRESCO_HOY_MS),
+      setInterval(() => {
+        if (state.cargaFallida) cargarTodo().then(enviarPendientes);
+        else cargarHoy().catch(() => {});
+      }, REFRESCO_HOY_MS),
       setInterval(() => cargarAgricultores().catch(() => {}), REFRESCO_AGRICULTORES_MS),
       setInterval(enviarPendientes, REINTENTO_ENVIO_MS),
       setInterval(pintarFecha, REFRESCO_HOY_MS),
@@ -949,7 +996,7 @@
 
     $("btnVista").addEventListener("click", () =>
       cambiarVista(state.vista === "palets" ? "bascula" : "palets"));
-    $("btnRecargarPalets").addEventListener("click", cargarPalets);
+    $("btnRecargarPalets").addEventListener("click", () => cargarPalets(true));
     $("listaPalets").addEventListener("click", (e) => {
       const b = e.target.closest("[data-etiqueta]");
       if (b) imprimirEtiqueta(b.dataset.etiqueta);
@@ -957,11 +1004,14 @@
 
     window.addEventListener("online", () => {
       pintarEstadoRed();
-      enviarPendientes();
+      if (state.cargaFallida) cargarTodo().then(enviarPendientes);
+      else enviarPendientes();
+      if (state.vista === "palets") cargarPalets();
     });
     window.addEventListener("offline", () => {
       state.sinRed = true;
       pintarEstadoRed();
+      if (state.vista === "palets") pintarActualizado();
     });
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState !== "visible") return;

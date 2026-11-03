@@ -258,6 +258,8 @@ body.bascula:not(.authed) .bascula-palets,
 }
 .palets-resumen { display: flex; gap: 8px 18px; flex-wrap: wrap; font-size: .95rem; color: var(--muted); }
 .palets-resumen b { color: var(--text); font-size: 1.15rem; }
+.palets-actualizado { margin-left: auto; font-size: .85rem; color: var(--muted); }
+.palets-actualizado.sin-red { color: #b45309; font-weight: 600; }
 .palets-barra .btn-ghost { padding: 12px 18px; font-size: 1rem; }
 .palets-grupo { margin: 0 0 18px; }
 .palets-grid {

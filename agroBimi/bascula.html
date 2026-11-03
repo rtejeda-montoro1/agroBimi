@@ -140,6 +140,7 @@
   <main class="bascula-palets" id="vistaPalets" hidden>
     <div class="palets-barra">
       <div class="palets-resumen" id="paletsResumen"></div>
+      <span class="palets-actualizado" id="paletsActualizado"></span>
       <button type="button" class="btn-ghost" id="btnRecargarPalets">⟳ Actualizar</button>
     </div>
     <div id="listaPalets"></div>
@@ -150,7 +151,11 @@
   <!-- Justificante: oculto en pantalla, es lo único que sale al imprimir. -->
   <div id="zonaImpresion" aria-hidden="true"></div>
 
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <!-- Versión fija: una 2.x nueva no cambia el comportamiento sin avisar.
+       Para actualizar, cambiar la versión y recalcular el integrity. -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js"
+          integrity="sha384-TcHRA3zBbn+Lexh5n+Oil4guNPOS3rjNDpGRAN46u/s/mB2IZ50ceC6TYDU2yvgK"
+          crossorigin="anonymous"></script>
   <script src="config.js"></script>
   <script src="js/bascula.js"></script>
 </body>

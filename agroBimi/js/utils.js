@@ -128,9 +128,28 @@
 
   // Redondeo a 2 decimales sin arrastrar el error binario de los float
   // (0.1 + 0.2). Todos los importes de liquidación pasan por aquí.
+  // Se redondea el valor absoluto y se le devuelve el signo: así -0,375
+  // da -0,38 igual que 0,375 da 0,38 (Math.round sube los .5 hacia +∞).
   function redondear(v, decimales = 2) {
     const f = 10 ** decimales;
-    return Math.round((num(v) + Number.EPSILON) * f) / f;
+    const n = num(v);
+    // + 0 convierte -0 en 0 (si no, se mostraría «-0,00 €»).
+    return Math.sign(n) * Math.round((Math.abs(n) + Number.EPSILON) * f) / f + 0;
+  }
+
+  // Precio de una línea: 2 decimales, salvo que tenga más (hasta 4). Si se
+  // mostrase 0,36 € un precio de 0,3575 €, la cantidad × precio impresa no
+  // daría el importe de la línea.
+  function fmtPrecio(v) {
+    const n = Number(v);
+    if (v === null || v === undefined || v === "" || !Number.isFinite(n)) return "—";
+    const dec = redondear(n, 2) === n ? 2 : redondear(n, 3) === n ? 3 : 4;
+    return fmtEuro(n, dec);
+  }
+
+  // Cantidad de una línea: sin decimales si es entera (cajas), con 2 si no.
+  function fmtCantidad(v) {
+    return fmtNum(v, Number.isInteger(num(v)) ? 0 : 2);
   }
 
   // ---- Numeración de documentos ---------------------------------------
@@ -187,7 +206,9 @@
     const t = App.$("toast");
     t.textContent = msg;
     t.classList.add("show");
-    setTimeout(() => t.classList.remove("show"), 2500);
+    // Si sale otro aviso antes de que se cierre este, cuenta desde el nuevo.
+    clearTimeout(toast.timer);
+    toast.timer = setTimeout(() => t.classList.remove("show"), 2500);
   }
 
   function fmtCodigo(codigo) {
@@ -273,6 +294,8 @@
     num,
     fmtNum,
     fmtEuro,
+    fmtPrecio,
+    fmtCantidad,
     redondear,
     siguienteSecuencia,
     fmtDocumento,

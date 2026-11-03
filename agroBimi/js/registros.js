@@ -67,7 +67,7 @@
 
     if (error) {
       // La tabla está oculta durante la carga; mostramos el error en el bloque.
-      App.$("registrosVacio").innerHTML = `<div class="error">Error al cargar: ${error.message}</div>`;
+      App.$("registrosVacio").innerHTML = `<div class="error">Error al cargar: ${App.escapar(error.message)}</div>`;
       return;
     }
 
@@ -237,9 +237,25 @@
     return etiqueta ? etiqueta.textContent.trim() : campo.id;
   }
 
+  // Un doble clic (o Enter + clic) no puede crear dos registros: cada uno
+  // metería sus cajas en la cámara y en los palets.
+  let guardandoRegistro = false;
+
   async function guardarRegistro(e) {
     e.preventDefault();
-    if (!App.state.agricultorAbierto) return;
+    if (guardandoRegistro || !App.state.agricultorAbierto) return;
+    const boton = e.submitter || App.dom.formRegistro.querySelector('[type="submit"]');
+    guardandoRegistro = true;
+    if (boton) boton.disabled = true;
+    try {
+      await guardarRegistroDatos();
+    } finally {
+      guardandoRegistro = false;
+      if (boton) boton.disabled = false;
+    }
+  }
+
+  async function guardarRegistroDatos() {
 
     const id = App.$("registroId").value;
     const registro = { agricultor_id: App.state.agricultorAbierto.id };
@@ -251,6 +267,12 @@
     const fechaFutura = primeraFechaFutura(registro);
     if (fechaFutura) {
       App.toast(`"${fechaFutura}" no puede ser una fecha futura.`);
+      return;
+    }
+
+    // Sin fecha las cajas no entran en la cámara ni en ningún palet.
+    if (!registro.fecha && App.num(registro.cajas_entradas) > 0) {
+      App.toast("Pon la fecha de entrada: sin ella las cajas no entran en la cámara.");
       return;
     }
 
@@ -432,6 +454,8 @@
       const r = (lista || []).find((x) => String(x.id) === id);
       if (r) Object.assign(r, cambios);
     });
+    // El resumen de rendimiento depende de estas cajas.
+    App.pintarResumenCiclos();
 
     App.toast("Cajas actualizadas");
     mostrarPopoverCajas(btn);
