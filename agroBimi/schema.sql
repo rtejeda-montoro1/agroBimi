@@ -1456,6 +1456,12 @@ declare
   v_serie text;
   v_regs  bigint[] := array(select distinct x from unnest(coalesce(p_registros, '{}')) x);
   v_n     integer;
+  v_fuera         integer;
+  v_cajas         numeric;
+  v_descuento     numeric;
+  v_lin_cajas     numeric;
+  v_lin_descuento numeric;
+  v_lin_base      numeric;
 begin
   if p_id is not null then
     perform 1 from liquidaciones where id = p_id and estado = 'borrador' for update;
@@ -1519,6 +1525,54 @@ begin
     end if;
   end if;
 
+  -- Lo guardado tiene que cuadrar con los registros TAL Y COMO ESTÁN AHORA
+  -- (ya bloqueados). Si entre «Calcular» y «Guardar» la báscula ha sumado
+  -- cajas o ha entrado un registro nuevo en el periodo, el cálculo ya no
+  -- vale: sin esto, esas cajas quedaban liquidadas sin pagarse.
+  select count(*) filter (where r.agricultor_id is distinct from (p_datos->>'agricultor_id')::bigint
+                            or r.campana_id is distinct from (p_datos->>'campana_id')::bigint
+                            or r.fecha is null
+                            or r.fecha not between (p_datos->>'fecha_desde')::date
+                                               and (p_datos->>'fecha_hasta')::date),
+         coalesce(sum(coalesce(r.cajas_entradas, 0)), 0),
+         coalesce(sum(coalesce(r.descuento_cajas, 0)), 0)
+  into v_fuera, v_cajas, v_descuento
+  from registros r where r.liquidacion_id = v_id;
+
+  if v_fuera > 0 then
+    raise exception 'Algunos registros no son de este agricultor, campaña o periodo. Vuelve a pulsar «Calcular».';
+  end if;
+
+  if exists (select 1 from registros r
+             where r.liquidacion_id is null
+               and r.agricultor_id = (p_datos->>'agricultor_id')::bigint
+               and r.campana_id = (p_datos->>'campana_id')::bigint
+               and r.fecha between (p_datos->>'fecha_desde')::date and (p_datos->>'fecha_hasta')::date) then
+    raise exception 'Han entrado registros nuevos en el periodo mientras tanto. Vuelve a pulsar «Calcular».';
+  end if;
+
+  select coalesce(sum(cantidad) filter (where tipo = 'bimi'), 0),
+         coalesce(sum(cantidad) filter (where tipo = 'descuento'), 0),
+         count(*) filter (where tipo = 'descuento'),
+         coalesce(sum(importe), 0)
+  into v_lin_cajas, v_lin_descuento, v_n, v_lin_base
+  from liquidacion_lineas where liquidacion_id = v_id;
+
+  if v_lin_cajas <> v_cajas
+     or (v_n > 0 and v_lin_descuento <> v_descuento)
+     or (v_n = 0 and v_descuento > 0 and coalesce((p_datos->>'incluir_descuento')::boolean, false)) then
+    raise exception 'Las cajas de los registros han cambiado desde el cálculo (ahora % cajas y % de descuento). Vuelve a pulsar «Calcular».',
+      v_cajas, v_descuento;
+  end if;
+
+  -- Importes: la base es la suma de las líneas y el total, base + IVA − retención.
+  if abs(v_lin_base - coalesce((p_datos->>'base')::numeric, 0)) > 0.005
+     or abs(coalesce((p_datos->>'base')::numeric, 0) + coalesce((p_datos->>'iva')::numeric, 0)
+            - coalesce((p_datos->>'retencion')::numeric, 0)
+            - coalesce((p_datos->>'total')::numeric, 0)) > 0.005 then
+    raise exception 'Los importes no cuadran con las líneas. Vuelve a pulsar «Calcular».';
+  end if;
+
   return v_id;
 end;
 $$;
@@ -1551,7 +1605,10 @@ begin
   end if;
 
   -- Primero se sueltan los registros: el ON DELETE SET NULL dejaría el
-  -- num_factura antiguo pegado.
+  -- num_factura antiguo pegado. El aviso a registros_proteger_trg
+  -- (sección 20) permite soltarlos aunque la liquidación esté cerrada o
+  -- facturada con la factura del agricultor. Solo dura esta transacción.
+  perform set_config('agrobimi.eliminando_liquidacion', p_id::text, true);
   update registros set
     liquidacion_id = null,
     num_factura    = case when v_liq.num_factura is not null then null else num_factura end
@@ -1563,3 +1620,141 @@ $$;
 
 revoke all on function public.liquidacion_eliminar(bigint) from public, anon;
 grant execute on function public.liquidacion_eliminar(bigint) to authenticated;
+
+-- 20) LO LIQUIDADO NO SE CAMBIA
+--     Cuando una liquidación sale de borrador (cerrada o facturada), lo que
+--     se pagó queda fijo. Antes solo se avisaba con un confirm() en el
+--     navegador y el recibo podía dejar de cuadrar con los registros.
+--
+--     a) Liquidaciones: solo se puede pasar de borrador a cerrada, y de
+--        borrador o cerrada a facturada. Una vez fuera de borrador no
+--        cambia nada más (importes, fechas, nº de recibo...). Para
+--        corregir, se elimina y se rehace (si no tiene recibo propio).
+create or replace function public.liquidaciones_proteger_trg()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  if old.estado = 'borrador' then
+    return new;  -- el borrador se edita libremente (liquidacion_guardar)
+  end if;
+
+  if old.estado = 'cerrada' and new.estado = 'facturada' then
+    -- Facturar: solo se rellenan los datos de la factura.
+    if (new.agricultor_id, new.campana_id, new.fecha, new.fecha_desde, new.fecha_hasta,
+        new.precio_caja, new.precio_caja_perdida, new.iva_porcentaje, new.base, new.iva,
+        new.retencion_porcentaje, new.retencion, new.total, new.observaciones,
+        new.numero, new.secuencia)
+       is distinct from
+       (old.agricultor_id, old.campana_id, old.fecha, old.fecha_desde, old.fecha_hasta,
+        old.precio_caja, old.precio_caja_perdida, old.iva_porcentaje, old.base, old.iva,
+        old.retencion_porcentaje, old.retencion, old.total, old.observaciones,
+        old.numero, old.secuencia) then
+      raise exception 'La liquidación % está cerrada: al facturarla no se pueden cambiar sus importes ni sus datos.',
+        old.numero;
+    end if;
+    return new;
+  end if;
+
+  if row(new.*) is distinct from row(old.*) then
+    raise exception 'La liquidación % está %: ya no se puede modificar. Si hay que corregirla, elimínala y vuelve a hacerla.',
+      old.numero, old.estado;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists liquidaciones_proteger on liquidaciones;
+create trigger liquidaciones_proteger
+  before update on liquidaciones
+  for each row execute function public.liquidaciones_proteger_trg();
+
+--     b) Líneas: solo se tocan mientras la liquidación es un borrador. Si
+--        la liquidación ya no existe es un borrado en cascada: se deja.
+create or replace function public.liquidacion_lineas_proteger_trg()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+declare
+  v_liq liquidaciones%rowtype;
+begin
+  select * into v_liq from liquidaciones
+  where id = case when tg_op = 'INSERT' then new.liquidacion_id else old.liquidacion_id end;
+  if found and v_liq.estado <> 'borrador' then
+    raise exception 'La liquidación % está %: sus líneas ya no se pueden cambiar.',
+      v_liq.numero, v_liq.estado;
+  end if;
+  if tg_op = 'UPDATE' and new.liquidacion_id is distinct from old.liquidacion_id then
+    select * into v_liq from liquidaciones where id = new.liquidacion_id;
+    if found and v_liq.estado <> 'borrador' then
+      raise exception 'La liquidación % está %: sus líneas ya no se pueden cambiar.',
+        v_liq.numero, v_liq.estado;
+    end if;
+  end if;
+  return case when tg_op = 'DELETE' then old else new end;
+end;
+$$;
+
+drop trigger if exists liquidacion_lineas_proteger on liquidacion_lineas;
+create trigger liquidacion_lineas_proteger
+  before insert or update or delete on liquidacion_lineas
+  for each row execute function public.liquidacion_lineas_proteger_trg();
+
+--     c) Registros de una liquidación cerrada o facturada: no se borran ni
+--        se cambia lo que cuenta para el pago (agricultor, campaña, fecha,
+--        cajas, descuento y cajas vacías) ni de qué liquidación son. Sí se
+--        pueden cambiar el resto (comentarios, ciclo, fecha CMR, salidas...).
+--        Excepciones: copiar a los registros el nº de la factura de su
+--        liquidación (al facturar) y soltarlos desde liquidacion_eliminar.
+--        En un borrador se puede todo: al recalcularlo, se coge lo nuevo.
+create or replace function public.registros_proteger_trg()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+declare
+  v_liq liquidaciones%rowtype;
+begin
+  if old.liquidacion_id is null then
+    return case when tg_op = 'DELETE' then old else new end;
+  end if;
+
+  select * into v_liq from liquidaciones where id = old.liquidacion_id;
+  if not found or v_liq.estado = 'borrador' then
+    return case when tg_op = 'DELETE' then old else new end;
+  end if;
+
+  if current_setting('agrobimi.eliminando_liquidacion', true) = old.liquidacion_id::text then
+    return case when tg_op = 'DELETE' then old else new end;
+  end if;
+
+  if tg_op = 'DELETE' then
+    raise exception 'No se puede eliminar el registro del %: está en la liquidación % (%).',
+      to_char(old.fecha, 'DD/MM/YYYY'), v_liq.numero, v_liq.estado;
+  end if;
+
+  if (new.agricultor_id, new.campana_id, new.fecha, new.cajas_entradas, new.descuento_cajas,
+      new.cajas_vacias_retiradas, new.cajas_vacias_devueltas, new.liquidacion_id)
+     is distinct from
+     (old.agricultor_id, old.campana_id, old.fecha, old.cajas_entradas, old.descuento_cajas,
+      old.cajas_vacias_retiradas, old.cajas_vacias_devueltas, old.liquidacion_id) then
+    raise exception 'El registro del % está en la liquidación % (%): no se pueden cambiar su fecha, campaña ni cajas. Solo comentarios, ciclo y datos de salida.',
+      to_char(old.fecha, 'DD/MM/YYYY'), v_liq.numero, v_liq.estado;
+  end if;
+
+  if new.num_factura is distinct from old.num_factura
+     and new.num_factura is distinct from v_liq.num_factura then
+    raise exception 'El registro del % está en la liquidación % (%): su nº de factura es el de la liquidación.',
+      to_char(old.fecha, 'DD/MM/YYYY'), v_liq.numero, v_liq.estado;
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists registros_proteger on registros;
+create trigger registros_proteger
+  before update or delete on registros
+  for each row execute function public.registros_proteger_trg();

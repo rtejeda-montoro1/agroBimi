@@ -467,6 +467,9 @@
       retencion: previa.retencionImporte,
       total: previa.total,
       observaciones: datos.observaciones,
+      // No se guarda como columna: liquidacion_guardar lo usa para comprobar
+      // que no ha aparecido un descuento nuevo desde el cálculo.
+      incluir_descuento: datos.incluirDescuento,
     };
 
     // Todo en una transacción (liquidacion_guardar, schema.sql sección 18):
@@ -480,9 +483,10 @@
 
     if (error) {
       App.toast("No se ha guardado: " + error.message);
-      // Si otra persona ha liquidado alguno de los registros, el cálculo ya
-      // no vale: hay que volver a calcular antes de guardar.
-      if (/otra liquidación|ya no es un borrador/.test(error.message)) {
+      // Si otra persona ha liquidado alguno de los registros, o han cambiado
+      // las cajas desde el cálculo (la báscula sigue apuntando), el cálculo
+      // ya no vale: hay que volver a calcular antes de guardar.
+      if (/otra liquidación|ya no es un borrador|Calcular/.test(error.message)) {
         App.state.liquidacionPrevia = null;
         App.$("btnGuardarLiquidacion").disabled = true;
       }

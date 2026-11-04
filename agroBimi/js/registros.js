@@ -261,27 +261,38 @@
     }
   }
 
-  // Las líneas de una liquidación se guardan con sus cantidades: si se
-  // cambia o borra un registro ya liquidado, la liquidación (y su recibo)
-  // deja de cuadrar con los registros. No se bloquea, pero se avisa.
+  // Registro ya liquidado:
+  //  - En un BORRADOR se puede cambiar o borrar, pero hay que recalcular la
+  //    liquidación para que cuadre: se avisa.
+  //  - En una liquidación CERRADA o FACTURADA, la base de datos no deja
+  //    borrarlo ni cambiar fecha, campaña o cajas (schema.sql sección 20).
+  //    El borrado se para aquí con una explicación; en una edición se deja
+  //    seguir, porque los comentarios, el ciclo, etc. sí se pueden cambiar
+  //    y, si se ha tocado algo protegido, el error de la base de datos lo
+  //    explica.
   async function confirmarSiLiquidado(registroId, accion) {
-    // El popover de cajas también se usa en la vista de campaña.
-    const r = [...(App.state.registrosActuales || []), ...(App.state.registrosCampanaActuales || [])]
-      .find((x) => String(x.id) === String(registroId));
-    if (!r || !r.liquidacion_id) return true;
-    // Las liquidaciones solo están en memoria si se ha abierto su ventana.
-    let l = (App.state.liquidacionesActuales || []).find((x) => String(x.id) === String(r.liquidacion_id));
-    if (!l) {
-      const { data } = await App.db.from("liquidaciones")
-        .select("numero,num_factura").eq("id", r.liquidacion_id).maybeSingle();
-      l = data;
+    // Se pregunta a la base de datos: lo que hay en memoria puede estar
+    // desfasado (otra pestaña puede haberlo liquidado o cerrado).
+    const { data: r } = await App.db.from("registros")
+      .select("liquidacion_id,liquidaciones(numero,num_factura,estado)")
+      .eq("id", registroId).maybeSingle();
+    const l = r?.liquidaciones;
+    if (!r?.liquidacion_id || !l) return true;
+
+    const cual = `la liquidación ${l.numero || ""}`.trim();
+    if (l.estado === "borrador") {
+      return confirm(
+        `⚠ Este registro está en ${cual}, que todavía es un borrador.\n\n` +
+        `Si lo ${accion}, vuelve a calcularla (Editar → Calcular → Guardar) para que cuadre.\n\n` +
+        "¿Continuar?");
     }
-    const cual = l?.numero ? `la liquidación ${l.numero}` : "una liquidación";
-    const factura = l?.num_factura ? ` (facturada: ${l.num_factura})` : "";
-    return confirm(
-      `⚠ Este registro ya está incluido en ${cual}${factura}.\n\n` +
-      `Si lo ${accion}, la liquidación y su recibo no cambian y dejarán de cuadrar con los registros.\n\n` +
-      "¿Continuar igualmente?");
+    if (accion === "eliminas") {
+      const factura = l.num_factura ? ` (factura ${l.num_factura})` : "";
+      alert(`No se puede eliminar: este registro está en ${cual}${factura}, que ya está ${l.estado}.\n\n` +
+        "Lo liquidado no se puede cambiar. Si hay que corregirlo, elimina la liquidación (si no tiene recibo emitido) y vuelve a hacerla.");
+      return false;
+    }
+    return true;
   }
 
   async function guardarRegistroDatos() {
