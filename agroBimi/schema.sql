@@ -2,32 +2,127 @@
 --  ESQUEMA DE LA BASE DE DATOS
 --  Gestión de Bimi
 -- =====================================================================
+--  Es el esquema ACTUAL: cada tabla con todas sus columnas, y todas las
+--  funciones, triggers y permisos. Se ejecuta completo en el editor SQL de
+--  Supabase y se puede repetir tantas veces como haga falta:
+--    - una instalación nueva queda creada entera;
+--    - en una base de datos ya al día no cambia ningún dato: las tablas
+--      que ya existen se dejan como están y se vuelven a poner las
+--      funciones, los triggers y los permisos.
+--
+--  Cambios en las tablas: en una base de datos que ya existe,
+--  "create table if not exists" no añade columnas nuevas. Hay que
+--  añadirlas en la tabla de aquí abajo Y con un
+--  "alter table ... add column if not exists ..." al final de este
+--  archivo, que puede quitarse cuando todas las bases de datos lo tengan.
+--  Los arreglos de datos (pasar datos antiguos al formato nuevo) no van
+--  aquí: van en un script de migración aparte (ver README).
+--
+--  Bases de datos anteriores a noviembre de 2026: este archivo ya no
+--  lleva las migraciones de entonces (columnas añadidas una a una, palets
+--  de un solo agricultor, cartas de porte, pesadas antiguas...). Para
+--  ponerlas al día, ejecutar antes el schema.sql del commit 4d8ce36.
+-- =====================================================================
 
--- 1) Tabla de AGRICULTORES
+
+-- =====================================================================
+--  TABLAS
+-- =====================================================================
+
+-- 1) AGRICULTORES
 --    Lo único obligatorio es el nombre. El "codigo" es un número único de
 --    3 dígitos que asigna la app al crear el agricultor; no se edita.
+--    Los datos fiscales (nif ... iban) son opcionales: hacen falta para
+--    emitir recibos completos.
 create table if not exists agricultores (
-  id         bigint generated always as identity primary key,
-  nombre     text          not null,
-  codigo     integer       unique,
-  created_at timestamptz   not null default now()
+  id            bigint generated always as identity primary key,
+  nombre        text          not null,
+  codigo        integer       unique,
+  created_at    timestamptz   not null default now(),
+  nif           text,
+  direccion     text,
+  codigo_postal text,
+  poblacion     text,
+  provincia     text,
+  telefono      text,
+  email         text,
+  iban          text
 );
-
--- Si actualizas desde una versión anterior, añade la columna que falte:
-alter table agricultores add column if not exists codigo integer;
-do $$ begin
-  alter table agricultores add constraint agricultores_codigo_key unique (codigo);
-exception when duplicate_table or duplicate_object then null;
-end $$;
 
 create index if not exists agricultores_nombre_idx on agricultores (nombre);
 
--- 2) Tabla de REGISTROS
+-- 2) CAMPAÑAS
+--    Todo registro, retirada de plantas y liquidación pertenece a una
+--    campaña (ver sección 15). No puede haber dos con el mismo nombre (sin
+--    distinguir mayúsculas ni espacios sobrantes): la validación de la app
+--    es solo de UX, esta es la red de seguridad real.
+create table if not exists campanas (
+  id         bigint generated always as identity primary key,
+  nombre     text          not null,
+  created_at timestamptz   not null default now()
+);
+
+create unique index if not exists campanas_nombre_unico
+  on campanas (lower(trim(nombre)));
+
+-- 3) LIQUIDACIONES
+--    Una liquidación agrupa los registros de un agricultor en un rango de
+--    fechas, les pone precio y calcula el total. Al facturarla se le asigna
+--    un nº de factura, que además se copia al campo num_factura de cada
+--    registro incluido (así sigue funcionando la agrupación de la tabla).
+--    retencion: IRPF del recibo de compensación (sobre base + IVA).
+--    factura_agricultor: la factura la trae el agricultor; num_factura y
+--    fecha_factura son las de SU factura (escritas a mano) y no se gasta
+--    número de la serie (factura_secuencia queda vacía).
+create table if not exists liquidaciones (
+  id                   bigint generated always as identity primary key,
+  secuencia            integer     unique,   -- contador interno para numerar
+  numero               text        unique,   -- p. ej. LIQ-0001
+  agricultor_id        bigint      not null references agricultores(id) on delete cascade,
+  campana_id           bigint      references campanas(id) on delete set null,
+  fecha                date        not null, -- fecha de la liquidación
+  fecha_desde          date        not null, -- periodo liquidado
+  fecha_hasta          date        not null,
+  estado               text        not null default 'borrador',
+  precio_caja          numeric(12,4),
+  precio_caja_perdida  numeric(12,4),
+  iva_porcentaje       numeric(5,2),
+  base                 numeric(12,2),
+  iva                  numeric(12,2),
+  total                numeric(12,2),
+  factura_secuencia    integer     unique,
+  num_factura          text,
+  fecha_factura        date,
+  observaciones        text,
+  created_at           timestamptz not null default now(),
+  retencion_porcentaje numeric(5,2),
+  retencion            numeric(12,2),
+  factura_agricultor   boolean     not null default false,
+  constraint liquidaciones_estado_check
+    check (estado in ('borrador', 'cerrada', 'facturada')),
+  constraint liquidaciones_campana_obligatoria
+    check (campana_id is not null)
+);
+
+create index if not exists liquidaciones_agricultor_idx on liquidaciones (agricultor_id);
+create index if not exists liquidaciones_fecha_idx      on liquidaciones (fecha);
+create index if not exists liquidaciones_periodo_idx    on liquidaciones (fecha_desde, fecha_hasta);
+
+-- 4) REGISTROS
 --    Cada registro pertenece a un agricultor. Salvo el agricultor, la
 --    campaña y el ciclo (obligatorios, ver sección 15), todos los campos son
 --    opcionales: se pueden dejar en blanco, editar o eliminar.
+--    Cajas vacías: el agricultor se lleva vacías (cajas_vacias_retiradas)
+--    y las devuelve llenas (cajas_entradas) o sin usar
+--    (cajas_vacias_devueltas). Descuadre = retiradas − llenas − vacías.
+--    liquidacion_id: marca el registro como ya liquidado para que no entre
+--    en otra liquidación.
+--    De la báscula: origen = 'bascula' (null = apuntado en la oficina);
+--    client_uuid, el identificador que genera la tablet (si la red falla
+--    y reenvía, el servidor sabe que ya lo tenía); pesada_en, cuándo se
+--    pesó (no cuándo llegó al servidor, que puede ser horas después).
 create table if not exists registros (
-  id                     bigint generated always as identity primary key,
+  id                     bigint  generated always as identity primary key,
   agricultor_id          bigint  not null references agricultores(id) on delete cascade,
   fecha                  date,                       -- Fecha
   ciclo                  text,                       -- Ciclo
@@ -37,70 +132,25 @@ create table if not exists registros (
   descuento_cajas        integer,                    -- Descuento Cajas
   num_factura            text,                       -- Nº Factura
   cajas_vacias_retiradas integer,                    -- Cajas Vacías retiradas
-  num_plantas            integer,                    -- Nº Plantas
-  fecha_retirada         date,                       -- Fecha de Retirada
+  num_plantas            integer,                    -- sin uso (ahora en retiradas_plantas)
+  fecha_retirada         date,                       -- sin uso (ahora en retiradas_plantas)
   comentarios            text,                       -- Comentarios
-  created_at             timestamptz not null default now()
+  created_at             timestamptz not null default now(),
+  campana_id             bigint  references campanas(id) on delete set null,
+  cajas_vacias_devueltas integer,                    -- Cajas Vacías devueltas
+  liquidacion_id         bigint  references liquidaciones(id) on delete set null,
+  origen                 text,
+  client_uuid            uuid,
+  pesada_en              timestamptz,
+  constraint registros_campana_obligatoria check (campana_id is not null),
+  constraint registros_ciclo_valido check (ciclo is not null and ciclo in ('1', '2', '3'))
 );
 
-create index if not exists registros_agricultor_idx on registros (agricultor_id);
-create index if not exists registros_fecha_idx on registros (fecha);
-
--- 3) Tabla de CAMPAÑAS
---    Todo registro, retirada de plantas y liquidación pertenece a una
---    campaña (obligatorio desde 2026-10-11, ver sección 15).
-create table if not exists campanas (
-  id         bigint generated always as identity primary key,
-  nombre     text          not null,
-  created_at timestamptz   not null default now()
-);
-
--- Vínculo registro -> campaña (se añade también al actualizar versiones antiguas).
-alter table registros add column if not exists campana_id bigint references campanas(id) on delete set null;
-create index if not exists registros_campana_idx on registros (campana_id);
-
--- Impedir campañas duplicadas por nombre (sin distinguir mayúsculas ni
--- espacios sobrantes). Es la red de seguridad real: la validación en la app
--- es solo de UX y puede fallar si su estado está desactualizado.
---
--- Paso 1: si ya hubiera duplicados de una versión anterior, los unificamos.
---   a) Reapuntamos los registros a la campaña de MENOR id de cada nombre.
-update registros r
-set campana_id = (
-  select min(c2.id) from campanas c2
-  where lower(trim(c2.nombre)) = lower(trim(c1.nombre))
-)
-from campanas c1
-where r.campana_id = c1.id
-  -- Solo los que apuntan a una campaña duplicada: así no se reescribe toda
-  -- la tabla en cada despliegue (ni se revalidan sus restricciones).
-  and exists (select 1 from campanas c3
-              where lower(trim(c3.nombre)) = lower(trim(c1.nombre))
-                and c3.id < c1.id);
-
---   b) Borramos las campañas duplicadas sobrantes (conservando la de menor id).
-delete from campanas c
-where exists (
-  select 1 from campanas c2
-  where lower(trim(c2.nombre)) = lower(trim(c.nombre))
-    and c2.id < c.id
-);
-
--- Paso 2: índice único que impide crear el mismo nombre de nuevo.
-create unique index if not exists campanas_nombre_unico
-  on campanas (lower(trim(nombre)));
-
--- 4) Datos fiscales del AGRICULTOR
---    Necesarios para poder emitir facturas completas. Todos opcionales:
---    un agricultor sigue siendo válido solo con el nombre.
-alter table agricultores add column if not exists nif           text;
-alter table agricultores add column if not exists direccion     text;
-alter table agricultores add column if not exists codigo_postal text;
-alter table agricultores add column if not exists poblacion     text;
-alter table agricultores add column if not exists provincia     text;
-alter table agricultores add column if not exists telefono      text;
-alter table agricultores add column if not exists email         text;
-alter table agricultores add column if not exists iban          text;
+create index if not exists registros_agricultor_idx  on registros (agricultor_id);
+create index if not exists registros_fecha_idx       on registros (fecha);
+create index if not exists registros_campana_idx     on registros (campana_id);
+create index if not exists registros_liquidacion_idx on registros (liquidacion_id);
+create unique index if not exists registros_client_uuid_key on registros (client_uuid);
 
 -- 5) RETIRADAS DE PLANTAS
 --    Cada agricultor retira plantas (plantones) en cada ciclo. El número de
@@ -116,118 +166,87 @@ create table if not exists retiradas_plantas (
   num_plantas   integer     not null default 0,
   variedad      text,
   comentarios   text,
-  created_at    timestamptz not null default now()
+  created_at    timestamptz not null default now(),
+  constraint retiradas_campana_obligatoria check (campana_id is not null),
+  constraint retiradas_ciclo_valido check (ciclo is not null and ciclo in ('1', '2', '3'))
 );
 
 create index if not exists retiradas_agricultor_idx on retiradas_plantas (agricultor_id);
 create index if not exists retiradas_campana_idx    on retiradas_plantas (campana_id);
 create index if not exists retiradas_fecha_idx      on retiradas_plantas (fecha);
 
--- 6) CONTROL DE CAJAS VACÍAS
---    El agricultor se lleva cajas vacías y las devuelve llenas de bimi.
---    Con las columnas que ya existen (cajas_vacias_retiradas y
---    cajas_entradas) faltaba una: las vacías que devuelve sin usar.
---    El descuadre es: retiradas − devueltas llenas − devueltas vacías.
-alter table registros add column if not exists cajas_vacias_devueltas integer;
-
--- 7) PALETS
---    Las cajas se guardan en la cámara (sección 8) y allí se agrupan en
---    palets. Un palet puede llevar cajas de VARIOS agricultores: cuántas
---    de cada uno va en palet_lineas. El palet sigue ocupando sitio en la
---    cámara hasta que se le da salida (fecha_salida).
-create table if not exists palets (
-  id            bigint generated always as identity primary key,
-  secuencia     integer     unique,        -- contador interno para numerar
-  codigo        text        unique,        -- p. ej. P-000123
-  campana_id    bigint      references campanas(id) on delete set null,
-  ciclo         text,                      -- ya no se usa (versiones antiguas)
-  fecha         date        not null,      -- fecha de paletizado
-  num_cajas     integer     not null default 0,  -- suma de sus líneas (trigger)
-  fecha_salida  date,                      -- null = sigue en la cámara
-  comentarios   text,
-  created_at    timestamptz not null default now()
+-- 6) ALBARANES DE SALIDA
+--    Los palets salen de la cámara con un albarán. Lleva además los datos
+--    de la carta de porte (CMR) que cambian en cada salida (el número de
+--    cada columna es su casilla del CMR); los fijos (remitente, porteador)
+--    están en Ajustes.
+create table if not exists albaranes_salida (
+  id                     bigint generated always as identity primary key,
+  secuencia              integer     unique,
+  numero                 text        unique,   -- p. ej. ALB-0001
+  fecha                  date        not null,
+  destinatario_nombre    text        not null,
+  destinatario_nif       text,
+  destinatario_direccion text,
+  matricula              text,
+  transportista          text,
+  observaciones          text,
+  created_at             timestamptz not null default now(),
+  matricula_remolque     text,            -- 16
+  lugar_entrega          text,            -- 3
+  lugar_carga            text,            -- 4 y 21
+  documentos_anexos      text,            -- 5
+  marcas                 text,            -- 6
+  embalaje               text,            -- 8
+  naturaleza             text,            -- 9
+  peso_bruto_kg          numeric(12,2),   -- 11
+  temperatura            numeric(5,1)     -- 13
 );
 
-alter table palets add column if not exists fecha_salida date;
+-- 7) PALETS
+--    Las cajas de la báscula se reparten solas en palets (sección 16). Un
+--    palet puede llevar cajas de VARIOS agricultores: cuántas de cada
+--    pesada va en palet_lineas. El palet sigue en la cámara hasta que se
+--    le da salida (fecha_salida, con su albarán).
+create table if not exists palets (
+  id             bigint generated always as identity primary key,
+  secuencia      integer     unique,        -- contador interno para numerar
+  codigo         text        unique,        -- p. ej. P-000123
+  campana_id     bigint      references campanas(id) on delete set null,
+  ciclo          text,                      -- sin uso (versiones antiguas)
+  fecha          date        not null,      -- fecha de paletizado
+  num_cajas      integer     not null default 0,  -- suma de sus líneas (trigger)
+  fecha_salida   date,                      -- null = sigue en la cámara
+  comentarios    text,
+  created_at     timestamptz not null default now(),
+  fecha_completo date,                      -- cuándo llegó a las cajas por palet
+  albaran_id     bigint      references albaranes_salida(id) on delete set null
+);
 
 create index if not exists palets_campana_idx on palets (campana_id);
 create index if not exists palets_fecha_idx   on palets (fecha);
 create index if not exists palets_salida_idx  on palets (fecha_salida);
+create index if not exists palets_albaran_idx on palets (albaran_id);
 
+-- registro_id: la pesada de la que salen las cajas (null en palets de
+-- versiones antiguas).
 create table if not exists palet_lineas (
   id            bigint generated always as identity primary key,
   palet_id      bigint  not null references palets(id) on delete cascade,
   agricultor_id bigint  not null references agricultores(id) on delete cascade,
-  num_cajas     integer not null check (num_cajas > 0)
+  num_cajas     integer not null check (num_cajas > 0),
+  registro_id   bigint  references registros(id) on delete cascade
 );
 
 create index if not exists palet_lineas_palet_idx      on palet_lineas (palet_id);
 create index if not exists palet_lineas_agricultor_idx on palet_lineas (agricultor_id);
+create index if not exists palet_lineas_registro_idx   on palet_lineas (registro_id);
+create unique index if not exists palet_lineas_palet_registro_key
+  on palet_lineas (palet_id, registro_id) where registro_id is not null;
 
--- El total de cajas del palet se mantiene solo a partir de sus líneas.
-create or replace function public.palet_actualizar_total(p_palet_id bigint)
-returns void
-language sql
-as $$
-  update palets
-  set num_cajas = coalesce((select sum(num_cajas) from palet_lineas where palet_id = p_palet_id), 0)
-  where id = p_palet_id;
-$$;
-
-create or replace function public.palet_lineas_total_trg()
-returns trigger
-language plpgsql
-as $$
-begin
-  if tg_op in ('INSERT', 'UPDATE') then
-    perform public.palet_actualizar_total(new.palet_id);
-  end if;
-  if tg_op = 'DELETE' or (tg_op = 'UPDATE' and old.palet_id <> new.palet_id) then
-    perform public.palet_actualizar_total(old.palet_id);
-  end if;
-  return null;
-end;
-$$;
-
-drop trigger if exists palet_lineas_total on palet_lineas;
-create trigger palet_lineas_total
-  after insert or update or delete on palet_lineas
-  for each row execute function public.palet_lineas_total_trg();
-
--- Actualización desde versiones anteriores, donde cada palet era de UN
--- agricultor (palets.agricultor_id) y salía en una carta de porte:
---   - cada palet antiguo pasa a tener una línea con su agricultor;
---   - la fecha de su carta de porte pasa a ser su fecha de salida;
---   - se borran las cartas de porte (ya no se usan).
-do $$ begin
-  if exists (select 1 from information_schema.columns
-             where table_schema = 'public' and table_name = 'palets'
-               and column_name = 'agricultor_id') then
-    insert into palet_lineas (palet_id, agricultor_id, num_cajas)
-    select p.id, p.agricultor_id, p.num_cajas
-    from palets p
-    where p.agricultor_id is not null and p.num_cajas > 0
-      and not exists (select 1 from palet_lineas l where l.palet_id = p.id);
-    alter table palets drop column agricultor_id;
-  end if;
-
-  if exists (select 1 from information_schema.columns
-             where table_schema = 'public' and table_name = 'palets'
-               and column_name = 'carta_porte_id') then
-    update palets p set fecha_salida = c.fecha
-    from cartas_porte c
-    where p.carta_porte_id = c.id and p.fecha_salida is null;
-    alter table palets drop column carta_porte_id;
-  end if;
-end $$;
-
-drop table if exists cartas_porte;
-
--- 8) CÁMARA
---    Cada vez que se guardan cajas en la cámara se apunta aquí (es un paso
---    aparte de la báscula: no todo lo pesado tiene por qué ir a la cámara).
---    Ocupación de la cámara = cajas guardadas − cajas de palets ya salidos.
---    La capacidad está en Ajustes (parámetro capacidad_camara).
+-- 8) CÁMARA (versión antigua, SIN USO en la app)
+--    Entradas en cámara apuntadas a mano, de antes de la paletización
+--    automática. Se mantienen para no perder sus datos.
 create table if not exists camara_entradas (
   id            bigint generated always as identity primary key,
   agricultor_id bigint      not null references agricultores(id) on delete cascade,
@@ -241,14 +260,7 @@ create table if not exists camara_entradas (
 create index if not exists camara_entradas_agricultor_idx on camara_entradas (agricultor_id);
 create index if not exists camara_entradas_fecha_idx      on camara_entradas (fecha);
 
--- Saldo de la cámara por agricultor. Se calcula en la base de datos para
--- no tener que traer todos los movimientos a la app.
---   guardadas:   cajas que ha metido en la cámara
---   paletizadas: cajas suyas que están en algún palet (salido o no)
---   en_palets:   cajas suyas en palets que siguen en la cámara
---   sueltas:     guardadas sin paletizar todavía
--- Los palets antiguos (anteriores a la cámara) no tienen cajas guardadas
--- detrás: por eso "sueltas" nunca baja de 0.
+-- Saldo de la cámara por agricultor (sin uso en la app).
 -- (security_invoker: respeta los permisos de quien consulta.)
 create or replace view camara_saldos with (security_invoker = true) as
 select a.id as agricultor_id,
@@ -270,53 +282,125 @@ left join (
   group by pl.agricultor_id
 ) l on l.agricultor_id = a.id;
 
--- 9) LIQUIDACIONES
---    Una liquidación agrupa los registros de un agricultor en un rango de
---    fechas, les pone precio y calcula el total. Al facturarla se le asigna
---    un nº de factura, que además se copia al campo num_factura de cada
---    registro incluido (así sigue funcionando la agrupación de la tabla).
-create table if not exists liquidaciones (
-  id                  bigint generated always as identity primary key,
-  secuencia           integer     unique,   -- contador interno para numerar
-  numero              text        unique,   -- p. ej. LIQ-0001
-  agricultor_id       bigint      not null references agricultores(id) on delete cascade,
-  campana_id          bigint      references campanas(id) on delete set null,
-  fecha               date        not null, -- fecha de la liquidación
-  fecha_desde         date        not null, -- periodo liquidado
-  fecha_hasta         date        not null,
-  estado              text        not null default 'borrador',
-  precio_caja         numeric(12,4),
-  precio_caja_perdida numeric(12,4),
-  iva_porcentaje      numeric(5,2),
-  base                numeric(12,2),
-  iva                 numeric(12,2),
-  total               numeric(12,2),
-  factura_secuencia   integer     unique,
-  num_factura         text,
-  fecha_factura       date,
-  observaciones       text,
-  created_at          timestamptz not null default now()
+-- 9) LÍNEAS DE LIQUIDACIÓN
+--     Se guardan calculadas ("congeladas") para que una liquidación cerrada
+--     no cambie de importe si después se editan los registros o los precios.
+--     tipo: bimi | descuento | cajas_perdidas | otro
+create table if not exists liquidacion_lineas (
+  id             bigint generated always as identity primary key,
+  liquidacion_id bigint       not null references liquidaciones(id) on delete cascade,
+  tipo           text         not null default 'otro',
+  concepto       text         not null,
+  cantidad       numeric(12,2) not null default 0,
+  precio         numeric(12,4) not null default 0,
+  importe        numeric(12,2) not null default 0,
+  orden          integer      not null default 0
 );
 
--- Retención IRPF del recibo de compensación (sobre base + IVA).
-alter table liquidaciones add column if not exists retencion_porcentaje numeric(5,2);
-alter table liquidaciones add column if not exists retencion            numeric(12,2);
+create index if not exists liquidacion_lineas_liq_idx on liquidacion_lineas (liquidacion_id);
 
--- La factura la trae el agricultor: num_factura / fecha_factura son las de
--- SU factura (escritas a mano) y no se emite recibo de compensación ni se
--- gasta número de la serie (factura_secuencia queda vacía).
-alter table liquidaciones add column if not exists factura_agricultor boolean not null default false;
+-- 10) PARÁMETROS
+--     Ajustes globales de la app: datos del emisor, precios por defecto,
+--     IVA, series de numeración y paletización. Aquí solo los valores por
+--     defecto de una instalación nueva; los que ya existen no se tocan.
+--     Los datos del emisor van vacíos (el repo es público): se rellenan en
+--     Ajustes o con privado/datos_cliente.sql, que no está en el repo.
+create table if not exists parametros (
+  clave      text        primary key,
+  valor      text,
+  updated_at timestamptz not null default now()
+);
 
-do $$ begin
-  alter table liquidaciones add constraint liquidaciones_estado_check
-    check (estado in ('borrador', 'cerrada', 'facturada'));
-exception when duplicate_object then null;
-end $$;
+insert into parametros (clave, valor) values
+  ('emisor_nombre',       ''),
+  ('emisor_nif',          ''),
+  ('emisor_direccion',    ''),
+  ('emisor_codigo_postal',''),
+  ('emisor_poblacion',    ''),
+  ('emisor_provincia',    ''),
+  ('emisor_registro',     ''),
+  ('emisor_telefono',     ''),
+  ('emisor_email',        ''),
+  ('precio_caja',         '0'),
+  ('precio_caja_perdida', '0'),
+  ('iva_porcentaje',      '12'),
+  ('retencion_porcentaje','2'),
+  ('serie_liquidacion',   'LIQ'),
+  ('serie_factura',       'F'),
+  ('serie_palet',         'P'),
+  ('serie_albaran',       'ALB'),
+  ('capacidad_camara',    '22'),   -- sin uso en la app
+  ('cajas_por_palet',     '60'),
+  -- «FECHA DE INICIO» de la paletización automática (AAAA-MM-DD): las
+  -- pesadas anteriores no se paletizan. Vacía = todas.
+  ('paletizado_desde',    to_char((now() at time zone 'Europe/Madrid')::date, 'YYYY-MM-DD'))
+on conflict (clave) do nothing;
 
-create index if not exists liquidaciones_agricultor_idx on liquidaciones (agricultor_id);
-create index if not exists liquidaciones_fecha_idx      on liquidaciones (fecha);
-create index if not exists liquidaciones_periodo_idx    on liquidaciones (fecha_desde, fecha_hasta);
+-- 11) CONTADORES DE NUMERACIÓN
+--     Último número dado de cada serie (palet, albaran, liquidacion,
+--     recibo). NUNCA bajan: así no se reutiliza el número de un documento
+--     borrado o anulado. Los usa siguiente_numero() (sección 16).
+create table if not exists contadores (
+  clave  text    primary key,
+  ultimo integer not null
+);
 
+-- 12) USUARIOS DE BÁSCULA
+--     La tablet que está junto a la báscula entra con un usuario propio
+--     (p. ej. bascula@...) cuya sesión no caduca. Ese usuario NO puede
+--     leer ni escribir las tablas directamente: solo puede usar las
+--     funciones bascula_* de la sección 14 (listar agricultores, apuntar
+--     cajas y anular lo que apuntó hoy). Así, si alguien coge la tablet,
+--     no ve facturas, IBAN ni importes.
+--
+--     Para dar de alta el usuario de la báscula:
+--       1. Supabase -> Authentication -> Add user (email + contraseña).
+--       2. Ejecutar:
+--            insert into usuarios_bascula (user_id)
+--            select id from auth.users where email = 'bascula@tu-dominio.com'
+--            on conflict do nothing;
+create table if not exists usuarios_bascula (
+  user_id    uuid        primary key references auth.users(id) on delete cascade,
+  created_at timestamptz not null default now()
+);
+
+-- Pesadas sueltas de la báscula. En el mismo día, las pesadas de un
+-- agricultor (misma campaña y ciclo) se SUMAN en un único registro; aquí
+-- queda cada pesada, ligada a ese registro, para no duplicar reenvíos sin
+-- red, listarlas en la tablet y poder anular una sola.
+create table if not exists bascula_pesadas (
+  id            bigint generated always as identity primary key,
+  client_uuid   uuid        not null unique,
+  registro_id   bigint      not null references registros(id) on delete cascade,
+  agricultor_id bigint      not null references agricultores(id) on delete cascade,
+  campana_id    bigint      references campanas(id),
+  ciclo         text,
+  cajas         integer     not null default 0,
+  vacias        integer     not null default 0,
+  pesada_en     timestamptz not null,
+  created_at    timestamptz not null default now()
+);
+create index if not exists bascula_pesadas_registro_idx on bascula_pesadas (registro_id);
+create index if not exists bascula_pesadas_pesada_idx   on bascula_pesadas (pesada_en);
+
+-- Nadie la lee desde la app: solo la consulta es_bascula().
+alter table usuarios_bascula enable row level security;
+revoke all on table usuarios_bascula from anon, authenticated;
+
+create or replace function public.es_bascula()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (select 1 from usuarios_bascula where user_id = auth.uid());
+$$;
+
+revoke all on function public.es_bascula() from public, anon;
+grant execute on function public.es_bascula() to authenticated;
+
+-- Protección del recibo emitido (ver también la sección 20).
 -- Un recibo propio emitido no se puede borrar ni perder su número: la
 -- numeración es max + 1 y, si desapareciera el último, su número se
 -- volvería a dar a otro recibo (dos documentos fiscales con el mismo nº).
@@ -345,143 +429,10 @@ create trigger liquidaciones_proteger_recibo
   before delete or update of factura_secuencia on liquidaciones
   for each row execute function public.liquidaciones_proteger_recibo_trg();
 
--- Vínculo registro -> liquidación: marca el registro como ya liquidado para
--- que no se vuelva a incluir en otra liquidación.
-alter table registros add column if not exists liquidacion_id bigint
-  references liquidaciones(id) on delete set null;
-create index if not exists registros_liquidacion_idx on registros (liquidacion_id);
 
--- 10) LÍNEAS DE LIQUIDACIÓN
---     Se guardan calculadas ("congeladas") para que una liquidación cerrada
---     no cambie de importe si después se editan los registros o los precios.
---     tipo: bimi | descuento | cajas_perdidas | otro
-create table if not exists liquidacion_lineas (
-  id             bigint generated always as identity primary key,
-  liquidacion_id bigint       not null references liquidaciones(id) on delete cascade,
-  tipo           text         not null default 'otro',
-  concepto       text         not null,
-  cantidad       numeric(12,2) not null default 0,
-  precio         numeric(12,4) not null default 0,
-  importe        numeric(12,2) not null default 0,
-  orden          integer      not null default 0
-);
-
-create index if not exists liquidacion_lineas_liq_idx on liquidacion_lineas (liquidacion_id);
-
--- 11) PARÁMETROS
---     Ajustes globales de la app: datos del emisor de las facturas, precios
---     por defecto, IVA y series de numeración.
-create table if not exists parametros (
-  clave      text        primary key,
-  valor      text,
-  updated_at timestamptz not null default now()
-);
-
-insert into parametros (clave, valor) values
-  -- Datos del emisor: vacíos aquí (el repo es público). Se rellenan en
-  -- Ajustes o con privado/datos_cliente.sql, que no está en el repo.
-  ('emisor_nombre',       ''),
-  ('emisor_nif',          ''),
-  ('emisor_direccion',    ''),
-  ('emisor_codigo_postal',''),
-  ('emisor_poblacion',    ''),
-  ('emisor_provincia',    ''),
-  ('emisor_registro',     ''),
-  ('emisor_telefono',     ''),
-  ('emisor_email',        ''),
-  ('precio_caja',         '0'),
-  ('precio_caja_perdida', '0'),
-  ('iva_porcentaje',      '12'),
-  ('retencion_porcentaje','2'),
-  ('serie_liquidacion',   'LIQ'),
-  ('serie_factura',       'F'),
-  ('serie_palet',         'P'),
-  ('capacidad_camara',    '22')
-on conflict (clave) do nothing;
-
--- Ya no hay cartas de porte.
-delete from parametros where clave = 'serie_carta_porte';
-
--- 12) USUARIOS DE BÁSCULA
---     La tablet que está junto a la báscula entra con un usuario propio
---     (p. ej. bascula@...) cuya sesión no caduca. Ese usuario NO puede
---     leer ni escribir las tablas directamente: solo puede usar las
---     funciones bascula_* de la sección 14 (listar agricultores, apuntar
---     cajas y anular lo que apuntó hoy). Así, si alguien coge la tablet,
---     no ve facturas, IBAN ni importes.
---
---     Para dar de alta el usuario de la báscula:
---       1. Supabase -> Authentication -> Add user (email + contraseña).
---       2. Ejecutar:
---            insert into usuarios_bascula (user_id)
---            select id from auth.users where email = 'bascula@tu-dominio.com'
---            on conflict do nothing;
-create table if not exists usuarios_bascula (
-  user_id    uuid        primary key references auth.users(id) on delete cascade,
-  created_at timestamptz not null default now()
-);
-
--- Nadie la lee desde la app: solo la consulta es_bascula().
-alter table usuarios_bascula enable row level security;
-revoke all on table usuarios_bascula from anon, authenticated;
-
-create or replace function public.es_bascula()
-returns boolean
-language sql
-stable
-security definer
-set search_path = public
-as $$
-  select exists (select 1 from usuarios_bascula where user_id = auth.uid());
-$$;
-
-revoke all on function public.es_bascula() from public, anon;
-grant execute on function public.es_bascula() to authenticated;
-
--- Origen del registro: null = apuntado en la oficina, 'bascula' = desde
--- la tablet de la báscula.
-alter table registros add column if not exists origen text;
-
--- Para las entradas de la báscula:
---   client_uuid: identificador que genera la tablet al apuntar. Si la red
---     falla, la tablet reenvía la entrada más tarde; con este código el
---     servidor sabe si ya la tenía y no la duplica.
---   pesada_en: momento en que se pesó (no en el que llegó al servidor,
---     que puede ser horas después si no había red).
-alter table registros add column if not exists client_uuid uuid;
-alter table registros add column if not exists pesada_en   timestamptz;
-create unique index if not exists registros_client_uuid_key on registros (client_uuid);
-
--- Pesadas sueltas de la báscula. En el mismo día, las pesadas de un
--- agricultor (misma campaña y ciclo) se SUMAN en un único registro; aquí
--- queda cada pesada, ligada a ese registro, para no duplicar reenvíos sin
--- red, listarlas en la tablet y poder anular una sola.
--- En una base de datos existente, la migración correspondiente (se guarda
--- fuera del repositorio) junta además los registros que ya estaban repetidos.
-create table if not exists bascula_pesadas (
-  id            bigint generated always as identity primary key,
-  client_uuid   uuid        not null unique,
-  registro_id   bigint      not null references registros(id) on delete cascade,
-  agricultor_id bigint      not null references agricultores(id) on delete cascade,
-  campana_id    bigint      references campanas(id),
-  ciclo         text,
-  cajas         integer     not null default 0,
-  vacias        integer     not null default 0,
-  pesada_en     timestamptz not null,
-  created_at    timestamptz not null default now()
-);
-create index if not exists bascula_pesadas_registro_idx on bascula_pesadas (registro_id);
-create index if not exists bascula_pesadas_pesada_idx   on bascula_pesadas (pesada_en);
-
--- Las pesadas de antes: cada registro de la báscula era una pesada.
-insert into bascula_pesadas (client_uuid, registro_id, agricultor_id, campana_id, ciclo,
-                             cajas, vacias, pesada_en, created_at)
-select r.client_uuid, r.id, r.agricultor_id, r.campana_id, r.ciclo,
-       coalesce(r.cajas_entradas, 0), coalesce(r.cajas_vacias_retiradas, 0),
-       coalesce(r.pesada_en, r.created_at), r.created_at
-from registros r
-where r.origen = 'bascula' and r.client_uuid is not null
-on conflict (client_uuid) do nothing;
+-- =====================================================================
+--  PERMISOS Y FUNCIONES
+-- =====================================================================
 
 -- 13) Seguridad a nivel de fila (RLS)
 --    Activamos RLS y SOLO permitimos acceso a usuarios que han iniciado
@@ -497,7 +448,8 @@ begin
   foreach t in array array[
     'agricultores', 'registros', 'campanas', 'retiradas_plantas',
     'palets', 'palet_lineas', 'camara_entradas', 'liquidaciones',
-    'liquidacion_lineas', 'parametros', 'bascula_pesadas'
+    'liquidacion_lineas', 'parametros', 'bascula_pesadas', 'albaranes_salida',
+    'contadores'
   ]::text[]
   loop
     execute format('alter table %I enable row level security', t);
@@ -521,22 +473,12 @@ end $$;
 grant select on camara_saldos to authenticated;
 revoke all on camara_saldos from anon;
 
--- Políticas antiguas con otro nombre (versiones anteriores del esquema).
-drop policy if exists "acceso_anon_ventas"         on registros;
-drop policy if exists "acceso_autenticados_ventas" on registros;
-
 -- 14) FUNCIONES DE LA BÁSCULA
 --     Lo único que puede hacer la tablet de la báscula (bascula.html).
 --     Son "security definer": se ejecutan con permisos del dueño, así que
 --     validan aquí mismo todo lo que reciben. Las puede usar cualquier
 --     usuario con sesión (también los de la oficina), nunca el anónimo.
 --     La fecha del registro es el día (hora de Madrid) en que se pesó.
-
--- Versiones anteriores con otros parámetros o columnas: hay que borrarlas
--- porque "create or replace" no puede cambiarlas.
-drop function if exists public.bascula_registrar(bigint, bigint, text, integer);
-drop function if exists public.bascula_registrar(uuid, bigint, bigint, text, integer, timestamptz);
-drop function if exists public.bascula_hoy();
 
 -- Agricultores para elegir, con el último ciclo que se le apuntó en la
 -- campaña indicada (para proponerlo por defecto).
@@ -786,66 +728,20 @@ end $$;
 
 -- 15) CAMPAÑA Y CICLO OBLIGATORIOS
 --    Ningún registro, retirada de plantas ni liquidación puede quedar sin
---    campaña, y registros y retiradas siempre llevan ciclo 1, 2 o 3.
+--    campaña, y registros y retiradas siempre llevan ciclo 1, 2 o 3. Son
+--    las restricciones *_campana_obligatoria y *_ciclo_valido de cada tabla.
 --    Consecuencia: una campaña que todavía se usa no se puede borrar (el
 --    "on delete set null" de la clave foránea chocaría con esta regla).
---
---    Se añaden "not valid": se aplican a todo lo que se cree o modifique a
---    partir de ahora, sin fallar si quedan datos antiguos. La migración de la
---    campaña 26/27 (se guarda fuera del repositorio) arregla esos datos y
---    las valida contra todo. Ejecútala ANTES que este archivo: si no, los
---    datos antiguos sin campaña no se podrán editar ni liquidar.
-do $$ begin
-  alter table registros add constraint registros_campana_obligatoria
-    check (campana_id is not null) not valid;
-exception when duplicate_object then null;
-end $$;
-do $$ begin
-  alter table registros add constraint registros_ciclo_valido
-    check (ciclo is not null and ciclo in ('1', '2', '3')) not valid;
-exception when duplicate_object then null;
-end $$;
-do $$ begin
-  alter table retiradas_plantas add constraint retiradas_campana_obligatoria
-    check (campana_id is not null) not valid;
-exception when duplicate_object then null;
-end $$;
-do $$ begin
-  alter table retiradas_plantas add constraint retiradas_ciclo_valido
-    check (ciclo is not null and ciclo in ('1', '2', '3')) not valid;
-exception when duplicate_object then null;
-end $$;
-do $$ begin
-  alter table liquidaciones add constraint liquidaciones_campana_obligatoria
-    check (campana_id is not null) not valid;
-exception when duplicate_object then null;
-end $$;
 
 -- 16) PALETIZACIÓN AUTOMÁTICA Y ALBARANES DE SALIDA
 --     Todas las cajas que pasan por la báscula van a la cámara y, al pesar,
 --     se reparten solas en palets de 60 (cajas_por_palet). Las que aún no
 --     forman un palet completo están "en cámara". Los palets salen con un
---     albarán de salida. La migración correspondiente (fuera del
---     repositorio) lleva este mismo código.
+--     albarán de salida.
 
 -- ---------------------------------------------------------------------
--- 1) Ajustes
+-- Ajustes y numeración
 -- ---------------------------------------------------------------------
-insert into parametros (clave, valor) values
-  ('cajas_por_palet',  '60'),
-  ('serie_palet',      'P'),
-  ('serie_albaran',    'ALB'),
-  -- «FECHA DE INICIO» (formato AAAA-MM-DD):
-  ('paletizado_desde', to_char((now() at time zone 'Europe/Madrid')::date, 'YYYY-MM-DD'))
-on conflict (clave) do nothing;
-
--- Si la fecha se guardó vacía (p. ej. desde Ajustes antes de esta
--- migración) se pone la de hoy: vacía significaría paletizar TODAS las
--- pesadas de la historia.
-update parametros
-set valor = to_char((now() at time zone 'Europe/Madrid')::date, 'YYYY-MM-DD')
-where clave = 'paletizado_desde' and coalesce(trim(valor), '') = '';
-
 create or replace function public.cajas_por_palet()
 returns integer
 language sql
@@ -885,17 +781,6 @@ $$;
 -- transacción falla, el contador vuelve atrás y no queda hueco.
 -- p_minimo (el máximo actual de la tabla) cubre la primera vez y los
 -- números puestos a mano: nunca se da uno que ya exista.
-create table if not exists contadores (
-  clave  text    primary key,
-  ultimo integer not null
-);
-alter table contadores enable row level security;
-drop policy if exists "acceso_autenticados_contadores" on contadores;
-create policy "acceso_autenticados_contadores" on contadores for all to authenticated
-  using ((select not public.es_bascula())) with check ((select not public.es_bascula()));
-grant select, insert, update, delete on table contadores to authenticated;
-revoke all on table contadores from anon;
-
 create or replace function public.siguiente_numero(p_clave text, p_minimo integer)
 returns integer
 language sql
@@ -908,56 +793,8 @@ as $$
 $$;
 
 -- ---------------------------------------------------------------------
--- 2) Albaranes de salida
+-- Total de cada palet
 -- ---------------------------------------------------------------------
-create table if not exists albaranes_salida (
-  id                     bigint generated always as identity primary key,
-  secuencia              integer     unique,
-  numero                 text        unique,   -- p. ej. ALB-0001
-  fecha                  date        not null,
-  destinatario_nombre    text        not null,
-  destinatario_nif       text,
-  destinatario_direccion text,
-  matricula              text,
-  transportista          text,
-  observaciones          text,
-  created_at             timestamptz not null default now()
-);
-
--- Datos de la carta de porte (CMR) que se escriben en cada salida. Los
--- fijos (remitente, porteador) están en Ajustes.
-alter table albaranes_salida add column if not exists matricula_remolque text;   -- casilla 16
-alter table albaranes_salida add column if not exists lugar_entrega      text;   -- 3
-alter table albaranes_salida add column if not exists lugar_carga        text;   -- 4 y 21
-alter table albaranes_salida add column if not exists documentos_anexos  text;   -- 5
-alter table albaranes_salida add column if not exists marcas             text;   -- 6
-alter table albaranes_salida add column if not exists embalaje           text;   -- 8
-alter table albaranes_salida add column if not exists naturaleza         text;   -- 9
-alter table albaranes_salida add column if not exists peso_bruto_kg      numeric(12,2); -- 11
-alter table albaranes_salida add column if not exists temperatura        numeric(5,1);  -- 13
-
-alter table albaranes_salida enable row level security;
-drop policy if exists "acceso_autenticados_albaranes_salida" on albaranes_salida;
-create policy "acceso_autenticados_albaranes_salida" on albaranes_salida
-  for all to authenticated
-  using ((select not public.es_bascula())) with check ((select not public.es_bascula()));
-grant select, insert, update, delete on table albaranes_salida to authenticated;
-revoke all on table albaranes_salida from anon;
-
--- ---------------------------------------------------------------------
--- 3) Palets ligados a las pesadas
--- ---------------------------------------------------------------------
-alter table palets add column if not exists fecha_completo date;   -- cuándo llegó a 60
-alter table palets add column if not exists albaran_id bigint
-  references albaranes_salida(id) on delete set null;
-create index if not exists palets_albaran_idx on palets (albaran_id);
-
-alter table palet_lineas add column if not exists registro_id bigint
-  references registros(id) on delete cascade;
-create index if not exists palet_lineas_registro_idx on palet_lineas (registro_id);
-create unique index if not exists palet_lineas_palet_registro_key
-  on palet_lineas (palet_id, registro_id) where registro_id is not null;
-
 -- Total del palet y fecha de llenado: cuando llega a las cajas por palet
 -- se le pone la fecha de la última pesada que entró; si después baja (se
 -- corrige una pesada), vuelve a estar "en formación". Los palets ya
@@ -1008,16 +845,29 @@ create trigger parametros_cajas_por_palet
   when (new.clave = 'cajas_por_palet' and old.valor is distinct from new.valor)
   execute function public.parametros_cajas_por_palet_trg();
 
--- Por si la cifra se cambió antes de existir este trigger: se ponen al día
--- los palets en cámara (no cambia nada si ya cuadraban).
--- (En un bloque para que el editor de Supabase no muestre una fila NULL
--- por cada palet.)
-do $$ begin
-  perform public.palet_actualizar_total(id) from palets where fecha_salida is null;
-end $$;
+-- El total del palet se recalcula al cambiar sus líneas.
+create or replace function public.palet_lineas_total_trg()
+returns trigger
+language plpgsql
+as $$
+begin
+  if tg_op in ('INSERT', 'UPDATE') then
+    perform public.palet_actualizar_total(new.palet_id);
+  end if;
+  if tg_op = 'DELETE' or (tg_op = 'UPDATE' and old.palet_id <> new.palet_id) then
+    perform public.palet_actualizar_total(old.palet_id);
+  end if;
+  return null;
+end;
+$$;
+
+drop trigger if exists palet_lineas_total on palet_lineas;
+create trigger palet_lineas_total
+  after insert or update or delete on palet_lineas
+  for each row execute function public.palet_lineas_total_trg();
 
 -- ---------------------------------------------------------------------
--- 4) Reparto automático
+-- Reparto automático
 -- ---------------------------------------------------------------------
 -- Mete en palets las cajas de una pesada que todavía no tienen palet
 -- (como mucho p_max, si se indica). Rellena primero el palet abierto más
@@ -1173,7 +1023,6 @@ create trigger registros_borrar_paletizado
 -- completar ni salida). Los palets completos o salidos no se tocan.
 -- Con p_palet_id null se crea un palet nuevo con esas cajas (todo o nada:
 -- si algo falla no queda un palet vacío). Devuelve el id del palet.
-drop function if exists public.palet_guardar_lineas(bigint, jsonb);
 create or replace function public.palet_guardar_lineas(p_palet_id bigint, p_lineas jsonb)
 returns bigint
 language plpgsql
@@ -1404,26 +1253,6 @@ group by r.id, c.cap;
 
 grant select on paletizado_entradas to authenticated;
 revoke all on paletizado_entradas from anon;
-
--- ---------------------------------------------------------------------
--- 5) Paletizar las pesadas que ya haya desde la fecha de inicio
--- ---------------------------------------------------------------------
-do $$
-declare v_id bigint;
-begin
-  for v_id in
-    select id from registros
-    where fecha >= coalesce(public.paletizado_desde(), fecha)
-      and coalesce(cajas_entradas, 0) > 0
-      -- Solo las que nunca se han paletizado. Las que la oficina dejó sin
-      -- palet a propósito (quitando cajas o borrando un palet) no se tocan
-      -- al volver a ejecutar este script.
-      and not exists (select 1 from palet_lineas l where l.registro_id = registros.id)
-    order by fecha, coalesce(pesada_en, created_at), id
-  loop
-    perform public.paletizar_registro(v_id);
-  end loop;
-end $$;
 
 -- 17) PALETS EN LA BÁSCULA
 --     La tablet de la báscula no puede leer las tablas de palets (ver

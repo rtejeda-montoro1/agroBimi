@@ -50,6 +50,14 @@ Ejecuta `agroBimi/schema.sql` completo en el editor SQL de Supabase. Es
 idempotente: se puede volver a ejecutar tantas veces como haga falta, crea
 solo lo que falte y no borra datos.
 
+`schema.sql` es el esquema actual: cada tabla con todas sus columnas, mas
+las funciones, triggers y permisos. Ya no lleva los pasos para actualizar
+bases de datos antiguas (desde noviembre de 2026). Si una base de datos es
+anterior, ejecuta antes el `schema.sql` del commit `4d8ce36`. Si cambias una
+tabla, anade la columna en su `create table` y tambien con un
+`alter table ... add column if not exists` al final del archivo (las
+instrucciones estan en su cabecera).
+
 **Datos del cliente:** el repositorio es publico, asi que los datos reales
 del emisor de los recibos (nombre, NIF, direccion, registro de
 establecimiento) y del CMR (remitente y porteador) no estan en el codigo
