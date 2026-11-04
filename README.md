@@ -103,11 +103,10 @@ Se ve en el panel *Rendimiento por ciclo* de la ficha del agricultor. (El
 informe global de rendimientos se quito de la web para simplificarla; si se
 vuelve a pedir, esta en `respaldo/2026-10-10/`.)
 
-Las plantas que ya estaban anotadas en los registros antiguos (columnas
-`num_plantas` y `fecha_retirada`) se pasan a la tabla nueva con el boton
-*⬆ Importar de los registros*, que no duplica lo ya importado. Esas dos
-columnas del registro se conservan por compatibilidad, pero el calculo usa
-la tabla nueva.
+Las plantas que se anotaban en los registros antiguos (columnas
+`num_plantas` y `fecha_retirada` de `registros`) ya no se usan: el calculo
+usa solo la tabla nueva. La migracion `2026-11-04_quitar_sin_uso.sql` quita
+esas columnas si estan vacias.
 
 ### Control de cajas vacias
 
@@ -158,7 +157,8 @@ oficina.
 La etiqueta se imprime con un `@page` (sin nombre) del tamano de Ajustes
 (`etiqueta_ancho_mm` x `etiqueta_alto_mm`, 105 x 75 por defecto). La tabla
 `camara_entradas` y la vista `camara_saldos` (guardar cajas en camara a mano)
-ya no las usa la web.
+ya no estan en `schema.sql`: la migracion `2026-11-04_quitar_sin_uso.sql` las
+quita de una base de datos existente si estan vacias.
 
 ### Liquidaciones y facturas
 

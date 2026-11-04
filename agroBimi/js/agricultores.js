@@ -139,9 +139,43 @@
     return max + 1;
   }
 
+  // Un doble clic (o Enter + clic) no puede crear el agricultor dos veces:
+  // el segundo pedía el mismo código y fallaba con un "duplicate key".
+  let guardandoAgricultor = false;
+
   async function guardarAgricultor(e) {
     e.preventDefault();
+    if (guardandoAgricultor) return;
+    const boton = e.submitter || App.dom.formAgricultor.querySelector('[type="submit"]');
+    guardandoAgricultor = true;
+    if (boton) boton.disabled = true;
+    try {
+      await guardarAgricultorDatos();
+    } finally {
+      guardandoAgricultor = false;
+      if (boton) boton.disabled = false;
+    }
+  }
 
+  // NIF e IBAN: se guardan normalizados ("12345678Z", "ES91 2100 ...") y,
+  // si no pasan el control, se pregunta antes de guardar (puede ser un
+  // documento extranjero). Devuelve false si el usuario prefiere revisarlo.
+  function revisarDatosFiscales(datos) {
+    if (datos.nif) datos.nif = App.normalizarNif(datos.nif);
+    if (datos.iban) datos.iban = App.normalizarIban(datos.iban);
+
+    const avisos = [];
+    if (datos.nif && !App.nifValido(datos.nif)) {
+      avisos.push(`• El NIF/CIF «${datos.nif}» no parece válido (la letra o el dígito de control no cuadra).`);
+    }
+    if (datos.iban && !App.ibanValido(datos.iban)) {
+      avisos.push(`• El IBAN «${datos.iban}» no parece válido (falla el dígito de control o su longitud).`);
+    }
+    if (!avisos.length) return true;
+    return confirm(`${avisos.join("\n")}\n\nSale así en los recibos. ¿Guardar igualmente?`);
+  }
+
+  async function guardarAgricultorDatos() {
     const id = App.$("agricultorId").value;
     const nombre = App.$("nombre").value.trim();
     if (!nombre) return;
@@ -151,26 +185,33 @@
     App.CAMPOS_AGRICULTOR.forEach((campo) => {
       datos[campo] = App.$(`agri_${campo}`).value.trim() || null;
     });
+    if (!revisarDatosFiscales(datos)) return;
 
     let error;
 
     if (id) {
       ({ error } = await App.db.from("agricultores").update(datos).eq("id", id));
     } else {
-      let codigo;
-      try {
-        codigo = await siguienteCodigo();
-      } catch (err) {
-        App.toast("Error al generar el codigo: " + err.message);
-        return;
-      }
+      // El código es el máximo + 1. Si otra persona crea un agricultor a la
+      // vez, los dos piden el mismo y el segundo choca con el índice único
+      // (23505): se vuelve a pedir el siguiente, como mucho unas veces.
+      for (let intento = 0; intento < 3; intento++) {
+        let codigo;
+        try {
+          codigo = await siguienteCodigo();
+        } catch (err) {
+          App.toast("Error al generar el codigo: " + err.message);
+          return;
+        }
 
-      if (codigo > 999) {
-        App.toast("No quedan codigos libres de 3 digitos.");
-        return;
-      }
+        if (codigo > 999) {
+          App.toast("No quedan codigos libres de 3 digitos.");
+          return;
+        }
 
-      ({ error } = await App.db.from("agricultores").insert({ ...datos, codigo }));
+        ({ error } = await App.db.from("agricultores").insert({ ...datos, codigo }));
+        if (!(error?.code === "23505" && /codigo/.test(error.message))) break;
+      }
     }
 
     if (error) {

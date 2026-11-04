@@ -132,8 +132,6 @@ create table if not exists registros (
   descuento_cajas        integer,                    -- Descuento Cajas
   num_factura            text,                       -- Nº Factura
   cajas_vacias_retiradas integer,                    -- Cajas Vacías retiradas
-  num_plantas            integer,                    -- sin uso (ahora en retiradas_plantas)
-  fecha_retirada         date,                       -- sin uso (ahora en retiradas_plantas)
   comentarios            text,                       -- Comentarios
   created_at             timestamptz not null default now(),
   campana_id             bigint  references campanas(id) on delete set null,
@@ -213,7 +211,6 @@ create table if not exists palets (
   secuencia      integer     unique,        -- contador interno para numerar
   codigo         text        unique,        -- p. ej. P-000123
   campana_id     bigint      references campanas(id) on delete set null,
-  ciclo          text,                      -- sin uso (versiones antiguas)
   fecha          date        not null,      -- fecha de paletizado
   num_cajas      integer     not null default 0,  -- suma de sus líneas (trigger)
   fecha_salida   date,                      -- null = sigue en la cámara
@@ -228,8 +225,10 @@ create index if not exists palets_fecha_idx   on palets (fecha);
 create index if not exists palets_salida_idx  on palets (fecha_salida);
 create index if not exists palets_albaran_idx on palets (albaran_id);
 
--- registro_id: la pesada de la que salen las cajas (null en palets de
--- versiones antiguas).
+-- 8) LÍNEAS DE PALET
+--    Cuántas cajas de cada pesada lleva cada palet.
+--    registro_id: la pesada de la que salen las cajas (null en palets de
+--    versiones antiguas).
 create table if not exists palet_lineas (
   id            bigint generated always as identity primary key,
   palet_id      bigint  not null references palets(id) on delete cascade,
@@ -243,44 +242,6 @@ create index if not exists palet_lineas_agricultor_idx on palet_lineas (agricult
 create index if not exists palet_lineas_registro_idx   on palet_lineas (registro_id);
 create unique index if not exists palet_lineas_palet_registro_key
   on palet_lineas (palet_id, registro_id) where registro_id is not null;
-
--- 8) CÁMARA (versión antigua, SIN USO en la app)
---    Entradas en cámara apuntadas a mano, de antes de la paletización
---    automática. Se mantienen para no perder sus datos.
-create table if not exists camara_entradas (
-  id            bigint generated always as identity primary key,
-  agricultor_id bigint      not null references agricultores(id) on delete cascade,
-  campana_id    bigint      references campanas(id) on delete set null,
-  fecha         date        not null,
-  num_cajas     integer     not null check (num_cajas > 0),
-  comentarios   text,
-  created_at    timestamptz not null default now()
-);
-
-create index if not exists camara_entradas_agricultor_idx on camara_entradas (agricultor_id);
-create index if not exists camara_entradas_fecha_idx      on camara_entradas (fecha);
-
--- Saldo de la cámara por agricultor (sin uso en la app).
--- (security_invoker: respeta los permisos de quien consulta.)
-create or replace view camara_saldos with (security_invoker = true) as
-select a.id as agricultor_id,
-       coalesce(e.guardadas, 0)   as guardadas,
-       coalesce(l.paletizadas, 0) as paletizadas,
-       coalesce(l.en_palets, 0)   as en_palets,
-       greatest(coalesce(e.guardadas, 0) - coalesce(l.paletizadas, 0), 0) as sueltas
-from agricultores a
-left join (
-  select agricultor_id, sum(num_cajas)::integer as guardadas
-  from camara_entradas group by agricultor_id
-) e on e.agricultor_id = a.id
-left join (
-  select pl.agricultor_id,
-         sum(pl.num_cajas)::integer as paletizadas,
-         (coalesce(sum(pl.num_cajas) filter (where p.fecha_salida is null), 0))::integer as en_palets
-  from palet_lineas pl
-  join palets p on p.id = pl.palet_id
-  group by pl.agricultor_id
-) l on l.agricultor_id = a.id;
 
 -- 9) LÍNEAS DE LIQUIDACIÓN
 --     Se guardan calculadas ("congeladas") para que una liquidación cerrada
@@ -329,7 +290,6 @@ insert into parametros (clave, valor) values
   ('serie_factura',       'F'),
   ('serie_palet',         'P'),
   ('serie_albaran',       'ALB'),
-  ('capacidad_camara',    '22'),   -- sin uso en la app
   ('cajas_por_palet',     '60'),
   -- «FECHA DE INICIO» de la paletización automática (AAAA-MM-DD): las
   -- pesadas anteriores no se paletizan. Vacía = todas.
@@ -447,7 +407,7 @@ declare t text;
 begin
   foreach t in array array[
     'agricultores', 'registros', 'campanas', 'retiradas_plantas',
-    'palets', 'palet_lineas', 'camara_entradas', 'liquidaciones',
+    'palets', 'palet_lineas', 'liquidaciones',
     'liquidacion_lineas', 'parametros', 'bascula_pesadas', 'albaranes_salida',
     'contadores'
   ]::text[]
@@ -467,11 +427,6 @@ begin
     execute format('revoke all on table %I from anon', t);
   end loop;
 end $$;
-
--- La vista de saldos de la cámara: solo lectura y solo con sesión. Al ser
--- security_invoker, el usuario de la báscula no ve nada a través de ella.
-grant select on camara_saldos to authenticated;
-revoke all on camara_saldos from anon;
 
 -- 14) FUNCIONES DE LA BÁSCULA
 --     Lo único que puede hacer la tablet de la báscula (bascula.html).

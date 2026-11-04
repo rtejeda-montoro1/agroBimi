@@ -83,9 +83,25 @@
     App.$("nombreCampana").focus();
   }
 
+  // Un doble clic no puede mandar dos altas: la segunda chocaba con el
+  // índice único y decía «Esa campaña ya existe» justo después de crearla.
+  let guardandoCampana = false;
+
   async function guardarCampana(e) {
     e.preventDefault();
+    if (guardandoCampana) return;
+    const boton = e.submitter || App.dom.formCampana.querySelector('[type="submit"]');
+    guardandoCampana = true;
+    if (boton) boton.disabled = true;
+    try {
+      await guardarCampanaDatos();
+    } finally {
+      guardandoCampana = false;
+      if (boton) boton.disabled = false;
+    }
+  }
 
+  async function guardarCampanaDatos() {
     const id = App.$("campanaId").value;
     const nombre = App.$("nombreCampana").value.trim();
     if (!nombre) return;

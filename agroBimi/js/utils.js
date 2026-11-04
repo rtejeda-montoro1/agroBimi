@@ -191,6 +191,71 @@
     return encontrado ? encontrado[0] : "";
   }
 
+  // ---- NIF / NIE / CIF e IBAN -----------------------------------------
+  // Un error al teclearlos acaba impreso en el recibo. Se comprueba la
+  // letra o el dígito de control; no se comprueba que exista de verdad.
+
+  // Quita espacios, guiones y puntos y pasa a mayúsculas: "12.345.678-z"
+  // → "12345678Z".
+  function normalizarNif(v) {
+    return String(v ?? "").toUpperCase().replace(/[\s.\-]/g, "");
+  }
+
+  const LETRAS_DNI = "TRWAGMYFPDXBNJZSQVHLCKE";
+
+  // DNI (8 cifras + letra), NIE (X/Y/Z + 7 cifras + letra), NIF especial
+  // (K/L/M + 7 cifras + letra) o CIF de empresa (letra + 7 cifras + control).
+  function nifValido(v) {
+    const n = normalizarNif(v);
+    let m = n.match(/^(\d{8})([A-Z])$/);
+    if (m) return LETRAS_DNI[Number(m[1]) % 23] === m[2];
+
+    m = n.match(/^([XYZ])(\d{7})([A-Z])$/);
+    if (m) return LETRAS_DNI[Number("XYZ".indexOf(m[1]) + m[2]) % 23] === m[3];
+
+    m = n.match(/^([KLM])(\d{7})([A-Z])$/);
+    if (m) return LETRAS_DNI[Number(m[2]) % 23] === m[3];
+
+    m = n.match(/^([ABCDEFGHJNPQRSUVW])(\d{7})([0-9A-J])$/);
+    if (m) {
+      const cifras = m[2].split("").map(Number);
+      let suma = 0;
+      cifras.forEach((d, i) => {
+        if (i % 2 === 1) suma += d;                      // posiciones pares (2ª, 4ª, 6ª)
+        else { const x = d * 2; suma += Math.floor(x / 10) + (x % 10); }
+      });
+      const control = (10 - (suma % 10)) % 10;
+      const letra = "JABCDEFGHI"[control];
+      // Unas letras de empresa llevan control con letra, otras con cifra y
+      // el resto cualquiera de los dos.
+      if ("PQRSNW".includes(m[1])) return m[3] === letra;
+      if ("ABEH".includes(m[1])) return m[3] === String(control);
+      return m[3] === letra || m[3] === String(control);
+    }
+    return false;
+  }
+
+  // "es12 3456 7890..." → "ES12 3456 7890 ..." (en grupos de 4, como se
+  // imprime en el recibo).
+  function normalizarIban(v) {
+    const n = String(v ?? "").toUpperCase().replace(/[^0-9A-Z]/g, "");
+    return n.replace(/(.{4})/g, "$1 ").trim();
+  }
+
+  // Control internacional (mod 97). Los españoles tienen 24 caracteres.
+  function ibanValido(v) {
+    const n = String(v ?? "").toUpperCase().replace(/[^0-9A-Z]/g, "");
+    if (!/^[A-Z]{2}\d{2}[0-9A-Z]{10,30}$/.test(n)) return false;
+    if (n.startsWith("ES") && n.length !== 24) return false;
+    const reordenado = n.slice(4) + n.slice(0, 4);
+    let resto = 0;
+    for (const c of reordenado) {
+      const valorC = /\d/.test(c) ? c : String(c.charCodeAt(0) - 55);
+      for (const d of valorC) resto = (resto * 10 + Number(d)) % 97;
+    }
+    return resto === 1;
+  }
+
   function escapar(txt) {
     const div = document.createElement("div");
     div.textContent = txt;
@@ -323,6 +388,10 @@
     ultimoDiaMes,
     fechaEnRango,
     traerTodo,
+    normalizarNif,
+    nifValido,
+    normalizarIban,
+    ibanValido,
     limitarFechasAHoy,
     esFechaFutura,
     num,
