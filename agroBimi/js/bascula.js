@@ -552,7 +552,9 @@
   // ------------------------------------------------------------------
   //  Justificante impreso
   // ------------------------------------------------------------------
-  function ticket(e, copia) {
+  // paraEmpresa: el aviso «PENDIENTE DE ENVÍO» solo va en la copia de la
+  // empresa; al agricultor no le aporta nada en su justificante.
+  function ticket(e, copia, paraEmpresa = false) {
     // Referencia corta de la entrada (el principio de su uuid): permite
     // encontrarla en la oficina si hay dudas con un justificante.
     const ref = String(e.uuid || e.client_uuid || "").slice(0, 8).toUpperCase();
@@ -576,7 +578,7 @@
           <b>${e.vacias || 0}</b>
         </div>
 
-        ${e.pendiente ? `<div class="ticket-pendiente">PENDIENTE DE ENVÍO<br>
+        ${e.pendiente && paraEmpresa ? `<div class="ticket-pendiente">PENDIENTE DE ENVÍO<br>
           <small>Guardada en la tablet sin red: aún no consta en la oficina.</small></div>` : ""}
         ${ref ? `<div class="ticket-ref">Ref. ${escapar(ref)}</div>` : ""}
 
@@ -593,7 +595,7 @@
   function imprimirJustificante(e) {
     $("zonaImpresion").innerHTML =
       ticket(e, "Copia para el agricultor") +
-      ticket(e, "Copia para la empresa");
+      ticket(e, "Copia para la empresa", true);
 
     // Al "Guardar como PDF" el navegador propone el título de la página como
     // nombre del archivo: lo cambiamos mientras dura la impresión.
