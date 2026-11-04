@@ -669,15 +669,25 @@ $$;
 -- registro del día y, si se queda sin cajas ni vacías, el registro se
 -- borra. Solo lo de hoy y sin liquidar; lo anterior se corrige desde la
 -- oficina.
-create or replace function public.bascula_anular(p_id bigint)
+-- Si para quitar sus cajas hay que tocar un palet COMPLETO (con su
+-- etiqueta ya impresa, seguramente), no se anula: se devuelve un error con
+-- hint 'palet_completo' y los códigos de esos palets en el detalle, para
+-- que la tablet lo pregunte. Con p_forzar = true se anula igualmente.
+-- La versión anterior, sin p_forzar, se quita: con las dos, la llamada
+-- con un solo parámetro sería ambigua. (Esta línea se puede quitar cuando
+-- todas las bases de datos tengan la nueva.)
+drop function if exists public.bascula_anular(bigint);
+create or replace function public.bascula_anular(p_id bigint, p_forzar boolean default false)
 returns boolean
 language plpgsql
 security definer
 set search_path = public
 as $$
 declare
-  bp bascula_pesadas%rowtype;
-  r  registros%rowtype;
+  bp        bascula_pesadas%rowtype;
+  r         registros%rowtype;
+  v_ultima  boolean;
+  v_codigos text;
 begin
   if auth.uid() is null then
     raise exception 'Sesión no iniciada';
@@ -696,9 +706,21 @@ begin
   for update;
   if not found then return false; end if;
 
+  -- ¿De qué palets saldrían sus cajas? Si es la última pesada del registro,
+  -- se borra el registro y salen todas.
+  v_ultima := not exists (select 1 from bascula_pesadas
+                          where registro_id = r.id and id <> bp.id);
+  v_codigos := public.palets_completos_afectados(r.id,
+    case when v_ultima then 0 else greatest(coalesce(r.cajas_entradas, 0) - bp.cajas, 0) end);
+  if v_codigos is not null and not coalesce(p_forzar, false) then
+    raise exception 'Las cajas de esta pesada ya están en el palet completo %. Si la anulas, ese palet se queda con menos cajas y su etiqueta deja de valer.',
+      v_codigos
+      using hint = 'palet_completo', detail = v_codigos;
+  end if;
+
   delete from bascula_pesadas where id = bp.id;
 
-  if not exists (select 1 from bascula_pesadas where registro_id = r.id) then
+  if v_ultima then
     delete from registros where id = r.id;
   else
     -- Si la oficina ya bajó las cajas a mano, no se queda en negativo.
@@ -718,7 +740,7 @@ begin
   foreach f in array array[
     'bascula_agricultores(bigint)', 'bascula_campanas()',
     'bascula_registrar(uuid, bigint, bigint, text, integer, timestamptz, integer)',
-    'bascula_hoy()', 'bascula_anular(bigint)', 'bascula_emisor()'
+    'bascula_hoy()', 'bascula_anular(bigint, boolean)', 'bascula_emisor()'
   ]::text[]
   loop
     execute format('revoke all on function public.%s from public, anon', f);
@@ -932,10 +954,50 @@ begin
 end;
 $$;
 
+-- Códigos de los palets COMPLETOS (sin salida) de los que habría que quitar
+-- cajas si el registro pasa a tener p_cajas_nuevas. Null si no se toca
+-- ninguno. Mismo orden que registros_paletizar_trg (abajo).
+create or replace function public.palets_completos_afectados(
+  p_registro_id bigint, p_cajas_nuevas integer)
+returns text
+language plpgsql
+stable
+set search_path = public
+as $$
+declare
+  v_cap     integer := public.cajas_por_palet();
+  v_exceso  integer;
+  v_linea   record;
+  v_codigos text[] := '{}';
+begin
+  v_exceso := coalesce((select sum(num_cajas) from palet_lineas where registro_id = p_registro_id), 0)
+            - coalesce(p_cajas_nuevas, 0);
+  for v_linea in
+    select l.num_cajas, p.codigo, p.num_cajas >= v_cap as completo
+    from palet_lineas l join palets p on p.id = l.palet_id
+    where l.registro_id = p_registro_id and p.fecha_salida is null
+    order by (p.num_cajas >= v_cap), p.secuencia desc nulls first, l.id desc
+  loop
+    exit when v_exceso <= 0;
+    if v_linea.completo and not v_linea.codigo = any(v_codigos) then
+      v_codigos := v_codigos || v_linea.codigo;
+    end if;
+    v_exceso := v_exceso - least(v_exceso, v_linea.num_cajas);
+  end loop;
+  return nullif(array_to_string(v_codigos, ', '), '');
+end;
+$$;
+
+revoke all on function public.palets_completos_afectados(bigint, integer) from public, anon;
+grant execute on function public.palets_completos_afectados(bigint, integer) to authenticated;
+
 -- Al apuntar una pesada se paletiza. Al corregirla:
 --   - más cajas: las nuevas se paletizan;
---   - menos cajas: se quitan de sus palets sin salida, del más reciente al
---     más antiguo (si ya salieron, no se deja corregir);
+--   - menos cajas: se quitan primero de lo que esté sin palet, luego de sus
+--     palets EN FORMACIÓN y solo al final de los completos (que ya tienen
+--     la etiqueta impresa), cada grupo del más reciente al más antiguo. Si
+--     ya salieron, no se deja corregir. palets_completos_afectados() sigue
+--     este mismo orden: si se cambia aquí, cámbialo también allí;
 --   - otro agricultor: sus líneas de palet pasan al nuevo agricultor.
 create or replace function public.registros_paletizar_trg()
 returns trigger
@@ -946,6 +1008,7 @@ declare
   v_exceso integer;
   v_linea  record;
   v_quita  integer;
+  v_cap    integer := public.cajas_por_palet();
 begin
   if tg_op = 'INSERT' then
     perform public.paletizar_registro(new.id);
@@ -963,7 +1026,7 @@ begin
     select l.id, l.num_cajas
     from palet_lineas l join palets p on p.id = l.palet_id
     where l.registro_id = new.id and p.fecha_salida is null
-    order by p.secuencia desc nulls first, l.id desc
+    order by (p.num_cajas >= v_cap), p.secuencia desc nulls first, l.id desc
   loop
     exit when v_exceso <= 0;
     v_quita := least(v_exceso, v_linea.num_cajas);

@@ -3,30 +3,63 @@
 // =====================================================================
 
 (function initAuthModule(App) {
-  // Cierre de sesión automático tras 5 minutos sin interacción en la UI.
+  // Cierre de sesión automático tras 20 minutos sin interacción.
+  //
+  // La actividad es la de TODAS las pestañas de la app en este navegador:
+  // cada una apunta la hora de su última actividad en localStorage y el
+  // cierre solo llega cuando ninguna se ha usado en 20 minutos. Antes cada
+  // pestaña contaba lo suyo: una olvidada en segundo plano cerraba la
+  // sesión de la que se estaba usando.
+  // El cierre es solo de este navegador (scope "local"): con el "global"
+  // por defecto se cerraba también la sesión en los demás equipos.
   const INACTIVIDAD_MS = 20 * 60 * 1000;
   const EVENTOS_ACTIVIDAD = ["mousemove", "mousedown", "keydown", "scroll", "touchstart", "click"];
+  const KEY_ACTIVIDAD = "bimi_ultima_actividad";
   let temporizadorInactividad = null;
   let ultimaActividad = 0;
   let vigilando = false;
 
-  function reiniciarTemporizador() {
-    if (!vigilando) return;
-    clearTimeout(temporizadorInactividad);
-    temporizadorInactividad = setTimeout(cerrarPorInactividad, INACTIVIDAD_MS);
+  // La última actividad de cualquier pestaña (la propia si no hay
+  // localStorage, p. ej. en modo privado).
+  function ultimaActividadCompartida() {
+    let otra = 0;
+    try { otra = Number(localStorage.getItem(KEY_ACTIVIDAD)) || 0; } catch { /* sin almacenamiento */ }
+    return Math.max(ultimaActividad, otra);
   }
 
-  // Se llama en cada evento de actividad; limita el reinicio a 1/seg.
+  function programarComprobacion() {
+    if (!vigilando) return;
+    clearTimeout(temporizadorInactividad);
+    const quedan = ultimaActividadCompartida() + INACTIVIDAD_MS - Date.now();
+    temporizadorInactividad = setTimeout(comprobarInactividad, Math.max(quedan, 1000));
+  }
+
+  // Al vencer el plazo se mira si otra pestaña ha tenido actividad
+  // mientras tanto: si es así, se vuelve a esperar.
+  function comprobarInactividad() {
+    if (!vigilando) return;
+    if (Date.now() - ultimaActividadCompartida() < INACTIVIDAD_MS) {
+      programarComprobacion();
+      return;
+    }
+    cerrarPorInactividad();
+  }
+
+  // Se llama en cada evento de actividad; se apunta como mucho cada 5 s
+  // (mousemove dispara decenas de eventos por segundo).
   function alHaberActividad() {
     const ahora = Date.now();
-    if (ahora - ultimaActividad < 1000) return;
+    if (ahora - ultimaActividad < 5000) return;
     ultimaActividad = ahora;
-    reiniciarTemporizador();
+    try { localStorage.setItem(KEY_ACTIVIDAD, String(ahora)); } catch { /* sin almacenamiento */ }
+    programarComprobacion();
   }
 
   async function cerrarPorInactividad() {
     detenerVigilanciaInactividad();
-    await App.db.auth.signOut();
+    // Las demás pestañas se enteran solas: Supabase avisa del cierre a
+    // todas las del mismo navegador.
+    await App.db.auth.signOut({ scope: "local" });
     App.toast("Sesión cerrada por inactividad");
   }
 
@@ -34,9 +67,10 @@
     if (vigilando) return;
     vigilando = true;
     ultimaActividad = Date.now();
+    try { localStorage.setItem(KEY_ACTIVIDAD, String(ultimaActividad)); } catch { /* sin almacenamiento */ }
     EVENTOS_ACTIVIDAD.forEach((ev) =>
       document.addEventListener(ev, alHaberActividad, { passive: true }));
-    reiniciarTemporizador();
+    programarComprobacion();
   }
 
   function detenerVigilanciaInactividad() {
@@ -195,8 +229,10 @@
       }
     });
 
+    // Solo en este navegador: salir en la oficina no debe cerrar la sesión
+    // en otro equipo.
     App.$("btnLogout").addEventListener("click", async () => {
-      await App.db.auth.signOut();
+      await App.db.auth.signOut({ scope: "local" });
       App.toast("Sesion cerrada");
     });
 

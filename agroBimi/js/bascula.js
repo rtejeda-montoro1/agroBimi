@@ -910,12 +910,25 @@
     if (!h) return;
     if (!confirm(`¿Anular la entrada de las ${hora(h.creado)}?\n${h.nombre} · Ciclo ${h.ciclo} · ${resumenCajas(h)}\n\nSe resta del total del día.`)) return;
 
-    const { data, error } = await db.rpc("bascula_anular", { p_id: id });
+    let { data, error } = await db.rpc("bascula_anular", { p_id: id });
+
+    // Sus cajas ya están en un palet completo (con la etiqueta pegada,
+    // seguramente): se pregunta antes de tocarlo.
+    let paletTocado = null;
+    if (error?.hint === "palet_completo") {
+      if (!confirm(`${error.message}\n\n¿Anularla igualmente? Después habrá que corregir ese palet y volver a imprimir su etiqueta.`)) return;
+      paletTocado = error.details;
+      ({ data, error } = await db.rpc("bascula_anular", { p_id: id, p_forzar: true }));
+    }
     if (error) {
       toast(esRechazo(error) ? error.message : "Sin conexión: no se puede anular ahora.");
       return;
     }
-    toast(data ? "Entrada anulada" : "No se puede anular: corrígela desde la oficina");
+    if (data && paletTocado) {
+      alert(`Entrada anulada.\n\nEl palet ${paletTocado} tiene ahora menos cajas: vuelve a imprimir su etiqueta.`);
+    } else {
+      toast(data ? "Entrada anulada" : "No se puede anular: corrígela desde la oficina");
+    }
     cargarHoy().catch(() => {});
   }
 
