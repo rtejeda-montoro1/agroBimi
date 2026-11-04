@@ -31,6 +31,9 @@
   const REFRESCO_HOY_MS = 60 * 1000;
   const REFRESCO_AGRICULTORES_MS = 10 * 60 * 1000;
   const REINTENTO_ENVIO_MS = 20 * 1000;
+  // «Registrar e imprimir» espera como mucho esto a que la oficina
+  // confirme la entrada antes de imprimir el justificante.
+  const ESPERA_IMPRIMIR_MS = 6 * 1000;
 
   const state = {
     agricultores: [],
@@ -46,6 +49,7 @@
     cargado: false,
     enviando: false,
     sinRed: !navigator.onLine,
+    falloRedEn: 0,     // cuándo falló la red por última vez (Date.now())
     datosDeCache: false,
     vista: "bascula",  // "bascula" o "palets"
     palets: null,      // lo último que devolvió bascula_palets()
@@ -115,6 +119,29 @@
   // 22xxx / 23xxx = datos no válidos.
   function esRechazo(error) {
     return /^(P0001|22|23)/.test(error?.code || "");
+  }
+
+  // El estado de la red se decide por lo que pasa con el servidor, no solo
+  // por los eventos online/offline del navegador. Antes «Sin conexión» solo
+  // se quitaba al enviar una entrada pendiente: tras un corte de un segundo
+  // sin nada en la cola, el aviso se quedaba puesto para siempre.
+  function marcarEnLinea() {
+    if (!state.sinRed) return;
+    state.sinRed = false;
+    pintarEstadoRed();
+  }
+
+  function marcarSinRed() {
+    state.sinRed = true;
+    state.falloRedEn = Date.now();
+    pintarEstadoRed();
+  }
+
+  // Tras una llamada al servidor: si ha respondido (aunque sea con un
+  // rechazo), hay red; si no ha llegado, no.
+  function anotarRed(error) {
+    if (error && !esRechazo(error)) marcarSinRed();
+    else marcarEnLinea();
   }
 
   // ------------------------------------------------------------------
@@ -225,6 +252,7 @@
 
   async function cargarAgricultores() {
     const { data, error } = await db.rpc("bascula_agricultores", { p_campana_id: campanaId() });
+    anotarRed(error);
     if (error) throw error;
     state.agricultores = data || [];
     // Los ciclos de las entradas sin enviar son más recientes que los del servidor.
@@ -243,6 +271,7 @@
 
   async function cargarHoy() {
     const { data, error } = await db.rpc("bascula_hoy");
+    anotarRed(error);
     if (error) throw error;
     state.hoy = data || [];
     guardarCache();
@@ -319,7 +348,7 @@
 
         if (error && !esRechazo(error)) {
           // Sin red (o sesión caducada): paramos y se reintenta más tarde.
-          state.sinRed = true;
+          marcarSinRed();
           break;
         }
         state.sinRed = false;
@@ -524,6 +553,9 @@
   //  Justificante impreso
   // ------------------------------------------------------------------
   function ticket(e, copia) {
+    // Referencia corta de la entrada (el principio de su uuid): permite
+    // encontrarla en la oficina si hay dudas con un justificante.
+    const ref = String(e.uuid || e.client_uuid || "").slice(0, 8).toUpperCase();
     return `
       <div class="ticket">
         ${state.emisor ? `<div class="ticket-emisor">${escapar(state.emisor)}</div>` : ""}
@@ -543,6 +575,10 @@
           <span>Cajas vacías retiradas</span>
           <b>${e.vacias || 0}</b>
         </div>
+
+        ${e.pendiente ? `<div class="ticket-pendiente">PENDIENTE DE ENVÍO<br>
+          <small>Guardada en la tablet sin red: aún no consta en la oficina.</small></div>` : ""}
+        ${ref ? `<div class="ticket-ref">Ref. ${escapar(ref)}</div>` : ""}
 
         <div class="ticket-firma">
           <div class="ticket-firma-hueco"></div>
@@ -829,9 +865,44 @@
     pintarHoy();
     pintarEstadoRed();
 
-    // Primero se lanza el envío: el diálogo de impresión puede bloquear la página.
     enviarPendientes();
-    if (imprimir) imprimirJustificante({ ...entrada, creado: entrada.pesada_en, pendiente: true });
+    if (imprimir) imprimirTrasEnvio(entrada);
+  }
+
+  // Espera a que la entrada llegue a la oficina (o se rechace), como mucho
+  // ESPERA_IMPRIMIR_MS. Devuelve "enviada", "rechazada" o "pendiente" (sin
+  // red, o el servidor tarda: sigue en la cola y se enviará sola).
+  async function esperarEnvio(uuid) {
+    const inicio = Date.now();
+    while (Date.now() - inicio < ESPERA_IMPRIMIR_MS) {
+      const p = leerCola().find((x) => x.uuid === uuid);
+      if (!p) return "enviada";
+      if (p.error) return "rechazada";
+      // Sin red no tiene sentido esperar.
+      if (!navigator.onLine || (state.falloRedEn >= inicio && !state.enviando)) return "pendiente";
+      if (!state.enviando) enviarPendientes();
+      await new Promise((r) => setTimeout(r, 300));
+    }
+    return "pendiente";
+  }
+
+  // Antes el justificante se imprimía al momento: si luego el servidor
+  // rechazaba la entrada, el agricultor se iba con un papel firmado de algo
+  // que no estaba en la oficina. Ahora:
+  //  - aceptada: justificante normal;
+  //  - rechazada: no se imprime y se avisa;
+  //  - sin confirmar (sin red): se imprime marcado «PENDIENTE DE ENVÍO» y
+  //    con la referencia, para poder cuadrarlo después.
+  async function imprimirTrasEnvio(entrada) {
+    toast("Enviando a la oficina…");
+    const estado = await esperarEnvio(entrada.uuid);
+    if (estado === "rechazada") {
+      const p = leerCola().find((x) => x.uuid === entrada.uuid);
+      alert(`No se ha impreso el justificante: la oficina no ha aceptado la entrada de ${entrada.nombre}.\n\n` +
+        `${p?.error || ""}\n\nRevísala en la lista de hoy.`);
+      return;
+    }
+    imprimirJustificante({ ...entrada, creado: entrada.pesada_en, pendiente: estado !== "enviada" });
   }
 
   async function anular(id) {
@@ -922,7 +993,7 @@
     }
     temporizadores.push(
       setInterval(() => {
-        if (state.cargaFallida) cargarTodo().then(enviarPendientes);
+        if (state.cargaFallida || state.datosDeCache) cargarTodo().then(enviarPendientes);
         else cargarHoy().catch(() => {});
       }, REFRESCO_HOY_MS),
       setInterval(() => cargarAgricultores().catch(() => {}), REFRESCO_AGRICULTORES_MS),
@@ -1035,7 +1106,11 @@
       else if (b.dataset.reintentar) reintentarPendiente(b.dataset.reintentar);
       else if (b.dataset.imprimir) {
         const entrada = buscarEntrada(b.dataset.imprimir);
-        if (entrada) imprimirJustificante(entrada);
+        if (entrada?.error) {
+          alert("Esta entrada no se ha guardado en la oficina: no se puede imprimir su justificante.");
+        } else if (entrada) {
+          imprimirJustificante(entrada);
+        }
       }
     });
 
@@ -1049,13 +1124,16 @@
 
     window.addEventListener("online", () => {
       pintarEstadoRed();
-      if (state.cargaFallida) cargarTodo().then(enviarPendientes);
-      else enviarPendientes();
+      // cargarHoy confirma que de verdad hay red y quita el aviso.
+      if (state.cargaFallida || state.datosDeCache) cargarTodo().then(enviarPendientes);
+      else {
+        enviarPendientes();
+        cargarHoy().catch(() => {});
+      }
       if (state.vista === "palets") cargarPalets();
     });
     window.addEventListener("offline", () => {
-      state.sinRed = true;
-      pintarEstadoRed();
+      marcarSinRed();
       if (state.vista === "palets") pintarActualizado();
     });
     document.addEventListener("visibilitychange", () => {

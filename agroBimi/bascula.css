@@ -367,6 +367,15 @@ body.bascula:not(.authed) .bascula-palets,
   /* Mismo tamaño para las cajas entradas y las vacías. */
   .ticket-cajas b { font-size: 13pt; line-height: 1.2; }
   .ticket-cajas + .ticket-firma { margin-top: 2mm; }
+  .ticket-pendiente {
+    border: 1.5pt dashed #000;
+    padding: 1.5mm 2mm;
+    margin: 2mm 0;
+    text-align: center;
+    font-weight: 700;
+  }
+  .ticket-pendiente small { font-weight: 400; font-size: 8.5pt; }
+  .ticket-ref { text-align: center; font-size: 8.5pt; color: #444; margin-bottom: 1mm; }
   .ticket-firma { text-align: center; font-size: 9pt; color: #444; }
   .ticket-firma-hueco { height: 22mm; border-bottom: .75pt solid #000; margin-bottom: 1mm; }
 }
