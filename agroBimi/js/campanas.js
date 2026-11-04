@@ -199,12 +199,13 @@
 
     cuerpo.innerHTML = App.spinnerFila(8, "Buscando registros...");
 
-    const { data, error } = await App.db
+    const { data, error } = await App.traerTodo(() => App.db
       .from("registros")
       .select("*, agricultores(nombre,codigo)")
       .eq("campana_id", id)
       .order("agricultor_id", { ascending: true })
-      .order("fecha", { ascending: false, nullsFirst: false });
+      .order("fecha", { ascending: false, nullsFirst: false })
+      .order("id"));
 
     if (error) {
       cuerpo.innerHTML = `<tr><td colspan="8" class="error">Error: ${App.escapar(error.message)}</td></tr>`;

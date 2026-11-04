@@ -46,10 +46,11 @@
     cuerpo.innerHTML = App.spinnerFila(10, "Cargando liquidaciones...");
 
     const data = await App.consultar(
-      App.db.from("liquidaciones")
+      App.traerTodo(() => App.db.from("liquidaciones")
         .select("*, liquidacion_lineas(*)")
         .order("fecha", { ascending: false })
-        .order("secuencia", { ascending: false, nullsFirst: false }),
+        .order("secuencia", { ascending: false, nullsFirst: false })
+        .order("id")),
       "las liquidaciones"
     );
 
@@ -152,8 +153,18 @@
       App.$("liqObservaciones").value = liquidacion.observaciones ?? "";
       // Las cajas vacías se descuentan normalmente a final de campaña: al
       // editar se respeta si esta liquidación ya las llevaba.
-      App.$("liqIncluirCajas").checked = (liquidacion.liquidacion_lineas || [])
-        .some((l) => l.tipo === "cajas_perdidas");
+      const lineasGuardadas = liquidacion.liquidacion_lineas || [];
+      App.$("liqIncluirCajas").checked = lineasGuardadas.some((l) => l.tipo === "cajas_perdidas");
+      // Igual con el descuento y la línea libre (anticipos, etc.): si no se
+      // recuperan aquí, al recalcular y guardar desaparecerían del borrador.
+      App.$("liqIncluirDescuento").checked = lineasGuardadas.some((l) => l.tipo === "descuento");
+      const otra = lineasGuardadas.find((l) => l.tipo === "otro");
+      if (otra) {
+        App.$("liqOtroConcepto").value = otra.concepto ?? "";
+        App.$("liqOtraCantidad").value = otra.cantidad ?? "";
+        App.$("liqOtroPrecio").value = otra.precio ?? "";
+        App.$("liqOtroConcepto").closest("details").open = true;
+      }
       // El agricultor no se cambia al editar: los registros ya están
       // vinculados a esta liquidación.
       App.$("liqAgricultor").disabled = true;
@@ -275,15 +286,15 @@
   // Registros del agricultor dentro del periodo que todavía no están
   // liquidados (o que ya pertenecen a ESTA liquidación, al reeditarla).
   async function registrosDelPeriodo(datos) {
-    let query = App.db.from("registros")
-      .select("id,fecha,cajas_entradas,descuento_cajas,liquidacion_id,campana_id")
-      .eq("agricultor_id", datos.agricultorId)
-      .gte("fecha", datos.desde)
-      .lte("fecha", datos.hasta);
-
-    if (datos.campanaId) query = query.eq("campana_id", datos.campanaId);
-
-    const data = await App.consultar(query, "los registros del periodo");
+    const data = await App.consultar(App.traerTodo(() => {
+      const q = App.db.from("registros")
+        .select("id,fecha,cajas_entradas,descuento_cajas,liquidacion_id,campana_id")
+        .eq("agricultor_id", datos.agricultorId)
+        .gte("fecha", datos.desde)
+        .lte("fecha", datos.hasta)
+        .order("id");
+      return datos.campanaId ? q.eq("campana_id", datos.campanaId) : q;
+    }), "los registros del periodo");
     if (data === null) return null;
 
     return data.filter((r) =>
@@ -306,8 +317,11 @@
     // que ya se le haya cobrado en otras liquidaciones).
     let saldoCajas = null;
     if (datos.incluirCajas) {
+      // Sin filtro de campaña: las cajas son físicas y lo ya cobrado se
+      // cuenta de todas las campañas. Si solo se mirasen los movimientos
+      // de esta campaña, lo cobrado en campañas anteriores taparía los
+      // descuadres nuevos y no se cobrarían.
       saldoCajas = await App.saldoCajasAgricultor(datos.agricultorId, {
-        campanaId: datos.campanaId || "",
         // El precio de esta liquidación manda sobre el de Ajustes.
         precioCaja: datos.precioCajaPerdida,
         // Al reeditar, sus propias cajas ya cobradas no cuentan.
@@ -662,20 +676,10 @@
       "Sus registros volverán a quedar pendientes de liquidar. Esta acción no se puede deshacer."
     )) return;
 
-    // Primero se sueltan los registros: si se borrase la liquidación antes,
-    // el ON DELETE SET NULL dejaría el num_factura antiguo pegado.
-    const limpieza = { liquidacion_id: null };
-    if (l.num_factura) limpieza.num_factura = null;
-
-    const { error: errorRegs } = await App.db.from("registros")
-      .update(limpieza).eq("liquidacion_id", l.id);
-
-    if (errorRegs) {
-      App.toast("Error al liberar los registros: " + errorRegs.message);
-      return;
-    }
-
-    const { error } = await App.db.from("liquidaciones").delete().eq("id", l.id);
+    // Soltar los registros y borrar, todo en una transacción
+    // (liquidacion_eliminar, schema.sql sección 19): si algo falla, los
+    // registros siguen en su liquidación y no se pueden pagar dos veces.
+    const { error } = await App.db.rpc("liquidacion_eliminar", { p_id: l.id });
     if (error) {
       App.toast("Error: " + error.message);
       return;

@@ -36,12 +36,16 @@
   async function cargarDatosPaletizado() {
     const [palets, entradas] = await Promise.all([
       App.consultar(
-        App.db.from("palets")
+        App.traerTodo(() => App.db.from("palets")
           .select("*, albaranes_salida(numero), palet_lineas(id,agricultor_id,registro_id,num_cajas,registros(fecha))")
-          .order("secuencia", { ascending: false, nullsFirst: false }),
+          .order("secuencia", { ascending: false, nullsFirst: false })
+          .order("id")),
         "los palets"
       ),
-      App.consultar(App.db.from("paletizado_entradas").select("*"), "las cajas en cámara"),
+      App.consultar(
+        App.traerTodo(() => App.db.from("paletizado_entradas").select("*").order("registro_id")),
+        "las cajas en cámara"
+      ),
     ]);
     if (palets === null || entradas === null) return false;
     App.state.paletsActuales = palets;

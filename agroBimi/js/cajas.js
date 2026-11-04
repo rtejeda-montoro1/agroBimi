@@ -83,15 +83,27 @@
 
   // Consulta los datos necesarios para el cálculo. La usan tanto el
   // informe como el cálculo de una liquidación.
-  async function traerDatosCajas() {
+  //
+  // Con agricultorId se filtra en el servidor: así la liquidación no
+  // depende del límite de filas por consulta de Supabase (1000), que con
+  // todos los registros de todos los agricultores se superaba y dejaba el
+  // saldo de cajas a medias sin avisar.
+  async function traerDatosCajas(agricultorId = null) {
+    const movs = () => {
+      const q = App.db.from("registros").select(SELECT_MOVIMIENTOS).order("id");
+      return agricultorId ? q.eq("agricultor_id", agricultorId) : q;
+    };
+    const lineas = () => {
+      const q = App.db.from("liquidacion_lineas")
+        .select(`cantidad,liquidacion_id,liquidaciones${agricultorId ? "!inner" : ""}(agricultor_id,estado)`)
+        .eq("tipo", "cajas_perdidas")
+        .order("id");
+      return agricultorId ? q.eq("liquidaciones.agricultor_id", agricultorId) : q;
+    };
+
     const [movimientos, cobros] = await Promise.all([
-      App.consultar(App.db.from("registros").select(SELECT_MOVIMIENTOS), "los movimientos de cajas"),
-      App.consultar(
-        App.db.from("liquidacion_lineas")
-          .select("cantidad,liquidacion_id,liquidaciones(agricultor_id,estado)")
-          .eq("tipo", "cajas_perdidas"),
-        "las cajas ya cobradas"
-      ),
+      App.consultar(App.traerTodo(movs), "los movimientos de cajas"),
+      App.consultar(App.traerTodo(lineas), "las cajas ya cobradas"),
     ]);
 
     if (movimientos === null || cobros === null) return null;
@@ -103,7 +115,7 @@
   async function saldoCajasAgricultor(agricultorId, {
     campanaId = "", desde = "", hasta = "", precioCaja = null, excluirLiquidacionId = null,
   } = {}) {
-    const datos = await traerDatosCajas();
+    const datos = await traerDatosCajas(agricultorId);
     if (!datos) return null;
 
     const precio = precioCaja === null ? App.paramNum("precio_caja_perdida") : App.num(precioCaja);

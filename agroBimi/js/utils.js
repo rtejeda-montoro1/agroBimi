@@ -130,11 +130,20 @@
   // (0.1 + 0.2). Todos los importes de liquidación pasan por aquí.
   // Se redondea el valor absoluto y se le devuelve el signo: así -0,375
   // da -0,38 igual que 0,375 da 0,38 (Math.round sube los .5 hacia +∞).
+  //
+  // Ojo: sumar Number.EPSILON no basta. 6 × 0,3625 da 2,1749999999999998
+  // en binario y se quedaba en 2,17 (debe ser 2,18). Por eso primero se
+  // limpia el ruido binario con 15 cifras significativas (2,175) y luego
+  // se redondea moviendo la coma en el texto ("2.175e2" = 217,5 exacto).
   function redondear(v, decimales = 2) {
-    const f = 10 ** decimales;
     const n = num(v);
+    const limpio = Number(Math.abs(n).toPrecision(15));
+    const txt = String(limpio);
+    const r = txt.includes("e") // números minúsculos o enormes: sin truco
+      ? Math.round(limpio * 10 ** decimales) / 10 ** decimales
+      : Number(Math.round(Number(`${txt}e${decimales}`)) + `e-${decimales}`);
     // + 0 convierte -0 en 0 (si no, se mostraría «-0,00 €»).
-    return Math.sign(n) * Math.round((Math.abs(n) + Number.EPSILON) * f) / f + 0;
+    return Math.sign(n) * r + 0;
   }
 
   // Precio de una línea: 2 decimales, salvo que tenga más (hasta 4). Si se
@@ -249,6 +258,30 @@
     return data || [];
   }
 
+  // Trae TODAS las filas de una consulta, en bloques. Supabase devuelve
+  // como mucho 1000 filas por consulta (max-rows) y corta el resto sin
+  // avisar: con una campaña entera de registros, las listas, los totales y
+  // el Excel salían incompletos.
+  //
+  // `crear` es una función que construye la consulta desde cero (una
+  // consulta de Supabase no se puede reutilizar para pedir otro bloque).
+  // Debe llevar un orden ÚNICO (p. ej. terminar en .order("id")): si no,
+  // entre bloque y bloque podrían repetirse o saltarse filas.
+  // Devuelve { data, error } como una consulta normal, así que sirve igual
+  // con consultar() que con el patrón const { data, error } = await ...
+  // TAM_BLOQUE debe coincidir con el max-rows del proyecto (1000 por
+  // defecto): un bloque más corto se toma como el último.
+  const TAM_BLOQUE = 1000;
+  async function traerTodo(crear) {
+    const filas = [];
+    for (let desde = 0; ; desde += TAM_BLOQUE) {
+      const { data, error } = await crear().range(desde, desde + TAM_BLOQUE - 1);
+      if (error) return { data: null, error };
+      filas.push(...(data || []));
+      if (!data || data.length < TAM_BLOQUE) return { data: filas, error: null };
+    }
+  }
+
   // ---- Impresión ------------------------------------------------------
   // Vuelca un documento (factura) en #zonaImpresion y abre
   // el diálogo de impresión. Desde ahí el navegador permite "Guardar como
@@ -289,6 +322,7 @@
     primerDiaMes,
     ultimoDiaMes,
     fechaEnRango,
+    traerTodo,
     limitarFechasAHoy,
     esFechaFutura,
     num,

@@ -1525,3 +1525,41 @@ $$;
 
 revoke all on function public.liquidacion_guardar(bigint, jsonb, jsonb, bigint[]) from public, anon;
 grant execute on function public.liquidacion_guardar(bigint, jsonb, jsonb, bigint[]) to authenticated;
+
+-- 19) ELIMINAR UNA LIQUIDACIÓN DE UNA VEZ
+--     Suelta sus registros (liquidacion_id y num_factura) y borra la
+--     liquidación en una sola transacción. Antes eran dos pasos desde el
+--     navegador: si el borrado fallaba (p. ej. otra persona acababa de
+--     emitir el recibo), los registros quedaban sueltos y se podían
+--     volver a liquidar, pagándolos dos veces.
+--     Sin security definer: la báscula sigue sin poder usarla (RLS).
+create or replace function public.liquidacion_eliminar(p_id bigint)
+returns void
+language plpgsql
+set search_path = public
+as $$
+declare
+  v_liq liquidaciones%rowtype;
+begin
+  select * into v_liq from liquidaciones where id = p_id for update;
+  if not found then
+    raise exception 'La liquidación ya no existe (¿se ha eliminado en otra pestaña?).';
+  end if;
+  if v_liq.factura_secuencia is not null then
+    raise exception 'No se puede eliminar la liquidación %: ya tiene emitido el recibo %.',
+      v_liq.numero, v_liq.num_factura;
+  end if;
+
+  -- Primero se sueltan los registros: el ON DELETE SET NULL dejaría el
+  -- num_factura antiguo pegado.
+  update registros set
+    liquidacion_id = null,
+    num_factura    = case when v_liq.num_factura is not null then null else num_factura end
+  where liquidacion_id = p_id;
+
+  delete from liquidaciones where id = p_id;
+end;
+$$;
+
+revoke all on function public.liquidacion_eliminar(bigint) from public, anon;
+grant execute on function public.liquidacion_eliminar(bigint) to authenticated;

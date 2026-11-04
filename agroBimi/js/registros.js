@@ -59,11 +59,17 @@
     App.$("registrosVacio").innerHTML = App.spinner("Cargando registros...");
     App.$("btnExport").disabled = true;
 
-    const { data, error } = await App.db
+    const agricultorId = App.state.agricultorAbierto.id;
+    const { data, error } = await App.traerTodo(() => App.db
       .from("registros")
       .select("*")
-      .eq("agricultor_id", App.state.agricultorAbierto.id)
-      .order("fecha", { ascending: App.state.ordenFechaAsc, nullsFirst: false });
+      .eq("agricultor_id", agricultorId)
+      .order("fecha", { ascending: App.state.ordenFechaAsc, nullsFirst: false })
+      .order("id"));
+
+    // Si mientras llegaba la respuesta se abrió otro agricultor, se
+    // descarta: si no, saldrían sus registros bajo el nombre del nuevo.
+    if (App.state.agricultorAbierto?.id !== agricultorId) return;
 
     if (error) {
       // La tabla está oculta durante la carga; mostramos el error en el bloque.

@@ -32,9 +32,10 @@
     cuerpo.innerHTML = App.spinnerFila(7, "Cargando albaranes...");
 
     const data = await App.consultar(
-      App.db.from("albaranes_salida")
+      App.traerTodo(() => App.db.from("albaranes_salida")
         .select("*, palets(id,num_cajas)")
-        .order("secuencia", { ascending: false, nullsFirst: false }),
+        .order("secuencia", { ascending: false, nullsFirst: false })
+        .order("id")),
       "los albaranes"
     );
     if (data === null) {
@@ -122,9 +123,10 @@
   }
 
   async function cargarAlbaranesSilencioso() {
-    const { data } = await App.db.from("albaranes_salida")
+    const { data } = await App.traerTodo(() => App.db.from("albaranes_salida")
       .select("*, palets(id,num_cajas)")
-      .order("secuencia", { ascending: false, nullsFirst: false });
+      .order("secuencia", { ascending: false, nullsFirst: false })
+      .order("id"));
     App.state.albaranesActuales = data || [];
   }
 

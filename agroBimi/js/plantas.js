@@ -134,9 +134,10 @@
     if (!agricultor) return;
 
     const data = await App.consultar(
-      App.db.from("retiradas_plantas").select("*")
+      App.traerTodo(() => App.db.from("retiradas_plantas").select("*")
         .eq("agricultor_id", agricultor.id)
-        .order("fecha", { ascending: true }),
+        .order("fecha", { ascending: true })
+        .order("id")),
       "las retiradas de plantas"
     );
 
@@ -194,7 +195,8 @@
     cuerpo.innerHTML = App.spinnerFila(8, "Cargando retiradas de plantas...");
 
     const data = await App.consultar(
-      App.db.from("retiradas_plantas").select("*").order("fecha", { ascending: false }),
+      App.traerTodo(() => App.db.from("retiradas_plantas").select("*")
+        .order("fecha", { ascending: false }).order("id")),
       "las retiradas de plantas"
     );
 
