@@ -876,6 +876,37 @@ as $$
   select p_serie || '-' || lpad(p_sec::text, greatest(p_ancho, length(p_sec::text)), '0');
 $$;
 
+-- Contadores de numeración: guardan el último número dado y NUNCA bajan.
+-- Antes el siguiente número era max(secuencia) + 1: al borrar el último
+-- palet o anular el último albarán, su número se volvía a dar a otro
+-- documento (dos etiquetas o dos CMR con el mismo número).
+-- siguiente_numero() bloquea la fila del contador hasta el final de la
+-- transacción: dos personas a la vez se ponen en fila y no chocan. Si la
+-- transacción falla, el contador vuelve atrás y no queda hueco.
+-- p_minimo (el máximo actual de la tabla) cubre la primera vez y los
+-- números puestos a mano: nunca se da uno que ya exista.
+create table if not exists contadores (
+  clave  text    primary key,
+  ultimo integer not null
+);
+alter table contadores enable row level security;
+drop policy if exists "acceso_autenticados_contadores" on contadores;
+create policy "acceso_autenticados_contadores" on contadores for all to authenticated
+  using ((select not public.es_bascula())) with check ((select not public.es_bascula()));
+grant select, insert, update, delete on table contadores to authenticated;
+revoke all on table contadores from anon;
+
+create or replace function public.siguiente_numero(p_clave text, p_minimo integer)
+returns integer
+language sql
+set search_path = public
+as $$
+  insert into contadores (clave, ultimo) values (p_clave, coalesce(p_minimo, 0) + 1)
+  on conflict (clave) do update
+    set ultimo = greatest(contadores.ultimo, coalesce(p_minimo, 0)) + 1
+  returning ultimo;
+$$;
+
 -- ---------------------------------------------------------------------
 -- 2) Albaranes de salida
 -- ---------------------------------------------------------------------
@@ -1030,7 +1061,7 @@ begin
     for update;
 
     if not found then
-      select coalesce(max(secuencia), 0) + 1 into v_sec from palets;
+      v_sec := public.siguiente_numero('palet', (select max(secuencia) from palets));
       v_serie := coalesce((select nullif(trim(valor), '') from parametros where clave = 'serie_palet'), 'P');
       insert into palets (secuencia, codigo, campana_id, fecha, num_cajas)
       values (v_sec, public.numero_documento(v_serie, v_sec, 6), r.campana_id, r.fecha, 0)
@@ -1168,7 +1199,7 @@ begin
                    where (x->>'num_cajas')::integer > 0) then
       raise exception 'Indica las cajas que lleva el palet.';
     end if;
-    select coalesce(max(secuencia), 0) + 1 into v_sec from palets;
+    v_sec := public.siguiente_numero('palet', (select max(secuencia) from palets));
     v_serie := coalesce((select nullif(trim(valor), '') from parametros where clave = 'serie_palet'), 'P');
     insert into palets (secuencia, codigo, campana_id, fecha, num_cajas)
     values (v_sec, public.numero_documento(v_serie, v_sec, 6),
@@ -1270,7 +1301,8 @@ begin
     raise exception 'Algún palet ya tiene salida o está vacío. Recarga la lista.';
   end if;
 
-  select coalesce(max(secuencia), 0) + 1 into v_sec from albaranes_salida;
+  -- El contador también pone en fila dos salidas simultáneas.
+  v_sec := public.siguiente_numero('albaran', (select max(secuencia) from albaranes_salida));
   v_serie := coalesce((select nullif(trim(valor), '') from parametros where clave = 'serie_albaran'), 'ALB');
 
   insert into albaranes_salida (secuencia, numero, fecha, destinatario_nombre, destinatario_nif,
@@ -1334,6 +1366,7 @@ begin
   foreach f in array array[
     'cajas_por_palet()', 'paletizado_desde()',
     'numero_documento(text, integer, integer)',
+    'siguiente_numero(text, integer)',
     'paletizar_registro(bigint, integer)',
     'palet_guardar_lineas(bigint, jsonb)',
     'albaran_crear(jsonb, bigint[])', 'albaran_anular(bigint)'
@@ -1489,9 +1522,9 @@ begin
     delete from liquidacion_lineas where liquidacion_id = p_id;
     update registros set liquidacion_id = null where liquidacion_id = p_id;
   else
-    -- Dos personas a la vez no pueden sacar el mismo número.
-    perform pg_advisory_xact_lock(hashtext('agrobimi_liquidacion'));
-    v_sec := coalesce((select max(secuencia) from liquidaciones), 0) + 1;
+    -- Dos personas a la vez no pueden sacar el mismo número, y el de una
+    -- liquidación eliminada no se vuelve a dar.
+    v_sec := public.siguiente_numero('liquidacion', (select max(secuencia) from liquidaciones));
     v_serie := coalesce((select nullif(trim(valor), '') from parametros where clave = 'serie_liquidacion'), 'LIQ');
 
     insert into liquidaciones (
@@ -1758,3 +1791,69 @@ drop trigger if exists registros_proteger on registros;
 create trigger registros_proteger
   before update or delete on registros
   for each row execute function public.registros_proteger_trg();
+
+-- 21) FACTURAR UNA LIQUIDACIÓN DE UNA VEZ
+--     Numera el recibo, marca la liquidación como facturada y copia el nº a
+--     sus registros en una sola transacción. Antes eran dos escrituras desde
+--     el navegador con el nº calculado allí (max + 1): dos personas a la vez
+--     chocaban, y si fallaba la segunda escritura los registros se quedaban
+--     sin nº de factura.
+--     p_agricultor = true: la factura la trae el agricultor; se apuntan su
+--     nº y su fecha (p_num, p_fecha) y no se gasta nº de la serie.
+--     Devuelve el nº de factura o recibo.
+--     Sin security definer: la báscula sigue sin poder usarla (RLS).
+create or replace function public.liquidacion_facturar(
+  p_id bigint, p_agricultor boolean, p_num text, p_fecha date)
+returns text
+language plpgsql
+set search_path = public
+as $$
+declare
+  v_liq   liquidaciones%rowtype;
+  v_sec   integer;
+  v_num   text;
+  v_fecha date;
+begin
+  select * into v_liq from liquidaciones where id = p_id for update;
+  if not found then
+    raise exception 'La liquidación ya no existe (¿se ha eliminado en otra pestaña?).';
+  end if;
+  if v_liq.estado = 'facturada' then
+    raise exception 'La liquidación % ya está facturada (%).', v_liq.numero, v_liq.num_factura;
+  end if;
+
+  if coalesce(p_agricultor, false) then
+    v_num := nullif(trim(p_num), '');
+    v_fecha := p_fecha;
+    if v_num is null or v_fecha is null then
+      raise exception 'Escribe el nº y la fecha de la factura del agricultor.';
+    end if;
+  else
+    -- La fecha del recibo es la del servidor (hora de España), no la del
+    -- reloj del ordenador.
+    v_fecha := (now() at time zone 'Europe/Madrid')::date;
+    v_sec := public.siguiente_numero('recibo',
+      (select max(factura_secuencia) from liquidaciones));
+    v_num := public.numero_documento(
+      coalesce((select nullif(trim(valor), '') from parametros where clave = 'serie_factura'), 'F'),
+      v_sec, 4);
+  end if;
+
+  update liquidaciones set
+    estado             = 'facturada',
+    factura_agricultor = coalesce(p_agricultor, false),
+    factura_secuencia  = v_sec,
+    num_factura        = v_num,
+    fecha_factura      = v_fecha
+  where id = p_id;
+
+  -- El nº también va a los registros: la tabla del agricultor los agrupa
+  -- por factura.
+  update registros set num_factura = v_num where liquidacion_id = p_id;
+
+  return v_num;
+end;
+$$;
+
+revoke all on function public.liquidacion_facturar(bigint, boolean, text, date) from public, anon;
+grant execute on function public.liquidacion_facturar(bigint, boolean, text, date) to authenticated;

@@ -577,12 +577,13 @@
     if (!l) return;
 
     const deAgricultor = tipoFacturaElegido() === "agricultor";
-    let cambios;
+    let numAgricultor = null;
+    let fechaAgricultor = null;
 
     if (deAgricultor) {
-      const numFactura = App.$("facturarNumAgricultor").value.trim();
-      const fecha = App.$("facturarFechaAgricultor").value;
-      if (!numFactura || !fecha) {
+      numAgricultor = App.$("facturarNumAgricultor").value.trim();
+      fechaAgricultor = App.$("facturarFechaAgricultor").value;
+      if (!numAgricultor || !fechaAgricultor) {
         App.toast("Escribe el nº y la fecha de la factura del agricultor.");
         return;
       }
@@ -590,59 +591,31 @@
       // ser un error al teclear.
       const repetida = App.state.liquidacionesActuales.find((x) =>
         x.id !== l.id && x.agricultor_id === l.agricultor_id &&
-        (x.num_factura || "").trim().toLowerCase() === numFactura.toLowerCase());
+        (x.num_factura || "").trim().toLowerCase() === numAgricultor.toLowerCase());
       if (repetida &&
-          !confirm(`La factura ${numFactura} ya está apuntada en la liquidación ${repetida.numero}. ¿Apuntarla también aquí?`)) {
+          !confirm(`La factura ${numAgricultor} ya está apuntada en la liquidación ${repetida.numero}. ¿Apuntarla también aquí?`)) {
         return;
       }
-      cambios = {
-        estado: "facturada",
-        factura_agricultor: true,
-        factura_secuencia: null,
-        num_factura: numFactura,
-        fecha_factura: fecha,
-      };
-    } else {
-      // Se vuelve a pedir el nº al guardar: otra persona puede haber
-      // facturado mientras la ventana estaba abierta.
-      let secuencia;
-      try {
-        secuencia = await App.siguienteSecuencia("liquidaciones", "factura_secuencia");
-      } catch (err) {
-        App.toast("Error al numerar la factura: " + err.message);
-        return;
-      }
-      cambios = {
-        estado: "facturada",
-        factura_agricultor: false,
-        factura_secuencia: secuencia,
-        num_factura: App.fmtDocumento(App.param("serie_factura"), secuencia, ANCHO_NUMERO),
-        fecha_factura: App.hoyISO(),
-      };
     }
 
-    const numFactura = cambios.num_factura;
-    const { error } = await App.db.from("liquidaciones").update(cambios).eq("id", l.id);
+    // Todo en una transacción (liquidacion_facturar, schema.sql sección 21):
+    // el nº de recibo lo da la base de datos, así dos personas a la vez no
+    // chocan, y los registros reciben el nº en el mismo paso.
+    const { data: numFactura, error } = await App.db.rpc("liquidacion_facturar", {
+      p_id: l.id,
+      p_agricultor: deAgricultor,
+      p_num: numAgricultor,
+      p_fecha: fechaAgricultor || null,
+    });
 
     if (error) {
       App.toast("Error al facturar: " + error.message);
       return;
     }
     App.cerrarModal(App.dom.modalFacturar);
-
-    // El nº de factura también va a los registros: así la tabla del
-    // agricultor sigue agrupándolos por factura como hasta ahora.
-    const { error: errorRegs } = await App.db.from("registros")
-      .update({ num_factura: numFactura })
-      .eq("liquidacion_id", l.id);
-
-    if (errorRegs) {
-      App.toast("Factura creada, pero no se pudo copiar el nº a los registros: " + errorRegs.message);
-    } else {
-      App.toast(deAgricultor
-        ? `Factura del agricultor ${numFactura} apuntada`
-        : `Recibo ${numFactura} generado`);
-    }
+    App.toast(deAgricultor
+      ? `Factura del agricultor ${numFactura} apuntada`
+      : `Recibo ${numFactura} generado`);
 
     await cargarLiquidaciones();
     if (App.state.agricultorAbierto) await App.cargarRegistros();
