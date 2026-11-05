@@ -256,8 +256,49 @@ body.bascula:not(.authed) .bascula-palets,
   flex-wrap: wrap;
   margin-bottom: 14px;
 }
-.palets-resumen { display: flex; gap: 8px 18px; flex-wrap: wrap; font-size: .95rem; color: var(--muted); }
-.palets-resumen b { color: var(--text); font-size: 1.15rem; }
+/* Resumen: tres recuadros en su propia fila, debajo de los botones. */
+.palets-resumen {
+  order: 10;
+  flex: 1 1 100%;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 10px;
+}
+.palets-dato {
+  --acento: var(--primary);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-left: 6px solid var(--acento);
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, .08);
+}
+.palets-dato.dato-completos { --acento: var(--success); }
+.palets-dato.dato-paletizadas { --acento: var(--primary); }
+.palets-dato.dato-sueltas { --acento: #d97706; }
+.palets-dato-icono {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  font-size: 1.25rem;
+  color: var(--acento);
+  background: color-mix(in srgb, var(--acento) 15%, transparent);
+}
+.palets-dato b {
+  display: block;
+  font-size: 1.7rem;
+  font-weight: 800;
+  line-height: 1.1;
+  color: var(--acento);
+  font-variant-numeric: tabular-nums;
+}
+.palets-dato div span { display: block; font-size: .88rem; color: var(--muted); line-height: 1.25; }
 .palets-actualizado { margin-left: auto; font-size: .85rem; color: var(--muted); }
 .palets-actualizado.sin-red { color: #b45309; font-weight: 600; }
 .palets-barra .btn-ghost { padding: 12px 18px; font-size: 1rem; }
@@ -332,18 +373,22 @@ body.bascula:not(.authed) .bascula-palets,
    Salen dos copias, cada una en su página: la 1 para el proveedor y la 2
    para el almacén. En una impresora de tickets son dos tickets seguidos.
 
-   ===== TAMAÑO DEL PAPEL: ajustar cuando esté la impresora =====
-   Solo hay que tocar --ticket-ancho (abajo) y, si hace falta, el margen
-   de @page:
-     - Tickets de 80 mm ........ --ticket-ancho: 72mm;  margin: 4mm
-     - Tickets de 58 mm ........ --ticket-ancho: 50mm;  margin: 2mm
+   ===== TAMAÑO DEL PAPEL =====
+   Impresora de tickets: 10POS RP-12N, papel de 80 mm (zona imprimible
+   de 72 mm según el fabricante). El ticket mide 72 mm
+   y el margen lateral de @page es de 4 mm: 4 + 72 + 4 = 80. Con más
+   margen (antes 6 mm) el ticket no cabía y se cortaba por la derecha.
+   Si algún día cambia la impresora, tocar --ticket-ancho y el margen:
+     - Tickets de 80 mm ........ --ticket-ancho: 72mm;  margin: 3mm 4mm
+     - Tickets de 58 mm ........ --ticket-ancho: 50mm;  margin: 2mm 4mm
      - Folio A4 / A5 ........... --ticket-ancho: 90mm;  margin: 10mm
-   Ahora está en 72 mm: sirve para tickets de 80 mm y en A4 ocupa una franja
-   a la izquierda. */
+   En el diálogo de imprimir: impresora RP-12N, tamaño de papel el de
+   80 mm del driver, márgenes "Predeterminados", escala 100 % y sin
+   encabezados ni pies de página. */
 :root { --ticket-ancho: 72mm; }
 
 @media print {
-  @page { size: auto; margin: 6mm; }
+  @page { size: auto; margin: 3mm 4mm; }
 
   /* El alto de pantalla (100vh) no vale al imprimir: en una pegatina de
      75 mm la página seguía en blanco hasta cubrirlo y salían 4 hojas. */

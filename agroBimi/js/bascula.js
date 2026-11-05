@@ -772,10 +772,16 @@
     const completos = palets.filter(paletCompleto);
     const cajasCompletos = completos.reduce((s, p) => s + (p.num_cajas || 0), 0);
 
-    $("paletsResumen").innerHTML = `
-      <span><b>${completos.length}</b> ${completos.length === 1 ? "palet completo" : "palets completos"}</span>
-      <span><b>${cajasCompletos}</b> cajas en cámara paletizadas pendientes de salir</span>
-      <span><b>${state.palets?.en_camara ?? 0}</b> cajas en cámara sin palet completo</span>`;
+    const dato = (clase, icono, numero, texto) => `
+      <div class="palets-dato ${clase}">
+        <span class="palets-dato-icono" aria-hidden="true">${icono}</span>
+        <div><b>${numero}</b><span>${texto}</span></div>
+      </div>`;
+    $("paletsResumen").innerHTML =
+      dato("dato-completos", "✔", completos.length,
+        completos.length === 1 ? "palet completo" : "palets completos") +
+      dato("dato-paletizadas", "▦", cajasCompletos, "cajas en cámara paletizadas pendientes de salir") +
+      dato("dato-sueltas", "⏳", state.palets?.en_camara ?? 0, "cajas en cámara sin palet completo");
 
     const verHoy = state.paletsFiltro === "hoy";
     document.querySelectorAll("#paletsFiltro [data-filtro]").forEach((b) => {
