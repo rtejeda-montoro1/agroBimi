@@ -108,12 +108,18 @@
     return Number.isFinite(n) ? n : 0;
   }
 
+  // Sin «-0»: restar una retención de 0 da un cero negativo (-0), y algo
+  // como -0,001 se redondea a cero; el formato los pintaba «-0,00 €».
+  function sinCeroNegativo(n, decimales) {
+    return redondear(n, decimales) === 0 ? 0 : n;
+  }
+
   function fmtNum(v, decimales = 0) {
     if (v === null || v === undefined || v === "" || !Number.isFinite(Number(v))) return "—";
     return new Intl.NumberFormat("es-ES", {
       minimumFractionDigits: decimales,
       maximumFractionDigits: decimales,
-    }).format(Number(v));
+    }).format(sinCeroNegativo(Number(v), decimales));
   }
 
   function fmtEuro(v, decimales = 2) {
@@ -123,7 +129,7 @@
       currency: "EUR",
       minimumFractionDigits: decimales,
       maximumFractionDigits: decimales,
-    }).format(Number(v));
+    }).format(sinCeroNegativo(Number(v), decimales));
   }
 
   // Redondeo a 2 decimales sin arrastrar el error binario de los float

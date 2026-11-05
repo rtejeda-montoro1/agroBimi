@@ -166,11 +166,11 @@
           <span>${App.escapar(etiquetaCampana(g.campana_id))}</span>
         </div>
         <div class="ciclo-card-datos">
-          <div><span>Plantas</span><b>${App.fmtNum(g.plantas)}</b></div>
-          <div><span>Cajas</span><b>${App.fmtNum(g.cajas)}</b></div>
           <div><span>Rendimiento</span><b class="destaca">${
             g.rendimiento === null ? "—" : `${App.fmtNum(g.rendimiento, 3)} cajas/planta`
           }</b></div>
+          <div><span>Plantas</span><b>${App.fmtNum(g.plantas)}</b></div>
+          <div><span>Cajas</span><b>${App.fmtNum(g.cajas)}</b></div>
           <div><span>Plantas por caja</span><b>${g.plantasPorCaja === null ? "—" : App.fmtNum(g.plantasPorCaja, 2)}</b></div>
           <div><span>1ª retirada</span><b>${App.formatearFecha(g.primeraRetirada)}</b></div>
           <div><span>Última entrada</span><b>${App.formatearFecha(g.ultimaEntrada)}</b></div>

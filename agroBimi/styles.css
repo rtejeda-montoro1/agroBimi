@@ -230,6 +230,39 @@ button:disabled {
   border-radius: 12px;
   box-shadow: var(--shadow);
 }
+/* Barra de scroll horizontal propia (js/ui.js, prepararScrollFlotante):
+   se queda pegada abajo de la pantalla mientras la tabla se ve. La de la
+   tabla se oculta para no ver dos (con el dedo se sigue pudiendo mover).
+   Carril claro con borde y tirador oscuro: se distingue bien dónde pulsar. */
+.tabla-wrap.con-scroll-flotante { scrollbar-width: none; }
+.tabla-wrap.con-scroll-flotante::-webkit-scrollbar { display: none; }
+.scroll-flotante {
+  position: sticky;
+  bottom: 4px;
+  z-index: 5;
+  height: 16px;
+  margin-top: 6px;
+  background: #e2e8f0;
+  border: 1px solid #94a3b8;
+  border-radius: 9px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, .15);
+  cursor: pointer;
+  touch-action: none;
+}
+.scroll-flotante[hidden] { display: none; }
+.scroll-flotante-tirador {
+  position: absolute;
+  top: 1px;
+  bottom: 1px;
+  left: 0;
+  background: #475569;
+  border-radius: 7px;
+  cursor: grab;
+}
+.scroll-flotante-tirador:hover,
+.scroll-flotante.arrastrando .scroll-flotante-tirador { background: #1e293b; }
+.scroll-flotante.arrastrando .scroll-flotante-tirador { cursor: grabbing; }
+
 .tabla-registros {
   width: 100%;
   border-collapse: collapse;
@@ -544,7 +577,9 @@ button:disabled {
 
 .ciclo-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  /* Más anchas que antes (250px): con dos columnas de datos, los números
+     de la derecha se salían de la tarjeta y se cortaban. */
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 380px), 1fr));
   gap: 10px;
   margin-top: 12px;
 }
@@ -564,14 +599,22 @@ button:disabled {
   border-bottom: 1px solid var(--border);
 }
 .ciclo-card-cab span { color: var(--muted); font-size: .78rem; }
-.ciclo-card-datos { display: grid; grid-template-columns: repeat(2, 1fr); gap: 2px 12px; }
+/* Dos columnas si caben; si no, una (nunca se corta un número). */
+.ciclo-card-datos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(165px, 1fr));
+  gap: 2px 16px;
+}
 .ciclo-card-datos > div {
   display: flex;
   justify-content: space-between;
   gap: 8px;
   font-size: .82rem;
   padding: 2px 0;
+  white-space: nowrap;
 }
+/* El rendimiento es lo que se mira: fila entera. */
+.ciclo-card-datos > div:has(.destaca) { grid-column: 1 / -1; }
 .ciclo-card-datos span { color: var(--muted); }
 .ciclo-card-datos .destaca { color: var(--success); }
 
@@ -751,97 +794,52 @@ button:disabled {
     font-size: 11pt;
   }
 
-  /* Recibo de compensación / liquidación: formato de la factura de siempre. */
-  .doc { color: #000; }
-  .doc-cab {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    gap: 24px;
-    border-bottom: 2pt solid #000;
-    padding-bottom: 8pt;
-    margin-bottom: 12pt;
-  }
-  .doc-cab h1 { margin: 0; font-size: 20pt; text-transform: uppercase; letter-spacing: .04em; }
-  .doc-num { margin: 2pt 0 0; font-size: 13pt; font-weight: 700; }
-  .doc-emisor, .doc-datos-cab { font-size: 9.5pt; text-align: right; }
-  .doc-datos-cab > div { display: flex; justify-content: flex-end; gap: 8pt; }
-  .doc-datos-cab span { color: #555; }
-
-  .doc-partes {
-    display: flex;
-    gap: 12pt;
-    margin-bottom: 12pt;
-  }
-  .doc-parte {
-    flex: 1;
+  /* Recibo de compensación / liquidación: igual que su vista previa en
+     pantalla (mismos bloques y clases que el modal: .factura-bloque,
+     .factura-datos, .totales-doc...). Aquí solo se fijan los colores y
+     tamaños de papel, para que salga igual con el tema claro o el oscuro. */
+  .recibo-vista { color: #000; font-family: Arial, Helvetica, sans-serif; font-size: 10pt; }
+  /* Dos copias (proveedor y almacén), cada una en su página. */
+  .recibo-vista + .recibo-vista { break-before: page; page-break-before: always; }
+  .recibo-cab { display: flex; justify-content: space-between; align-items: baseline; gap: 12pt; margin: 0 0 10pt; }
+  .recibo-vista h1 { margin: 0; font-size: 16pt; }
+  .recibo-copia { font-size: 9.5pt; font-weight: 700; color: #555; white-space: nowrap; }
+  /* Debajo de los conceptos: a la izquierda la firma (copia del
+     proveedor) y a la derecha los totales. */
+  .recibo-pie-conceptos { display: flex; justify-content: space-between; align-items: flex-end; gap: 16pt; }
+  .recibo-firma { flex: 0 1 200pt; text-align: center; font-size: 9pt; color: #555; }
+  .recibo-firma-hueco { height: 60pt; border-bottom: .75pt solid #000; margin-bottom: 3pt; }
+  .recibo-vista .factura-bloque {
     border: .75pt solid #999;
-    padding: 8pt 10pt;
-    font-size: 9.5pt;
+    border-radius: 6pt;
+    padding: 7pt 9pt;
+    margin-bottom: 9pt;
+    break-inside: avoid;
   }
-  .doc-parte h2 {
-    margin: 0 0 4pt;
-    font-size: 8pt;
+  .recibo-vista .factura-titulo { color: #555; font-size: 8pt; margin: 0 0 5pt; }
+  .recibo-vista .factura-datos { grid-template-columns: repeat(2, 1fr); gap: 0 16pt; }
+  .recibo-vista .factura-fila { font-size: 9.5pt; padding: 3pt 0; border-bottom: .5pt solid #ccc; }
+  .recibo-vista .factura-fila span { color: #555; }
+  .recibo-vista .factura-bloque p { margin: 0; }
+  .recibo-tabla { width: 100%; border-collapse: collapse; font-size: 9.5pt; }
+  .recibo-tabla th, .recibo-tabla td { padding: 4pt 6pt; text-align: left; border-bottom: .5pt solid #ccc; }
+  .recibo-tabla thead th {
+    font-size: 7.5pt;
     text-transform: uppercase;
-    letter-spacing: .06em;
-    color: #555;
+    letter-spacing: .03em;
+    border-bottom: .75pt solid #999;
+    background: #f1f1f1;
   }
-
-  .doc-datos {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 2pt 12pt;
-    border: .75pt solid #999;
-    padding: 8pt 10pt;
-    margin-bottom: 12pt;
-    font-size: 9.5pt;
-  }
-  .doc-datos > div { display: flex; justify-content: space-between; gap: 8pt; }
-  .doc-datos span { color: #555; }
-
-  .doc-tabla {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 9.5pt;
-  }
-  .doc-tabla th, .doc-tabla td {
-    border: .75pt solid #999;
-    padding: 5pt 7pt;
-    text-align: left;
-  }
-  .doc-tabla thead th, .doc-tabla tfoot th { background: #eee; }
-  .doc-tabla .der { text-align: right; }
-
-  .doc-totales {
-    margin: 12pt 0 0;
-    margin-left: auto;
-    width: 78mm;
-    font-size: 10pt;
-  }
-  .doc-totales > div {
-    display: flex;
-    justify-content: space-between;
-    gap: 8pt;
-    padding: 3pt 0;
-    border-bottom: .5pt solid #ccc;
-  }
-  .doc-totales span { color: #555; }
-  .doc-totales .doc-total {
-    border-bottom: none;
-    border-top: 1.5pt solid #000;
-    font-size: 12pt;
-    font-weight: 800;
-    padding-top: 5pt;
-  }
-  .doc-totales .doc-total span { color: #000; }
-
-  .doc-obs {
-    margin-top: 14pt;
-    border: .75pt solid #999;
-    padding: 8pt 10pt;
-    font-size: 9.5pt;
-  }
-  .doc-pie { margin-top: 14pt; font-size: 9pt; color: #555; font-style: italic; }
+  .recibo-tabla .col-num { text-align: right; font-variant-numeric: tabular-nums; }
+  .recibo-tabla .negativo { color: #b91c1c; }
+  .recibo-vista .totales-doc { margin-top: 8pt; }
+  .recibo-vista .totales-doc > div { font-size: 10pt; min-width: 220pt; border-bottom: .5pt solid #ccc; }
+  .recibo-vista .totales-doc span { color: #555; }
+  .recibo-vista .totales-doc .total-final { font-size: 13pt; font-weight: 700; border-top: 1pt solid #999; }
+  .recibo-vista .totales-doc .total-final span { color: #000; }
+  /* <b> dentro de negrita sube a 900 y Windows cambia a Arial Black. */
+  .recibo-vista .totales-doc .total-final b { font-weight: 700; }
+  .recibo-pie { margin-top: 10pt; font-size: 9pt; color: #555; font-style: italic; }
 
   /* Cajas y tablas del albarán (formato del recibo en papel del cliente). */
   .rec { color: #000; font-family: Arial, Helvetica, sans-serif; font-size: 10.5pt; }
@@ -948,7 +946,8 @@ button:disabled {
   /* Sin líneas entre agricultores, como la etiqueta a mano del cliente. */
   .etq-tabla td { padding: .8mm 1mm; }
   .etq-tabla .der { text-align: right; font-weight: 700; white-space: nowrap; }
-  .etq-fecha { margin-top: 3mm; font-size: 15pt; font-weight: 700; text-align: center; }
+  /* La fecha de llenado va al lado del número del palet. */
+  .etq-fecha { margin-left: 4mm; font-size: 13pt; font-weight: 700; }
 
   /* Carta de porte (CMR): copia la disposición del impreso del cliente.
      Cada ejemplar es una página A4 con márgenes estrechos. Lo que en papel

@@ -19,11 +19,20 @@
 
 (function initBascula() {
   const $ = (id) => document.getElementById(id);
-  const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  // La báscula guarda su sesión aparte (storageKey propio). Con la clave
+  // por defecto compartía la de la oficina: con la oficina abierta en el
+  // mismo navegador, bascula.html entraba sin pedir contraseña y con el
+  // usuario de la oficina.
+  const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    auth: { storageKey: "bimi-bascula-auth" },
+  });
 
   const KEY_CAMPANA = "bascula_campana";
   const KEY_PENDIENTES = "bascula_pendientes";
   const KEY_CACHE = "bascula_cache";
+  // Palets completos que la tablet ya conoce: los que no estén aquí se
+  // acaban de completar y se imprime su etiqueta sola.
+  const KEY_ETIQUETAS = "bascula_palets_completos";
   const MAX_CAJAS = 5000;
   // Si se apunta lo mismo al mismo agricultor en este margen, se pregunta
   // antes: casi siempre es un doble toque.
@@ -57,6 +66,7 @@
     paletsHora: null,  // cuándo se recibieron
     paletsFallo: false, // la última carga falló (sin red o error)
     paletsReq: 0,      // nº de la última carga pedida: las viejas se ignoran
+    paletsFiltro: "progreso", // "progreso" o "hoy" (completados hoy)
     cargaFallida: false, // la primera carga falló sin datos guardados: se reintenta
   };
 
@@ -369,6 +379,7 @@
     if (enviadas) {
       if (state.datosDeCache) cargarTodo();
       else cargarHoy().catch(() => {});
+      etiquetasDePaletsCompletados().catch(() => {});
       // Lo que se apuntó mientras se enviaba sale ya, sin esperar al
       // siguiente reintento (fuera de este envío, que aún tiene el turno).
       if (state.pendientes.some((p) => !p.error)) setTimeout(enviarPendientes, 0);
@@ -554,18 +565,22 @@
   // ------------------------------------------------------------------
   // paraEmpresa: el aviso «PENDIENTE DE ENVÍO» solo va en la copia de la
   // empresa; al agricultor no le aporta nada en su justificante.
+  // Textos del cliente: arriba «BIMI» y «Almacén Hortofrutícola»; el
+  // almacén receptor es el emisor de Ajustes (emisor_nombre).
+  // La fecha va debajo de las cajas. Sin referencia de la entrada: el
+  // cliente no quiere entregarla.
   function ticket(e, copia, paraEmpresa = false) {
-    // Referencia corta de la entrada (el principio de su uuid): permite
-    // encontrarla en la oficina si hay dudas con un justificante.
-    const ref = String(e.uuid || e.client_uuid || "").slice(0, 8).toUpperCase();
     return `
       <div class="ticket">
-        ${state.emisor ? `<div class="ticket-emisor">${escapar(state.emisor)}</div>` : ""}
-        <h1>Justificante</h1>
-        <div class="ticket-fecha">${escapar(fechaLarga(e.creado))} · ${hora(e.creado)}</div>
+        <div class="ticket-emisor">BIMI</div>
+        <h1>Almacén Hortofrutícola</h1>
 
         <dl class="ticket-datos">
-          <dt>Agricultor</dt><dd><b>${escapar(e.nombre)}</b></dd>
+          ${state.emisor ? `<dt class="ticket-receptor">Almacén receptor</dt>
+            <dd class="ticket-receptor"><b>${escapar(state.emisor)}</b></dd>
+            <div class="ticket-separador"></div>` : ""}
+          <dt>Proveedor</dt><dd><b>${escapar(e.nombre)}</b></dd>
+          <dt>Cultivo</dt><dd>Bimi</dd>
           <dt>Ciclo</dt><dd>${escapar(e.ciclo)}</dd>
         </dl>
 
@@ -578,9 +593,10 @@
           <b>${e.vacias || 0}</b>
         </div>
 
+        <div class="ticket-fecha">${escapar(fechaLarga(e.creado))} · ${hora(e.creado)}</div>
+
         ${e.pendiente && paraEmpresa ? `<div class="ticket-pendiente">PENDIENTE DE ENVÍO<br>
           <small>Guardada en la tablet sin red: aún no consta en la oficina.</small></div>` : ""}
-        ${ref ? `<div class="ticket-ref">Ref. ${escapar(ref)}</div>` : ""}
 
         <div class="ticket-firma">
           <div class="ticket-firma-hueco"></div>
@@ -593,16 +609,54 @@
   // dos tickets seguidos): no hay que cortar nada. El tamaño del papel se
   // ajusta en bascula.css.
   function imprimirJustificante(e) {
-    $("zonaImpresion").innerHTML =
-      ticket(e, "Copia para el agricultor") +
-      ticket(e, "Copia para la empresa", true);
+    encolarImpresion(() => justificanteParaImprimir(e));
+  }
 
-    // Al "Guardar como PDF" el navegador propone el título de la página como
-    // nombre del archivo: lo cambiamos mientras dura la impresión.
-    const tituloOriginal = document.title;
-    document.title = nombreArchivoJustificante(e);
-    window.addEventListener("afterprint", () => { document.title = tituloOriginal; }, { once: true });
-    window.print();
+  function justificanteParaImprimir(e) {
+    return {
+      html: ticket(e, "Copia para el proveedor") + ticket(e, "Copia para el almacén", true),
+      titulo: nombreArchivoJustificante(e),
+    };
+  }
+
+  // ------------------------------------------------------------------
+  //  Cola de impresión
+  //  Justificantes y etiquetas se imprimen de uno en uno y en el orden en
+  //  que se pidieron: la etiqueta de un palet que se completa con una
+  //  pesada de «Registrar e imprimir» sale DESPUÉS de su justificante,
+  //  aunque se sepa antes. preparar() puede ser async (el justificante
+  //  espera a la oficina) y devolver null si al final no hay que imprimir.
+  // ------------------------------------------------------------------
+  let colaImpresion = Promise.resolve();
+
+  function encolarImpresion(preparar) {
+    colaImpresion = colaImpresion
+      .then(preparar)
+      .then((trabajo) => (trabajo ? imprimirAhora(trabajo) : undefined))
+      .catch(() => {});
+    return colaImpresion;
+  }
+
+  function imprimirAhora({ html, titulo }) {
+    return new Promise((resolve) => {
+      $("zonaImpresion").innerHTML = html;
+      // Al "Guardar como PDF" el navegador propone el título de la página
+      // como nombre del archivo: lo cambiamos mientras dura la impresión.
+      const tituloOriginal = document.title;
+      document.title = titulo;
+      let hecho = false;
+      const fin = () => {
+        if (hecho) return;
+        hecho = true;
+        document.title = tituloOriginal;
+        resolve();
+      };
+      window.addEventListener("afterprint", fin, { once: true });
+      window.print();
+      // Por si el navegador no avisa del final (afterprint): que la cola
+      // no se quede parada.
+      setTimeout(fin, 60 * 1000);
+    });
   }
 
   // "Justificante José Pérez 2026-10-08 10.32". La hora evita que dos
@@ -690,7 +744,8 @@
     const agris = (p.lineas || []).map((l) => `
         <li><span>${escapar(l.nombre)}</span><b>${l.cajas}</b></li>`).join("");
     return `
-      <article class="palet-card${completo ? " completo" : ""}">
+      <article class="palet-card${completo ? " completo" : " incompleto"}">
+        ${completo ? "" : '<div class="palet-card-estado">⏳ En progreso · Incompleto</div>'}
         <div class="palet-card-cab">
           <span class="palet-card-num">Palet nº ${escapar(p.secuencia ?? "—")}</span>
           <span class="palet-card-cod">${escapar(p.codigo || "")}</span>
@@ -707,14 +762,14 @@
       </article>`;
   }
 
+  // Se ven los palets en progreso o, con el botón, los completados hoy
+  // (los de días anteriores se ven en la oficina).
   function pintarPalets() {
     const palets = state.palets?.palets || [];
-    // Completos por fecha de completado, el más reciente primero (criterio
-    // provisional hasta que el cliente diga otro). Sin fecha, al final.
-    const fechaMs = (p) => (p.fecha_completo ? new Date(p.fecha_completo).getTime() : -Infinity);
-    const completos = palets.filter(paletCompleto)
-      .sort((x, y) => fechaMs(y) - fechaMs(x) || (y.secuencia ?? 0) - (x.secuencia ?? 0));
+    const hoy = diaLocal();
     const enCurso = palets.filter((p) => !paletCompleto(p));
+    const completosHoy = palets.filter((p) => paletCompleto(p) && p.fecha_completo === hoy);
+    const completos = palets.filter(paletCompleto);
     const cajasCompletos = completos.reduce((s, p) => s + (p.num_cajas || 0), 0);
 
     $("paletsResumen").innerHTML = `
@@ -722,15 +777,19 @@
       <span><b>${cajasCompletos}</b> cajas en cámara paletizadas pendientes de salir</span>
       <span><b>${state.palets?.en_camara ?? 0}</b> cajas en cámara sin palet completo</span>`;
 
-    const grupo = (titulo, lista) => lista.length
-      ? `<section class="palets-grupo">
-           <div class="bascula-paso">${titulo}</div>
-           <div class="palets-grid">${lista.map(tarjetaPalet).join("")}</div>
-         </section>`
-      : "";
-    $("listaPalets").innerHTML = palets.length
-      ? grupo("Completos · listos para salir", completos) + grupo("En progreso", enCurso)
-      : '<div class="empty">No hay palets pendientes de salida.</div>';
+    const verHoy = state.paletsFiltro === "hoy";
+    document.querySelectorAll("#paletsFiltro [data-filtro]").forEach((b) => {
+      const activo = b.dataset.filtro === state.paletsFiltro;
+      b.classList.toggle("activo", activo);
+      b.setAttribute("aria-selected", String(activo));
+      const n = b.dataset.filtro === "hoy" ? completosHoy.length : enCurso.length;
+      b.textContent = `${b.dataset.filtro === "hoy" ? "Completos hoy" : "En progreso"} (${n})`;
+    });
+
+    const lista = verHoy ? completosHoy : enCurso;
+    $("listaPalets").innerHTML = lista.length
+      ? `<div class="palets-grid">${lista.map(tarjetaPalet).join("")}</div>`
+      : `<div class="empty">${verHoy ? "Hoy no se ha completado ningún palet." : "No hay palets en progreso."}</div>`;
   }
 
   // Igual que la etiqueta de la oficina (js/palets.js, etiquetaHTML).
@@ -743,11 +802,11 @@
     return `
       <div class="etq">
         <div class="etq-cabecera">
-          <span class="etq-numero">${p.secuencia != null ? `Palet nº ${escapar(p.secuencia)}` : ""}</span>
+          <span class="etq-numero">${p.secuencia != null ? `Palet nº ${escapar(p.secuencia)}` : ""}<span
+            class="etq-fecha">${p.fecha_completo ? fechaCorta(p.fecha_completo) : "En progreso"}</span></span>
           <span class="etq-codigo">${escapar(p.codigo || "")}</span>
         </div>
         <table class="etq-tabla"><tbody>${filas}</tbody></table>
-        <div class="etq-fecha">${p.fecha_completo ? fechaCorta(p.fecha_completo) : "En progreso"}</div>
       </div>`;
   }
 
@@ -758,16 +817,44 @@
         !confirm(`El palet ${p.codigo || ""} todavía no está completo. ¿Imprimir la etiqueta igualmente?`)) {
       return;
     }
-    const ancho = state.palets.etiqueta_ancho_mm || 105;
-    const alto = state.palets.etiqueta_alto_mm || 75;
-    // Este @page va después de bascula.css: manda sobre el del justificante.
-    $("zonaImpresion").innerHTML =
-      `<style>@page { size: ${ancho}mm ${alto}mm; margin: 4mm; }</style>${etiquetaHTML(p)}`;
+    encolarImpresion(() => etiquetaParaImprimir(p, state.palets));
+  }
 
-    const tituloOriginal = document.title;
-    document.title = `Etiqueta ${p.codigo || "palet"}`;
-    window.addEventListener("afterprint", () => { document.title = tituloOriginal; }, { once: true });
-    window.print();
+  function etiquetaParaImprimir(p, datos) {
+    const ancho = datos?.etiqueta_ancho_mm || 105;
+    const alto = datos?.etiqueta_alto_mm || 75;
+    // Este @page va después de bascula.css: manda sobre el del justificante.
+    return {
+      html: `<style>@page { size: ${ancho}mm ${alto}mm; margin: 4mm; }</style>${etiquetaHTML(p)}`,
+      titulo: `Etiqueta ${p.codigo || "palet"}`,
+    };
+  }
+
+  // Tras enviar pesadas: si con ellas se ha completado algún palet, se
+  // imprime su etiqueta sin que nadie lo pida. La tablet recuerda qué
+  // palets completos conoce; uno que no conocía y se ha completado hoy es
+  // nuevo. Si un palet vuelve a «en progreso» (se anula una pesada) y se
+  // completa otra vez, su etiqueta vuelve a salir.
+  // soloAnotar: al entrar solo se apuntan los que ya hay, para no
+  // imprimir de golpe los de antes.
+  async function etiquetasDePaletsCompletados({ soloAnotar = false } = {}) {
+    const { data, error } = await db.rpc("bascula_palets");
+    if (error || !data) return;
+    const cap = data.cajas_por_palet || 60;
+    const completos = (data.palets || []).filter((p) => (p.num_cajas || 0) >= cap);
+    const conocidos = almacen.leer(KEY_ETIQUETAS, null);
+    almacen.guardar(KEY_ETIQUETAS, completos.map((p) => p.id));
+    if (soloAnotar || !Array.isArray(conocidos)) return;
+
+    const hoy = diaLocal();
+    const nuevos = completos
+      .filter((p) => !conocidos.includes(p.id) && p.fecha_completo === hoy)
+      .sort((a, b) => (a.secuencia ?? 0) - (b.secuencia ?? 0));
+    if (!nuevos.length) return;
+    toast(nuevos.length === 1
+      ? `Palet ${nuevos[0].codigo} completo: imprimiendo su etiqueta`
+      : `${nuevos.length} palets completos: imprimiendo sus etiquetas`);
+    nuevos.forEach((p) => encolarImpresion(() => etiquetaParaImprimir(p, data)));
   }
 
   function cambiarVista(vista) {
@@ -776,7 +863,12 @@
     document.querySelector(".bascula-main").hidden = palets;
     $("vistaPalets").hidden = !palets;
     $("btnVista").textContent = palets ? "⚖ Báscula" : "📦 Palets";
-    if (palets) cargarPalets(true);
+    // Al entrar se empieza siempre por los que están en progreso.
+    if (palets) {
+      state.paletsFiltro = "progreso";
+      if (state.palets) pintarPalets();
+      cargarPalets(true);
+    }
   }
 
   // ------------------------------------------------------------------
@@ -895,16 +987,20 @@
   //  - rechazada: no se imprime y se avisa;
   //  - sin confirmar (sin red): se imprime marcado «PENDIENTE DE ENVÍO» y
   //    con la referencia, para poder cuadrarlo después.
-  async function imprimirTrasEnvio(entrada) {
+  // Coge su turno en la cola de impresión ya, antes de esperar: así la
+  // etiqueta de un palet que complete esta pesada sale detrás.
+  function imprimirTrasEnvio(entrada) {
     toast("Enviando a la oficina…");
-    const estado = await esperarEnvio(entrada.uuid);
-    if (estado === "rechazada") {
-      const p = leerCola().find((x) => x.uuid === entrada.uuid);
-      alert(`No se ha impreso el justificante: la oficina no ha aceptado la entrada de ${entrada.nombre}.\n\n` +
-        `${p?.error || ""}\n\nRevísala en la lista de hoy.`);
-      return;
-    }
-    imprimirJustificante({ ...entrada, creado: entrada.pesada_en, pendiente: estado !== "enviada" });
+    encolarImpresion(async () => {
+      const estado = await esperarEnvio(entrada.uuid);
+      if (estado === "rechazada") {
+        const p = leerCola().find((x) => x.uuid === entrada.uuid);
+        alert(`No se ha impreso el justificante: la oficina no ha aceptado la entrada de ${entrada.nombre}.\n\n` +
+          `${p?.error || ""}\n\nRevísala en la lista de hoy.`);
+        return null;
+      }
+      return justificanteParaImprimir({ ...entrada, creado: entrada.pesada_en, pendiente: estado !== "enviada" });
+    });
   }
 
   async function anular(id) {
@@ -1004,7 +1100,11 @@
     }
     if (!state.cargado) {
       state.cargado = true;
-      cargarTodo().then(enviarPendientes);
+      // Primero se apuntan los palets completos que ya hay (no se
+      // imprimen) y después se envía lo pendiente.
+      cargarTodo()
+        .then(() => etiquetasDePaletsCompletados({ soloAnotar: true }).catch(() => {}))
+        .then(enviarPendientes);
     }
     temporizadores.push(
       setInterval(() => {
@@ -1023,18 +1123,17 @@
       e.preventDefault();
       $("loginError").textContent = "";
       const btn = $("btnLogin");
+      if (btn.disabled) return;
       btn.disabled = true;
       btn.textContent = "Entrando...";
-      const { error } = await db.auth.signInWithPassword({
-        email: $("email").value.trim(),
-        password: $("password").value,
-      });
+      // Con el mismo bloqueo por intentos fallidos que la oficina.
+      const mensaje = await LoginBloqueo.entrar(
+        db, $("email").value.trim(), $("password").value);
       btn.disabled = false;
       btn.textContent = "Entrar";
-      if (error) {
-        $("loginError").textContent = error.status === 400
-          ? "Email o contraseña incorrectos."
-          : "No se pudo conectar. Inténtalo de nuevo.";
+      if (mensaje) {
+        $("loginError").textContent = mensaje;
+        $("password").value = "";
         return;
       }
       $("loginForm").reset();
@@ -1132,6 +1231,12 @@
     $("btnVista").addEventListener("click", () =>
       cambiarVista(state.vista === "palets" ? "bascula" : "palets"));
     $("btnRecargarPalets").addEventListener("click", () => cargarPalets(true));
+    $("paletsFiltro").addEventListener("click", (e) => {
+      const b = e.target.closest("[data-filtro]");
+      if (!b || b.dataset.filtro === state.paletsFiltro) return;
+      state.paletsFiltro = b.dataset.filtro;
+      pintarPalets();
+    });
     $("listaPalets").addEventListener("click", (e) => {
       const b = e.target.closest("[data-etiqueta]");
       if (b) imprimirEtiqueta(b.dataset.etiqueta);

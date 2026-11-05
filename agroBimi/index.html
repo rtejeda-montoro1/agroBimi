@@ -92,8 +92,9 @@
         <button class="btn-modulo" id="btnLiquidarAgricultor">🧾 Liquidaciones</button>
       </div>
 
-      <!-- Rendimiento por ciclo: cajas de bimi / plantas retiradas -->
-      <details class="panel-resumen" id="panelResumenCiclos" open>
+      <!-- Rendimiento por ciclo: cajas de bimi / plantas retiradas. Cerrado
+           por defecto (ocupa mucho): se abre al pulsarlo. -->
+      <details class="panel-resumen" id="panelResumenCiclos">
         <summary>📈 Rendimiento por ciclo</summary>
         <div class="ciclo-cards" id="resumenCiclos"></div>
       </details>
@@ -724,12 +725,12 @@
       <input type="hidden" id="facturaRegistroId" />
 
       <div class="factura-bloque">
-        <h3 class="factura-titulo">Emisor</h3>
+        <h3 class="factura-titulo">Emisor/Cliente</h3>
         <div class="factura-datos" id="facturaEmisor"></div>
       </div>
 
       <div class="factura-bloque">
-        <h3 class="factura-titulo">Agricultor</h3>
+        <h3 class="factura-titulo">Agricultor/Proveedor</h3>
         <div class="factura-datos" id="facturaCliente"></div>
       </div>
 
@@ -1332,6 +1333,7 @@
   <script src="js/core.js"></script>
   <script src="js/utils.js"></script>
   <script src="js/ajustes.js"></script>
+  <script src="js/login-bloqueo.js"></script>
   <script src="js/auth.js"></script>
   <script src="js/agricultores.js"></script>
   <script src="js/campanas.js"></script>

@@ -909,6 +909,23 @@ begin
 end;
 $$;
 
+-- Borra, de los palets indicados, los que se han quedado sin ninguna caja
+-- y siguen en la cámara. Pasa al anular o corregir a la baja la pesada que
+-- había abierto un palet nuevo: antes quedaba un palet a 0 en la lista.
+-- Solo se mira en los palets que acaban de perder cajas (un palet que la
+-- oficina está rellenando a mano no se toca a medias).
+create or replace function public.palets_quitar_vacios(p_ids bigint[])
+returns void
+language sql
+set search_path = public
+as $$
+  delete from palets p
+  where p.id = any(p_ids)
+    and p.fecha_salida is null
+    and p.albaran_id is null
+    and not exists (select 1 from palet_lineas l where l.palet_id = p.id);
+$$;
+
 -- Códigos de los palets COMPLETOS (sin salida) de los que habría que quitar
 -- cajas si el registro pasa a tener p_cajas_nuevas. Null si no se toca
 -- ninguno. Mismo orden que registros_paletizar_trg (abajo).
@@ -964,6 +981,7 @@ declare
   v_linea  record;
   v_quita  integer;
   v_cap    integer := public.cajas_por_palet();
+  v_tocados bigint[] := '{}';
 begin
   if tg_op = 'INSERT' then
     perform public.paletizar_registro(new.id);
@@ -978,12 +996,13 @@ begin
             - coalesce(new.cajas_entradas, 0);
 
   for v_linea in
-    select l.id, l.num_cajas
+    select l.id, l.palet_id, l.num_cajas
     from palet_lineas l join palets p on p.id = l.palet_id
     where l.registro_id = new.id and p.fecha_salida is null
     order by (p.num_cajas >= v_cap), p.secuencia desc nulls first, l.id desc
   loop
     exit when v_exceso <= 0;
+    v_tocados := v_tocados || v_linea.palet_id;
     v_quita := least(v_exceso, v_linea.num_cajas);
     if v_quita = v_linea.num_cajas then
       delete from palet_lineas where id = v_linea.id;
@@ -996,6 +1015,7 @@ begin
   if v_exceso > 0 then
     raise exception 'No se puede: % cajas de esta entrada ya han salido en un palet. Anula antes el albarán de salida.', v_exceso;
   end if;
+  perform public.palets_quitar_vacios(v_tocados);
 
   if coalesce(new.cajas_entradas, 0) > coalesce(old.cajas_entradas, 0) then
     perform public.paletizar_registro(new.id, new.cajas_entradas - coalesce(old.cajas_entradas, 0));
@@ -1012,16 +1032,27 @@ create trigger registros_paletizar
   after insert or update of cajas_entradas, agricultor_id, fecha on registros
   for each row execute function public.registros_paletizar_trg();
 
--- No se puede borrar una pesada cuyas cajas ya salieron en un palet.
+-- No se puede borrar una pesada cuyas cajas ya salieron en un palet. Si
+-- se puede, sus cajas salen de los palets aquí mismo (en vez de dejarlo al
+-- "on delete cascade") para borrar los palets que se queden vacíos.
 create or replace function public.registros_borrar_paletizado_trg()
 returns trigger
 language plpgsql
 set search_path = public
 as $$
+declare
+  v_palets bigint[];
 begin
   if exists (select 1 from palet_lineas l join palets p on p.id = l.palet_id
              where l.registro_id = old.id and p.fecha_salida is not null) then
     raise exception 'No se puede borrar: las cajas de esta entrada ya han salido en un palet. Anula antes el albarán de salida.';
+  end if;
+  with borradas as (
+    delete from palet_lineas where registro_id = old.id returning palet_id
+  )
+  select array_agg(distinct palet_id) into v_palets from borradas;
+  if v_palets is not null then
+    perform public.palets_quitar_vacios(v_palets);
   end if;
   return old;
 end;
@@ -1058,6 +1089,7 @@ declare
   v_id    bigint := p_palet_id;
   v_sec   integer;
   v_serie text;
+  v_tocados bigint[] := '{}';
 begin
   perform pg_advisory_xact_lock(hashtext('agrobimi_paletizar'));
 
@@ -1103,13 +1135,15 @@ begin
 
     v_falta := v_item.n - v_libre;
     for v_linea in
-      select l.id, l.num_cajas
+      select l.id, l.palet_id, l.num_cajas
       from palet_lineas l join palets p on p.id = l.palet_id
       where l.registro_id = v_item.registro_id
         and p.fecha_salida is null and p.num_cajas < v_cap
+        and p.id <> v_id
       order by p.secuencia desc nulls first, l.id desc
     loop
       exit when v_falta <= 0;
+      v_tocados := v_tocados || v_linea.palet_id;
       v_quita := least(v_falta, v_linea.num_cajas);
       if v_quita = v_linea.num_cajas then
         delete from palet_lineas where id = v_linea.id;
@@ -1129,6 +1163,14 @@ begin
   select coalesce(sum(num_cajas), 0) into v_total from palet_lineas where palet_id = v_id;
   if v_total > v_cap then
     raise exception 'Un palet lleva como mucho % cajas (este tendría %).', v_cap, v_total;
+  end if;
+  -- Los palets de los que se han pasado cajas a este y se quedan vacíos, y
+  -- este mismo si se ha dejado sin cajas (en la oficina ya no hay botón de
+  -- eliminar palet: vaciarlo es la forma de quitarlo). Devuelve null si
+  -- este se ha borrado.
+  perform public.palets_quitar_vacios(v_tocados || v_id);
+  if not exists (select 1 from palets where id = v_id) then
+    return null;
   end if;
   return v_id;
 end;
@@ -1234,7 +1276,7 @@ begin
     'cajas_por_palet()', 'paletizado_desde()',
     'numero_documento(text, integer, integer)',
     'siguiente_numero(text, integer)',
-    'paletizar_registro(bigint, integer)',
+    'paletizar_registro(bigint, integer)', 'palets_quitar_vacios(bigint[])',
     'palet_guardar_lineas(bigint, jsonb)',
     'albaran_crear(jsonb, bigint[])', 'albaran_anular(bigint)'
   ]::text[]
@@ -1704,3 +1746,126 @@ $$;
 
 revoke all on function public.liquidacion_facturar(bigint, boolean, text, date) from public, anon;
 grant execute on function public.liquidacion_facturar(bigint, boolean, text, date) to authenticated;
+
+
+-- 22) BLOQUEO DEL LOGIN POR INTENTOS FALLIDOS
+--     Tras 5 contraseñas incorrectas seguidas con el mismo email, ese
+--     email queda bloqueado 24 horas, en la oficina y en la báscula, desde
+--     cualquier navegador o equipo. Antes el contador se guardaba en el
+--     navegador: en la báscula no había, y con otra pestaña privada u otro
+--     equipo se empezaba de cero.
+--     Las páginas lo consultan antes de entrar (login_bloqueado), apuntan
+--     cada contraseña incorrecta (login_fallido) y, al entrar bien, ponen
+--     el contador a cero (login_correcto).
+--     Es una barrera de la web: quien llame directamente a la API de
+--     Supabase no pasa por aquí (para eso están los límites del propio
+--     Supabase).
+--
+--     Para desbloquear un email antes de tiempo (editor SQL de Supabase):
+--       delete from login_bloqueos where email = 'oficina@tu-dominio.com';
+create table if not exists login_bloqueos (
+  email           text        primary key,
+  fallos          integer     not null default 0,
+  ultimo_fallo    timestamptz not null default now(),
+  bloqueado_hasta timestamptz
+);
+
+-- Nadie la lee directamente: solo a través de las funciones de abajo.
+alter table login_bloqueos enable row level security;
+revoke all on table login_bloqueos from anon, authenticated;
+
+-- Hasta cuándo está bloqueado el email (null si no lo está). La llama la
+-- pantalla de login, aún sin sesión.
+create or replace function public.login_bloqueado(p_email text)
+returns timestamptz
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select bloqueado_hasta from login_bloqueos
+  where email = lower(trim(p_email)) and bloqueado_hasta > now();
+$$;
+
+-- Apunta una contraseña incorrecta. Los fallos se cuentan seguidos: si el
+-- anterior fue hace más de 24 horas, o ya pasó un bloqueo, se empieza de
+-- nuevo. Devuelve cuántos intentos quedan y, si se ha bloqueado, hasta
+-- cuándo.
+create or replace function public.login_fallido(p_email text)
+returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path = public
+as $$
+declare
+  c_max      constant integer  := 5;
+  c_bloqueo  constant interval := interval '24 hours';
+  v_email    text := lower(trim(coalesce(p_email, '')));
+  v_fallos   integer;
+  v_hasta    timestamptz;
+begin
+  if v_email = '' or length(v_email) > 320 then
+    return null;
+  end if;
+
+  -- Limpieza: lo que hace una semana que no falla ni está bloqueado.
+  delete from login_bloqueos
+  where ultimo_fallo < now() - interval '7 days'
+    and (bloqueado_hasta is null or bloqueado_hasta < now());
+
+  insert into login_bloqueos as b (email, fallos, ultimo_fallo)
+  values (v_email, 1, now())
+  on conflict (email) do update set
+    fallos = case
+      when b.bloqueado_hasta > now() then b.fallos  -- ya bloqueado: no suma
+      when b.bloqueado_hasta is not null
+        or b.ultimo_fallo < now() - c_bloqueo then 1
+      else b.fallos + 1
+    end,
+    bloqueado_hasta = case when b.bloqueado_hasta > now() then b.bloqueado_hasta end,
+    ultimo_fallo = now()
+  returning fallos, bloqueado_hasta into v_fallos, v_hasta;
+
+  if v_hasta is null and v_fallos >= c_max then
+    v_hasta := now() + c_bloqueo;
+    update login_bloqueos set bloqueado_hasta = v_hasta where email = v_email;
+  end if;
+
+  return jsonb_build_object(
+    'quedan', greatest(c_max - v_fallos, 0),
+    'bloqueado_hasta', v_hasta);
+end;
+$$;
+
+-- Al entrar bien: pone a cero el contador del propio usuario. Devuelve
+-- false si su email está bloqueado (alguien lo bloqueó mientras tanto):
+-- la página cierra entonces la sesión.
+create or replace function public.login_correcto()
+returns boolean
+language plpgsql
+volatile
+security definer
+set search_path = public
+as $$
+declare
+  v_email text := (select lower(email) from auth.users where id = auth.uid());
+begin
+  if v_email is null then
+    return true;
+  end if;
+  if exists (select 1 from login_bloqueos
+             where email = v_email and bloqueado_hasta > now()) then
+    return false;
+  end if;
+  delete from login_bloqueos where email = v_email;
+  return true;
+end;
+$$;
+
+revoke all on function public.login_bloqueado(text) from public;
+revoke all on function public.login_fallido(text) from public;
+revoke all on function public.login_correcto() from public, anon;
+grant execute on function public.login_bloqueado(text) to anon, authenticated;
+grant execute on function public.login_fallido(text) to anon, authenticated;
+grant execute on function public.login_correcto() to authenticated;

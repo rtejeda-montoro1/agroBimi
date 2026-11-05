@@ -138,9 +138,11 @@ oficina.
   (`fecha_salida` + `albaran_id`).
 - Corregir una pesada a la baja o borrarla quita sus cajas de sus palets sin
   salida (del mas reciente al mas antiguo). Si ya salieron, la base de datos
-  lo impide.
+  lo impide. Un palet sin salida que se queda sin cajas se borra solo
+  (`palets_quitar_vacios`); su numero no se reutiliza.
 - Edicion manual: `palet_guardar_lineas(palet, lineas)` toma las cajas de lo
-  que la pesada tenga sin palet o en otros palets en formacion.
+  que la pesada tenga sin palet o en otros palets en formacion. No hay boton
+  de eliminar palet: dejarlo sin cajas desde Editar lo borra.
 - Salida: `albaran_crear(datos, palets)` numera el albaran (`serie_albaran`),
   da salida a los palets y pone la fecha de salida en `registros.fecha_cmr`
   de sus pesadas, todo a la vez; `albaran_anular` los devuelve y deja en
@@ -154,7 +156,8 @@ oficina.
 - Solo se paletizan las pesadas desde `paletizado_desde` (Ajustes). Los palets
   de la version anterior (sin pesadas detras) no se rellenan.
 
-La etiqueta se imprime con un `@page` (sin nombre) del tamano de Ajustes
+La etiqueta lleva arriba el numero del palet con la fecha de llenado al lado
+(o "En progreso"). Se imprime con un `@page` (sin nombre) del tamano de Ajustes
 (`etiqueta_ancho_mm` x `etiqueta_alto_mm`, 105 x 75 por defecto). La tabla
 `camara_entradas` y la vista `camara_saldos` (guardar cajas en camara a mano)
 ya no estan en `schema.sql`: la migracion `2026-11-04_quitar_sin_uso.sql` las
@@ -214,8 +217,24 @@ no caduca (no hay cierre por inactividad), pero ese usuario no puede leer
 ni escribir ninguna tabla: solo usar las funciones `bascula_*`, que
 listan agricultores y campanas, apuntan cajas y anulan lo apuntado hoy
 que no este liquidado. Si se intenta usar en la app principal, se le
-redirige a la bascula. No se ha hecho sin login porque la web es publica:
+redirige a la bascula (y alli tiene que entrar). No se ha hecho sin login porque la web es publica:
 cualquiera con la URL podria apuntar cajas a un agricultor.
+La bascula guarda su sesion aparte de la de la oficina (`storageKey`
+propio): abrir `bascula.html` en un navegador con la oficina abierta pide
+la contrasena en vez de entrar con el usuario de la oficina.
+
+Login (oficina y bascula): tras 5 contrasenas incorrectas seguidas con el
+mismo email, ese email queda bloqueado 24 horas desde cualquier navegador
+(`schema.sql`, seccion 22; tabla `login_bloqueos`). Para desbloquearlo
+antes, en el editor SQL de Supabase:
+`delete from login_bloqueos where email = 'el-email@...';`
+
+Etiqueta automatica: cuando una pesada enviada desde la tablet completa un
+palet, la tablet abre sola la impresion de su etiqueta (detras del
+justificante, si se pidio). La tablet recuerda los palets completos que ya
+conoce (`bascula_palets_completos` en localStorage); al entrar solo los
+apunta, sin imprimir. Para imprimir sin el dialogo del navegador, Chrome de
+escritorio con `--kiosk-printing` (va a la impresora predeterminada).
 
 Sin red: cada entrada se guarda primero en la tablet (localStorage) y
 despues se envia; si no hay conexion se queda en cola y se reintenta sola
@@ -228,10 +247,11 @@ servidor despues. El servidor rechaza pesadas futuras o de hace mas de 7
 dias; las rechazadas se quedan en la tablet a la vista para revisarlas.
 
 Justificante: cada entrada se imprime (navegador -> imprimir) en dos copias,
-cada una en su pagina: 1 "Copia para el agricultor", 2 "Copia para la
-empresa", con nombre del
-agricultor, ciclo, cajas entradas, cajas vacias retiradas, fecha y hora y
-hueco para la firma. El tamano del papel esta pendiente de la impresora: se
+cada una en su pagina: 1 "Copia para el proveedor", 2 "Copia para el
+almacen". Lleva arriba "BIMI" y "Almacen Hortofruticola"; luego el almacen
+receptor (el emisor de Ajustes), proveedor (el agricultor), cultivo (Bimi),
+ciclo, cajas entradas, cajas vacias retiradas, fecha y hora y hueco para la
+firma. El tamano del papel esta pendiente de la impresora: se
 ajusta en `bascula.css` con `--ticket-ancho` y el margen de `@page` (ahora
 72 mm, valido para tickets de 80 mm y para A4).
 

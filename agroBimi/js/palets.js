@@ -184,7 +184,6 @@
           <td class="col-acciones">
             <button class="btn-ghost btn-sm" data-etiqueta-palet="${p.id}">🏷 Etiqueta</button>
             ${salido ? "" : `<button class="btn-edit btn-sm" data-edit-palet="${p.id}">Editar</button>`}
-            ${salido ? "" : `<button class="btn-del btn-sm" data-del-palet="${p.id}">Eliminar</button>`}
           </td>
         </tr>`;
         }).join("");
@@ -377,10 +376,16 @@
       App.toast("Indica las cajas que lleva el palet.");
       return;
     }
+    // No hay botón de eliminar palet: un palet que se deja sin cajas se
+    // borra solo (palet_guardar_lineas).
+    if (id && conCajas.length === 0 &&
+        !confirm("El palet se queda sin cajas, así que se borrará y sus cajas vuelven a la cámara sin palet. ¿Seguir?")) {
+      return;
+    }
 
     // Al crear, la base de datos numera el palet y le pone sus cajas a la
     // vez: si algo falla no queda un palet vacío.
-    const { error } = await App.db.rpc("palet_guardar_lineas", {
+    const { data: idGuardado, error } = await App.db.rpc("palet_guardar_lineas", {
       p_palet_id: id ? parseInt(id, 10) : null,
       p_lineas: conCajas.map(({ registro_id, num_cajas }) => ({ registro_id, num_cajas })),
     });
@@ -390,7 +395,7 @@
     }
 
     App.cerrarModal(App.dom.modalPalet);
-    App.toast(id ? "Palet actualizado" : "Palet creado");
+    App.toast(!id ? "Palet creado" : idGuardado == null ? "Palet borrado (se quedó sin cajas)" : "Palet actualizado");
     await refrescarPalets();
   }
 
@@ -400,9 +405,9 @@
   // El tamaño sale de Ajustes (por defecto 105 × 75 mm). Cada etiqueta
   // va en su propia página de ese tamaño.
   // Como la etiqueta en papel del cliente: cada agricultor con sus cajas
-  // (sumando sus pesadas) y la fecha de llenado. Arriba, el número del
-  // palet bien visible a la izquierda (para distinguir las etiquetas
-  // sueltas antes de pegarlas) y el código pequeño a la derecha.
+  // (sumando sus pesadas). Arriba, el número del palet bien visible a la
+  // izquierda (para distinguir las etiquetas sueltas antes de pegarlas)
+  // con la fecha de llenado al lado, y el código pequeño a la derecha.
   function etiquetaHTML(p) {
     const numero = p.secuencia ?? String(p.codigo || "").replace(/\D+/g, "").replace(/^0+(?=\d)/, "");
     const porAgri = new Map();
@@ -418,11 +423,11 @@
     return `
       <div class="etq">
         <div class="etq-cabecera">
-          <span class="etq-numero">${numero ? `Palet nº ${App.escapar(String(numero))}` : ""}</span>
+          <span class="etq-numero">${numero ? `Palet nº ${App.escapar(String(numero))}` : ""}<span
+            class="etq-fecha">${p.fecha_completo ? App.formatearFecha(p.fecha_completo) : "En progreso"}</span></span>
           <span class="etq-codigo">${App.escapar(p.codigo || "")}</span>
         </div>
         <table class="etq-tabla"><tbody>${filas}</tbody></table>
-        <div class="etq-fecha">${p.fecha_completo ? App.formatearFecha(p.fecha_completo) : "En progreso"}</div>
       </div>`;
   }
 
@@ -464,7 +469,6 @@
 
     const etiqueta = e.target.closest("[data-etiqueta-palet]");
     const editar = e.target.closest("[data-edit-palet]");
-    const eliminar = e.target.closest("[data-del-palet]");
 
     if (etiqueta) {
       imprimirEtiquetas([etiqueta.dataset.etiquetaPalet]);
@@ -473,21 +477,6 @@
     if (editar) {
       const p = paletPorId(editar.dataset.editPalet);
       if (p) await abrirModalPalet(p);
-      return;
-    }
-    if (eliminar) {
-      const p = paletPorId(eliminar.dataset.delPalet);
-      if (!p) return;
-      if (!confirm(`¿Eliminar el palet ${p.codigo || ""}?\n\nSus ${App.fmtNum(p.num_cajas)} cajas vuelven a la cámara sin palet. Esta acción no se puede deshacer.`)) return;
-      const { data: borrados, error } = await App.db.from("palets").delete()
-        .eq("id", p.id).is("fecha_salida", null).select("id");
-      if (error) {
-        App.toast("Error: " + error.message);
-        return;
-      }
-      // Si ya tenía salida (otra pestaña, la lista estaba vieja) no se borra.
-      App.toast((borrados || []).length ? "Palet eliminado" : "No se ha eliminado: el palet ya tiene salida.");
-      await refrescarPalets();
     }
   }
 

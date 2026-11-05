@@ -245,8 +245,8 @@ body.bascula:not(.authed) .bascula-palets,
 .hoy-pendiente, .hoy-rechazada { padding-left: 6px; padding-right: 6px; border-radius: 6px; }
 
 /* ---- Vista de palets ----
-   Una tarjeta por palet: completos primero (son los que se etiquetan),
-   después los que se están llenando. */
+   Una tarjeta por palet: los que se están llenando o, con el botón, los
+   completados hoy. */
 .bascula-palets { padding: 14px 16px; }
 .palets-barra {
   display: flex;
@@ -261,7 +261,18 @@ body.bascula:not(.authed) .bascula-palets,
 .palets-actualizado { margin-left: auto; font-size: .85rem; color: var(--muted); }
 .palets-actualizado.sin-red { color: #b45309; font-weight: 600; }
 .palets-barra .btn-ghost { padding: 12px 18px; font-size: 1rem; }
-.palets-grupo { margin: 0 0 18px; }
+/* En progreso / Completos hoy: dos botones como los del ciclo. */
+.palets-filtro { display: flex; gap: 8px; }
+.palets-filtro-btn {
+  padding: 12px 18px;
+  font-size: 1rem;
+  font-weight: 700;
+  background: var(--bg);
+  color: var(--text);
+  border: 2px solid var(--border);
+  border-radius: 10px;
+}
+.palets-filtro-btn.activo { background: var(--primary); border-color: var(--primary); color: #fff; }
 .palets-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
@@ -278,6 +289,21 @@ body.bascula:not(.authed) .bascula-palets,
   box-shadow: var(--shadow);
 }
 .palet-card.completo { border-color: rgba(22, 163, 74, .55); }
+/* El que aún se llena tiene que verse a simple vista: borde discontinuo
+   ámbar y una franja arriba. */
+.palet-card.incompleto { border-style: dashed; border-color: rgba(217, 119, 6, .7); }
+.palet-card-estado {
+  margin: -2px 0 2px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(217, 119, 6, .14);
+  color: #b45309;
+  font-size: .95rem;
+  font-weight: 800;
+  letter-spacing: .03em;
+  text-transform: uppercase;
+  text-align: center;
+}
 .palet-card-cab { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
 .palet-card-num { font-size: 1.35rem; font-weight: 800; }
 .palet-card-cod { font-size: .8rem; color: var(--muted); }
@@ -303,8 +329,8 @@ body.bascula:not(.authed) .bascula-palets,
 .palet-card:not(.completo) .btn-etiqueta { background: transparent; color: var(--primary); border: 1px solid var(--border); }
 
 /* ---- Justificante impreso ----
-   Salen dos copias, cada una en su página: la 1 para el agricultor y la 2
-   para la empresa. En una impresora de tickets son dos tickets seguidos.
+   Salen dos copias, cada una en su página: la 1 para el proveedor y la 2
+   para el almacén. En una impresora de tickets son dos tickets seguidos.
 
    ===== TAMAÑO DEL PAPEL: ajustar cuando esté la impresora =====
    Solo hay que tocar --ticket-ancho (abajo) y, si hace falta, el margen
@@ -347,7 +373,7 @@ body.bascula:not(.authed) .bascula-palets,
     border-bottom: 1pt solid #000;
     padding: 1.5mm 0;
   }
-  .ticket-fecha { text-align: center; margin-bottom: 3mm; text-transform: capitalize; }
+  .ticket-fecha { text-align: center; margin: 3mm 0 2mm; text-transform: capitalize; }
   .ticket-datos {
     display: grid;
     grid-template-columns: auto 1fr;
@@ -356,6 +382,13 @@ body.bascula:not(.authed) .bascula-palets,
   }
   .ticket-datos dt { color: #444; }
   .ticket-datos dd { margin: 0; text-align: right; overflow-wrap: anywhere; }
+  /* Almacén receptor: letra más pequeña para que el nombre entero quepa en
+     una línea, y una raya debajo que lo separa de los datos de la entrada. */
+  /* 7pt: cabe en una línea aunque el nombre esté en mayúsculas. Si aun
+     así no cupiera, pasa a la línea de abajo (alineado a la derecha) en vez
+     de salirse del papel. */
+  .ticket-datos .ticket-receptor { font-size: 7pt; align-self: baseline; }
+  .ticket-separador { grid-column: 1 / -1; border-top: .75pt solid #000; margin: .5mm 0; }
   .ticket-cajas {
     display: flex;
     justify-content: space-between;
@@ -375,7 +408,6 @@ body.bascula:not(.authed) .bascula-palets,
     font-weight: 700;
   }
   .ticket-pendiente small { font-weight: 400; font-size: 8.5pt; }
-  .ticket-ref { text-align: center; font-size: 8.5pt; color: #444; margin-bottom: 1mm; }
   .ticket-firma { text-align: center; font-size: 9pt; color: #444; }
   .ticket-firma-hueco { height: 22mm; border-bottom: .75pt solid #000; margin-bottom: 1mm; }
 }

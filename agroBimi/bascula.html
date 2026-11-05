@@ -24,7 +24,8 @@
   - Sin red se sigue trabajando: las entradas se guardan en la tablet y se
     envían solas al volver la conexión.
   - Cada entrada se puede imprimir como justificante con hueco para firma.
-  - Con «📦 Palets» se ven los palets sin salida y se imprime su etiqueta
+  - Con «📦 Palets» se ven los palets en progreso (o, con su botón, los
+    completados hoy) y se imprime su etiqueta
     (bascula_palets(), sección 17). Para corregirlos, desde la oficina.
 -->
 <body class="bascula">
@@ -139,6 +140,10 @@
   <!-- Palets sin salida, para verlos e imprimir su etiqueta (solo lectura) -->
   <main class="bascula-palets" id="vistaPalets" hidden>
     <div class="palets-barra">
+      <div class="palets-filtro" id="paletsFiltro" role="tablist" aria-label="Qué palets ver">
+        <button type="button" class="palets-filtro-btn activo" data-filtro="progreso" role="tab">En progreso</button>
+        <button type="button" class="palets-filtro-btn" data-filtro="hoy" role="tab">Completos hoy</button>
+      </div>
       <div class="palets-resumen" id="paletsResumen"></div>
       <span class="palets-actualizado" id="paletsActualizado"></span>
       <button type="button" class="btn-ghost" id="btnRecargarPalets">⟳ Actualizar</button>
@@ -157,6 +162,7 @@
           integrity="sha384-TcHRA3zBbn+Lexh5n+Oil4guNPOS3rjNDpGRAN46u/s/mB2IZ50ceC6TYDU2yvgK"
           crossorigin="anonymous"></script>
   <script src="config.js"></script>
+  <script src="js/login-bloqueo.js"></script>
   <script src="js/bascula.js"></script>
 </body>
 </html>

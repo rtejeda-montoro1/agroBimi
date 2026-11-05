@@ -357,7 +357,7 @@
 
         <table class="rec-tabla alb-detalle">
           <thead>
-            <tr><th>PALET</th><th>AGRICULTOR</th><th>FECHA ENTRADA</th><th class="der">CAJAS</th></tr>
+            <tr><th>PALET</th><th>PROVEEDOR</th><th>FECHA ENTRADA</th><th class="der">CAJAS</th></tr>
           </thead>
           <tbody>${detalle}</tbody>
           <tfoot>
@@ -365,9 +365,9 @@
           </tfoot>
         </table>
 
-        <h3 class="alb-subtitulo">Resumen por agricultor</h3>
+        <h3 class="alb-subtitulo">Resumen por proveedor</h3>
         <table class="rec-tabla alb-resumen">
-          <thead><tr><th>AGRICULTOR</th><th>NIF</th><th class="der">CAJAS</th></tr></thead>
+          <thead><tr><th>PROVEEDOR</th><th>NIF</th><th class="der">CAJAS</th></tr></thead>
           <tbody>${resumen}</tbody>
         </table>
 
