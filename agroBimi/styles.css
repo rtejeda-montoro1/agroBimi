@@ -442,6 +442,8 @@ button:disabled {
 }
 .modal.modal-ancho { max-width: 640px; }
 .modal h2 { margin: 0 0 16px; font-size: 1.15rem; }
+/* Nº del recibo, debajo del título y algo más pequeño. */
+.titulo-numero { display: block; margin-top: 2px; font-size: .9em; font-weight: 600; }
 .modal .sub-modal { margin: -8px 0 16px; color: var(--muted); font-size: .82rem; }
 .total-destacado {
   display: flex;
@@ -802,7 +804,10 @@ button:disabled {
   /* Dos copias (proveedor y almacén), cada una en su página. */
   .recibo-vista + .recibo-vista { break-before: page; page-break-before: always; }
   .recibo-cab { display: flex; justify-content: space-between; align-items: baseline; gap: 12pt; margin: 0 0 10pt; }
-  .recibo-vista h1 { margin: 0; font-size: 16pt; }
+  .recibo-vista h1 { margin: 0; font-size: 12.5pt; white-space: nowrap; }
+  .recibo-vista h1 .titulo-numero { display: block; margin-top: 2pt; font-size: 10.5pt; }
+  /* El copia, a la altura del título y no del número de debajo. */
+  .recibo-cab { align-items: flex-start; }
   .recibo-copia { font-size: 9.5pt; font-weight: 700; color: #555; white-space: nowrap; }
   /* Debajo de los conceptos: a la izquierda la firma (copia del
      proveedor) y a la derecha los totales. */

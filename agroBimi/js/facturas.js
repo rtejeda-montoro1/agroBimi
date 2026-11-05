@@ -42,8 +42,10 @@
       facturada,
       agricultor,
       titulo: facturada
-        ? `Recibo de compensación ${liquidacion.num_factura || ""}`.trim()
+        ? "RECIBO DE COMPENSACIÓN - FACTURA"
         : `Liquidación ${liquidacion.numero || ""}`.trim(),
+      // El nº del recibo va debajo del título, en letra más pequeña.
+      numeroTitulo: facturada ? (liquidacion.num_factura || "") : "",
       emisor: {
         "Nombre": emisor.nombre,
         "NIF / CIF": emisor.nif,
@@ -52,11 +54,13 @@
         "Teléfono": emisor.telefono,
         "Email": emisor.email,
       },
+      // En dos columnas: Nombre, Dirección y Teléfono a la izquierda, como
+      // en el emisor; Código, NIF e IBAN a la derecha.
       proveedor: {
-        "Código": App.fmtCodigo(agricultor.codigo),
         "Nombre": agricultor.nombre,
-        "NIF": agricultor.nif,
+        "Código": App.fmtCodigo(agricultor.codigo),
         "Dirección": direccionCompleta(agricultor),
+        "NIF": agricultor.nif,
         "Teléfono": agricultor.telefono,
         "IBAN": agricultor.iban,
       },
@@ -95,7 +99,8 @@
     liquidacionVista = liquidacion;
     const d = documento(liquidacion);
 
-    App.$("modalFacturaTitulo").textContent = `${d.facturada ? "🧾" : "📄"} ${d.titulo}`;
+    App.$("modalFacturaTitulo").innerHTML = `${d.facturada ? "🧾" : "📄"} ${App.escapar(d.titulo)}` +
+      (d.numeroTitulo ? `<span class="titulo-numero">${App.escapar(d.numeroTitulo)}</span>` : "");
     App.$("facturaAviso").hidden = d.facturada || d.deAgricultor;
     App.$("facturaRegistroId").value = liquidacion.id;
 
@@ -148,11 +153,12 @@
     return `
       <div class="recibo-vista">
         <div class="recibo-cab">
-          <h1>${App.escapar(d.titulo)}</h1>
+          <h1>${App.escapar(d.titulo)}${d.numeroTitulo
+            ? `<span class="titulo-numero">${App.escapar(d.numeroTitulo)}</span>` : ""}</h1>
           <span class="recibo-copia">${App.escapar(copia)}</span>
         </div>
-        ${bloque("Emisor/Cliente", `<div class="factura-datos">${filasDatos(d.emisor)}</div>`)}
-        ${bloque("Agricultor/Proveedor", `<div class="factura-datos">${filasDatos(d.proveedor)}</div>`)}
+        ${bloque("Emisor / Cliente", `<div class="factura-datos">${filasDatos(d.emisor)}</div>`)}
+        ${bloque("Agricultor / Proveedor", `<div class="factura-datos">${filasDatos(d.proveedor)}</div>`)}
         ${bloque("Datos del documento", `<div class="factura-datos">${filasDatos(d.registro)}</div>`)}
         ${bloque("Conceptos", `
           <table class="recibo-tabla">
