@@ -2,6 +2,40 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const { createElement, escapeHtml, fakeQuery, loadModule } = require("./helpers");
 
+function createSalidaHarness(queryResponse) {
+  const elements = new Map();
+  const getElement = (id) => {
+    if (!elements.has(id)) {
+      elements.set(id, createElement(id === "salidaPeso" ? { dataset: {} } : {}));
+    }
+    return elements.get(id);
+  };
+  const modal = createElement();
+  const form = createElement({ reset() { this.resetCount = (this.resetCount || 0) + 1; } });
+  const app = {
+    state: { albaranesActuales: [], paletsActuales: [] },
+    dom: { modalSalida: modal, formSalida: form },
+    db: { from: () => fakeQuery(queryResponse) },
+    $: getElement,
+    asegurarAgricultoresTodos: async () => {},
+    cargarDatosPaletizado: async () => true,
+    traerTodo: (createQuery) => createQuery(),
+    hoyISO: () => "2026-03-01",
+    escapar: escapeHtml,
+    filaMensaje: (span, message) => `<tr><td colspan="${span}">${message}</td></tr>`,
+    abrirModal: (element) => element.classList.add("open"),
+    toast: (message) => { app.lastToast = message; },
+    num: (value) => Number(value) || 0,
+    fmtNum: String,
+    redondear: (value) => Math.round(value * 100) / 100,
+    paramNum: () => 9.25,
+  };
+  const context = loadModule("salidas.js", app, {
+    document: { querySelectorAll: () => [] },
+  });
+  return { app, elements, form, modal, module: context.window.App };
+}
+
 test("salidas loads and filters albaranes, safely rendering totals and destinations", async () => {
   const ids = ["cuerpoAlbaranes", "filtroDesdeSalidas", "filtroHastaSalidas", "filtroDestinoSalidas", "countAlbaranes"];
   const elements = new Map(ids.map((id) => [id, createElement()]));
@@ -41,4 +75,38 @@ test("salidas loads and filters albaranes, safely rendering totals and destinati
   assert.match(elements.get("cuerpoAlbaranes").innerHTML, /AA-1/);
   assert.match(elements.get("cuerpoAlbaranes").innerHTML, />70</);
   assert.doesNotMatch(elements.get("cuerpoAlbaranes").innerHTML, /ALB-2/);
+});
+
+test("salidas report history errors and do not open an incomplete form", async () => {
+  const error = { message: "offline" };
+  const { app, form, modal, module } = createSalidaHarness({ data: null, error });
+
+  await module.abrirModalSalida();
+
+  assert.match(app.lastToast, /Error al cargar los albaranes anteriores: offline/);
+  assert.equal(form.resetCount || 0, 0);
+  assert.equal(modal.classList.contains("open"), false);
+  assert.equal(app.state.albaranesActuales.length, 0);
+});
+
+test("salidas use the latest history when opening a new form", async () => {
+  const previous = {
+    destinatario_nombre: "Cliente habitual",
+    lugar_carga: "Granada",
+    marcas: "Verde",
+    naturaleza: "Bimi",
+  };
+  const { app, elements, form, modal, module } = createSalidaHarness({
+    data: [previous],
+    error: null,
+  });
+
+  await module.abrirModalSalida();
+
+  assert.equal(form.resetCount, 1);
+  assert.equal(app.state.albaranesActuales[0], previous);
+  assert.match(elements.get("listaDestinatarios").innerHTML, /Cliente habitual/);
+  assert.equal(elements.get("salidaLugarCarga").value, "Granada");
+  assert.equal(elements.get("salidaMarcas").value, "Verde");
+  assert.equal(modal.classList.contains("open"), true);
 });

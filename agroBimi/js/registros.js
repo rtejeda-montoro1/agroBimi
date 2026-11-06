@@ -224,8 +224,7 @@
     if (raw === "") return null;
 
     if (tipo === "num") {
-      const n = parseInt(raw, 10);
-      return Number.isNaN(n) ? null : n;
+      return Number(raw);
     }
 
     return raw;
@@ -303,6 +302,14 @@
     App.CAMPOS_REGISTRO.forEach(({ id: campo, tipo }) => {
       registro[campo] = leerValor(campo, tipo);
     });
+
+    const campoNumericoInvalido = App.CAMPOS_REGISTRO.find(({ id: campo, tipo }) =>
+      tipo === "num" && registro[campo] !== null && !Number.isInteger(registro[campo]));
+    if (campoNumericoInvalido) {
+      const etiqueta = document.querySelector(`label[for="${campoNumericoInvalido.id}"]`);
+      App.toast(`"${etiqueta ? etiqueta.textContent.trim() : campoNumericoInvalido.id}" debe ser un número entero.`);
+      return;
+    }
 
     const fechaFutura = primeraFechaFutura(registro);
     if (fechaFutura) {

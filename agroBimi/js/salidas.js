@@ -89,7 +89,7 @@
   async function abrirModalSalida(idsMarcados = []) {
     await App.asegurarAgricultoresTodos();
     if (!(await App.cargarDatosPaletizado())) return;
-    if (App.state.albaranesActuales.length === 0) await cargarAlbaranesSilencioso();
+    if (App.state.albaranesActuales.length === 0 && !(await cargarAlbaranesSilencioso())) return;
 
     App.dom.formSalida.reset();
     App.$("salidaFecha").value = App.hoyISO();
@@ -123,11 +123,16 @@
   }
 
   async function cargarAlbaranesSilencioso() {
-    const { data } = await App.traerTodo(() => App.db.from("albaranes_salida")
+    const { data, error } = await App.traerTodo(() => App.db.from("albaranes_salida")
       .select("*, palets(id,num_cajas)")
       .order("secuencia", { ascending: false, nullsFirst: false })
       .order("id"));
+    if (error) {
+      App.toast(`Error al cargar los albaranes anteriores: ${error.message}`);
+      return false;
+    }
     App.state.albaranesActuales = data || [];
+    return true;
   }
 
   // Lo que en el CMR suele repetirse (lugar de carga, mercancía,

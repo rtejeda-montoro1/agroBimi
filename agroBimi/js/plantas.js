@@ -315,9 +315,9 @@
       return;
     }
 
-    const plantas = parseInt(App.$("plantaNumPlantas").value, 10);
-    if (!Number.isFinite(plantas) || plantas <= 0) {
-      App.toast("Indica cuántas plantas se han retirado.");
+    const plantas = Number(App.$("plantaNumPlantas").value);
+    if (!Number.isInteger(plantas) || plantas <= 0) {
+      App.toast("Indica un número entero positivo de plantas.");
       return;
     }
 
