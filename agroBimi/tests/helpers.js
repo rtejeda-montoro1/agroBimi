@@ -57,6 +57,7 @@ function loadModule(filename, app, globals = {}) {
     alert: globals.alert || (() => {}),
     console,
   };
+  if (globals.XLSX) context.XLSX = globals.XLSX;
   if (globals.console) context.console = globals.console;
   vm.runInNewContext(
     fs.readFileSync(path.join(__dirname, "..", "js", filename), "utf8"),
