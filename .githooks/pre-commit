@@ -1,0 +1,12 @@
+#!/bin/sh
+
+branch=$(git branch --show-current)
+if [ "$branch" != "main" ]; then
+  exit 0
+fi
+
+printf '%s\n' "Running the AgroBimi tests before committing to main..."
+if ! npm --prefix agroBimi test; then
+  printf '%s\n' "Commit blocked: the AgroBimi test suite failed." >&2
+  exit 1
+fi

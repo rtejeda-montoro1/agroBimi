@@ -2,6 +2,69 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const { createElement, loadModule, flush } = require("./helpers");
 
+async function loadBasculaWithLabelError(labelError, rejectLabelQuery = false, rpcOverrides = {}) {
+  const elements = new Map();
+  const getElement = (id) => {
+    if (!elements.has(id)) elements.set(id, createElement());
+    return elements.get(id);
+  };
+  const bodyClasses = new Set();
+  const logs = [];
+  const windowListeners = new Map();
+  const window = {
+    addEventListener(type, handler) {
+      if (!windowListeners.has(type)) windowListeners.set(type, []);
+      windowListeners.get(type).push(handler);
+    },
+    print() {},
+  };
+  const document = {
+    title: "Báscula",
+    visibilityState: "hidden",
+    body: {
+      classList: {
+        toggle(name, enabled) {
+          if (enabled) bodyClasses.add(name);
+          else bodyClasses.delete(name);
+        },
+        contains: (name) => bodyClasses.has(name),
+      },
+    },
+    getElementById: getElement,
+    addEventListener() {},
+    querySelectorAll: () => [],
+    querySelector: (selector) => selector === ".bascula-main" ? getElement("bascula-main") : null,
+  };
+  const db = {
+    auth: {
+      getSession: async () => ({ data: { session: { user: { id: "operator" } } } }),
+      onAuthStateChange() {},
+      signOut: async () => ({ error: null }),
+    },
+    rpc: async (name) => {
+      if (rpcOverrides[name]) return rpcOverrides[name]();
+      if (name === "bascula_palets") {
+        if (rejectLabelQuery) throw labelError;
+        return { data: null, error: labelError };
+      }
+      if (name === "bascula_emisor") return { data: "", error: null };
+      return { data: [], error: null };
+    },
+  };
+  loadModule("bascula.js", {}, {
+    window,
+    document,
+    navigator: { onLine: true },
+    supabase: { createClient: () => db },
+    crypto: { randomUUID: () => "uuid" },
+    localStorage: { getItem: () => null, setItem() {}, removeItem() {} },
+    console: { error: (...args) => logs.push(args) },
+  });
+  await flush();
+  await flush();
+  return { elements, logs, windowListeners };
+}
+
 test("bascula reports a print error and continues with the next queued job", async () => {
   const elements = new Map();
   const getElement = (id) => {
@@ -87,4 +150,65 @@ test("bascula reports a print error and continues with the next queued job", asy
   assert.equal(logs.length, 1);
   assert.match(logs[0][0], /justificante/);
   assert.match(getElement("toast").textContent, /No se pudo imprimir el justificante/);
+});
+
+test("bascula reports an automatic label lookup error", async () => {
+  const { elements, logs } = await loadBasculaWithLabelError({ message: "offline", code: "NETWORK" });
+  assert.match(elements.get("toast").textContent, /No se pudieron comprobar los palets completos/);
+  assert.equal(logs.length, 1);
+  assert.match(logs[0][0], /comprobar los palets completos/);
+});
+
+test("bascula reports a rejected automatic label lookup", async () => {
+  const { elements, logs } = await loadBasculaWithLabelError(
+    new Error("request rejected"),
+    true
+  );
+  assert.match(elements.get("toast").textContent, /No se pudieron comprobar los palets completos/);
+  assert.equal(logs.length, 1);
+  assert.match(logs[0][1].message, /request rejected/);
+});
+
+test("bascula reports a rejected farmer refresh and preserves its last data", async () => {
+  let farmerCalls = 0;
+  const error = new Error("refresh rejected");
+  const { elements, logs } = await loadBasculaWithLabelError(null, false, {
+    bascula_palets: async () => ({ data: { cajas_por_palet: 60, palets: [] }, error: null }),
+    bascula_agricultores: async () => {
+      farmerCalls++;
+      if (farmerCalls === 1) return { data: [{ id: 5, nombre: "Anterior" }], error: null };
+      throw error;
+    },
+  });
+
+  elements.get("selCampana").dispatch("change");
+  await flush();
+  await flush();
+
+  assert.match(elements.get("toast").textContent, /No se pudieron actualizar los agricultores/);
+  assert.match(elements.get("toast").textContent, /puede estar desactualizada/);
+  assert.match(elements.get("gridAgricultores").innerHTML, /Anterior/);
+  assert.equal(logs.length, 1);
+  assert.match(logs[0][0], /actualizar los agricultores/);
+});
+
+test("bascula reports a rejected today refresh", async () => {
+  let todayCalls = 0;
+  const error = new Error("today refresh rejected");
+  const { elements, logs, windowListeners } = await loadBasculaWithLabelError(null, false, {
+    bascula_palets: async () => ({ data: { cajas_por_palet: 60, palets: [] }, error: null }),
+    bascula_hoy: async () => {
+      todayCalls++;
+      if (todayCalls === 1) return { data: [], error: null };
+      throw error;
+    },
+  });
+
+  (windowListeners.get("online") || []).forEach((handler) => handler());
+  await flush();
+  await flush();
+
+  assert.match(elements.get("toast").textContent, /No se pudieron actualizar las entradas de hoy/);
+  assert.equal(logs.length, 1);
+  assert.match(logs[0][0], /actualizar las entradas de hoy/);
 });

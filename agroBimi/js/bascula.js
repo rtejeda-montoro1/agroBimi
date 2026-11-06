@@ -71,6 +71,7 @@
   };
 
   let temporizadores = [];
+  const actualizacionesConError = new Set();
 
   // ------------------------------------------------------------------
   //  Utilidades
@@ -152,6 +153,14 @@
   function anotarRed(error) {
     if (error && !esRechazo(error)) marcarSinRed();
     else marcarEnLinea();
+  }
+
+  function notificarErrorActualizacion(datos, error) {
+    anotarRed(error);
+    console.error(`Error al actualizar ${datos}:`, error);
+    if (actualizacionesConError.has(datos)) return;
+    actualizacionesConError.add(datos);
+    toast(`No se pudieron actualizar ${datos}. La información mostrada puede estar desactualizada.`);
   }
 
   // ------------------------------------------------------------------
@@ -264,6 +273,7 @@
     const { data, error } = await db.rpc("bascula_agricultores", { p_campana_id: campanaId() });
     anotarRed(error);
     if (error) throw error;
+    actualizacionesConError.delete("los agricultores");
     state.agricultores = data || [];
     // Los ciclos de las entradas sin enviar son más recientes que los del servidor.
     state.pendientes.forEach((p) => {
@@ -283,6 +293,7 @@
     const { data, error } = await db.rpc("bascula_hoy");
     anotarRed(error);
     if (error) throw error;
+    actualizacionesConError.delete("las entradas de hoy");
     state.hoy = data || [];
     guardarCache();
     pintarHoy();
@@ -378,8 +389,8 @@
 
     if (enviadas) {
       if (state.datosDeCache) cargarTodo();
-      else cargarHoy().catch(() => {});
-      etiquetasDePaletsCompletados().catch(() => {});
+      else cargarHoy().catch((error) => notificarErrorActualizacion("las entradas de hoy", error));
+      etiquetasDePaletsCompletados().catch(notificarErrorEtiquetas);
       // Lo que se apuntó mientras se enviaba sale ya, sin esperar al
       // siguiente reintento (fuera de este envío, que aún tiene el turno).
       if (state.pendientes.some((p) => !p.error)) setTimeout(enviarPendientes, 0);
@@ -848,7 +859,15 @@
   // imprimir de golpe los de antes.
   async function etiquetasDePaletsCompletados({ soloAnotar = false } = {}) {
     const { data, error } = await db.rpc("bascula_palets");
-    if (error || !data) return;
+    if (error) {
+      anotarRed(error);
+      notificarErrorEtiquetas(error);
+      return;
+    }
+    if (!data) {
+      notificarErrorEtiquetas(new Error("Respuesta vacía al consultar los palets."), false);
+      return;
+    }
     const cap = data.cajas_por_palet || 60;
     const completos = (data.palets || []).filter((p) => (p.num_cajas || 0) >= cap);
     const conocidos = almacen.leer(KEY_ETIQUETAS, null);
@@ -865,6 +884,12 @@
       : `${nuevos.length} palets completos: imprimiendo sus etiquetas`);
     nuevos.forEach((p) =>
       encolarImpresion(() => etiquetaParaImprimir(p, data), `la etiqueta del palet ${p.codigo || ""}`.trim()));
+  }
+
+  function notificarErrorEtiquetas(error, actualizarRed = true) {
+    if (actualizarRed && error) anotarRed(error);
+    console.error("No se pudieron comprobar los palets completos:", error);
+    toast("No se pudieron comprobar los palets completos. Revisa la conexión.");
   }
 
   function cambiarVista(vista) {
@@ -1037,7 +1062,7 @@
     } else {
       toast(data ? "Entrada anulada" : "No se puede anular: corrígela desde la oficina");
     }
-    cargarHoy().catch(() => {});
+    cargarHoy().catch((error) => notificarErrorActualizacion("las entradas de hoy", error));
   }
 
   function descartarPendiente(uuid) {
@@ -1113,15 +1138,16 @@
       // Primero se apuntan los palets completos que ya hay (no se
       // imprimen) y después se envía lo pendiente.
       cargarTodo()
-        .then(() => etiquetasDePaletsCompletados({ soloAnotar: true }).catch(() => {}))
+        .then(() => etiquetasDePaletsCompletados({ soloAnotar: true }).catch(notificarErrorEtiquetas))
         .then(enviarPendientes);
     }
     temporizadores.push(
       setInterval(() => {
         if (state.cargaFallida || state.datosDeCache) cargarTodo().then(enviarPendientes);
-        else cargarHoy().catch(() => {});
+        else cargarHoy().catch((error) => notificarErrorActualizacion("las entradas de hoy", error));
       }, REFRESCO_HOY_MS),
-      setInterval(() => cargarAgricultores().catch(() => {}), REFRESCO_AGRICULTORES_MS),
+      setInterval(() => cargarAgricultores().catch((error) =>
+        notificarErrorActualizacion("los agricultores", error)), REFRESCO_AGRICULTORES_MS),
       setInterval(enviarPendientes, REINTENTO_ENVIO_MS),
       setInterval(pintarFecha, REFRESCO_HOY_MS),
       setInterval(() => { if (state.vista === "palets") cargarPalets(); }, REFRESCO_HOY_MS),
@@ -1161,7 +1187,7 @@
 
     $("selCampana").addEventListener("change", () => {
       almacen.guardar(KEY_CAMPANA, $("selCampana").value);
-      cargarAgricultores().catch(() => {});
+      cargarAgricultores().catch((error) => notificarErrorActualizacion("los agricultores", error));
     });
 
     $("buscar").addEventListener("input", pintarAgricultores);
@@ -1258,7 +1284,7 @@
       if (state.cargaFallida || state.datosDeCache) cargarTodo().then(enviarPendientes);
       else {
         enviarPendientes();
-        cargarHoy().catch(() => {});
+        cargarHoy().catch((error) => notificarErrorActualizacion("las entradas de hoy", error));
       }
       if (state.vista === "palets") cargarPalets();
     });
@@ -1275,7 +1301,7 @@
       // cambiado el día).
       if (document.body.classList.contains("authed")) {
         enviarPendientes();
-        cargarHoy().catch(() => {});
+        cargarHoy().catch((error) => notificarErrorActualizacion("las entradas de hoy", error));
       }
     });
     // Si se intenta cerrar la pestaña con entradas sin enviar, avisamos.
@@ -1290,7 +1316,7 @@
       pintarEntrada();
       pintarEstadoRed();
       if (state.pendientes.length < antes && document.body.classList.contains("authed")) {
-        cargarHoy().catch(() => {});
+        cargarHoy().catch((error) => notificarErrorActualizacion("las entradas de hoy", error));
       }
     });
     window.addEventListener("beforeunload", (e) => {

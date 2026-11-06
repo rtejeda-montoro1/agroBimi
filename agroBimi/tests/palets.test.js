@@ -1,6 +1,50 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { fakeQuery, loadModule } = require("./helpers");
+const { createElement, fakeQuery, loadModule } = require("./helpers");
+
+function createPaletSaveHarness(cantidad) {
+  const elements = new Map();
+  const getElement = (id) => {
+    if (!elements.has(id)) elements.set(id, createElement());
+    return elements.get(id);
+  };
+  const input = createElement({
+    value: cantidad,
+    dataset: { registro: "12", maxFila: "2000" },
+  });
+  const button = createElement();
+  const form = createElement();
+  let rpcArgs = null;
+  let toast = "";
+  const app = {
+    state: {},
+    dom: {
+      formPalet: form,
+      modalPalet: createElement(),
+      modalPalets: createElement(),
+    },
+    $: getElement,
+    db: { rpc: async (_name, args) => { rpcArgs = args; return { data: 4, error: null }; } },
+    paramNum: () => 2000,
+    num: (value) => Number(value) || 0,
+    fmtNum: String,
+    toast: (message) => { toast = message; },
+    cerrarModal() {},
+    salidasAbierto: () => false,
+  };
+  const module = loadModule("palets.js", app, {
+    document: { querySelectorAll: () => [input] },
+  }).window.App;
+  module.configurarEventosPalets();
+  return {
+    app,
+    form,
+    button,
+    input,
+    get rpcArgs() { return rpcArgs; },
+    get toast() { return toast; },
+  };
+}
 
 test("palets loads both camera datasets and determines pallet completion", async () => {
   const calls = [];
@@ -44,4 +88,23 @@ test("palets preserve current data if either camera query fails", async () => {
   const module = loadModule("palets.js", app).window.App;
   assert.equal(await module.cargarDatosPaletizado(), false);
   assert.equal(app.state.paletsActuales, oldPalets);
+});
+
+test("palets preserve exponential notation as its full integer quantity", async () => {
+  const harness = createPaletSaveHarness("1e3");
+  await harness.form.listeners.get("submit")[0]({
+    preventDefault() {},
+    submitter: harness.button,
+  });
+  assert.equal(harness.rpcArgs.p_lineas[0].num_cajas, 1000);
+});
+
+test("palets reject fractional quantities instead of truncating them", async () => {
+  const harness = createPaletSaveHarness("1.5");
+  await harness.form.listeners.get("submit")[0]({
+    preventDefault() {},
+    submitter: harness.button,
+  });
+  assert.equal(harness.rpcArgs, null);
+  assert.match(harness.toast, /número entero/);
 });

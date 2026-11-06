@@ -58,6 +58,14 @@ Las pruebas usan el test runner integrado de Node.js y no requieren instalar
 dependencias. Ejecuta este comando despues de cada cambio para comprobar los
 flujos y calculos principales de la aplicacion.
 
+Para bloquear commits en `main` cuando fallen las pruebas, activa el hook
+local una vez en cada clon:
+
+    git config core.hooksPath .githooks
+
+El hook ejecuta `npm --prefix agroBimi test` solo en la rama `main` y cancela el
+commit si la suite falla. `AGENTS.md` contiene la misma regla para los agentes.
+
 ## Puesta en marcha / actualizacion
 
 Ejecuta `agroBimi/schema.sql` completo en el editor SQL de Supabase. Es

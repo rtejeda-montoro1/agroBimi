@@ -269,9 +269,14 @@
     return Array.from(document.querySelectorAll(".input-linea-palet"))
       .map((input) => ({
         registro_id: parseInt(input.dataset.registro, 10),
-        num_cajas: parseInt(input.value, 10) || 0,
+        num_cajas: input.value.trim() === "" ? 0 : Number(input.value),
         max: maxFila(input),
       }));
+  }
+
+  function cantidadValida(input) {
+    const cantidad = input.value.trim() === "" ? 0 : Number(input.value);
+    return Number.isInteger(cantidad) ? cantidad : 0;
   }
 
   // Lo que esa pesada puede llegar a poner en el palet: lo que ya lleva más
@@ -291,12 +296,12 @@
   // con el palet lleno solo se pueden quitar cajas.
   function limitarEditor(editado = null) {
     const cap = cajasPorPalet();
-    const valor = (input) => Math.max(0, parseInt(input.value, 10) || 0);
+    const valor = (input) => Math.max(0, cantidadValida(input));
 
     if (editado?.classList.contains("input-linea-palet")) {
       const otros = totalEditor() - valor(editado);
       const tope = Math.max(0, Math.min(maxFila(editado), cap - otros));
-      if ((parseInt(editado.value, 10) || 0) < 0) editado.value = "";
+      if (Number(editado.value) < 0) editado.value = "";
       if (valor(editado) > tope) {
         editado.value = tope > 0 ? String(tope) : "";
         App.toast(tope === maxFila(editado)
@@ -329,7 +334,7 @@
   function completarDesde(registroId) {
     const input = document.querySelector(`.input-linea-palet[data-registro="${registroId}"]`);
     if (!input) return;
-    const actual = parseInt(input.value, 10) || 0;
+    const actual = Math.max(0, cantidadValida(input));
     const falta = cajasPorPalet() - totalEditor();
     if (falta <= 0) {
       App.toast("El palet ya está completo.");
@@ -359,6 +364,10 @@
   async function guardarPaletDatos() {
 
     const ls = lineasDelEditor();
+    if (ls.some((l) => !Number.isInteger(l.num_cajas))) {
+      App.toast("Las cajas de cada pesada deben ser un número entero.");
+      return;
+    }
     const mal = ls.find((l) => l.num_cajas < 0 || l.num_cajas > l.max);
     if (mal) {
       App.toast(`Una de las entradas solo tiene ${App.fmtNum(mal.max)} cajas disponibles.`);
