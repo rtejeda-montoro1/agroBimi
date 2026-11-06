@@ -18,6 +18,7 @@
   let temporizadorInactividad = null;
   let ultimaActividad = 0;
   let vigilando = false;
+  let generacionCarga = 0;
 
   // La última actividad de cualquier pestaña (la propia si no hay
   // localStorage, p. ej. en modo privado).
@@ -92,17 +93,56 @@
   // guarda su propia sesión (no comparte la de la oficina), así que allí
   // tendrá que entrar otra vez; aquí se cierra para no dejarla abierta.
   async function cargarDatosOIrABascula() {
-    const { data: esBascula, error } = await App.db.rpc("es_bascula");
-    if (!error && esBascula) {
-      await App.db.auth.signOut({ scope: "local" });
-      location.replace("bascula.html");
-      return;
+    const generacion = generacionCarga;
+    let detalle = "";
+    try {
+      const { data: esBascula, error } = await App.db.rpc("es_bascula");
+      if (error) throw error;
+      if (esBascula) {
+        await App.db.auth.signOut({ scope: "local" });
+        location.replace("bascula.html");
+        return;
+      }
+
+      // Los parámetros (precios, IVA, emisor) los necesitan las
+      // liquidaciones y el control de cajas.
+      const resultados = await Promise.all([
+        App.cargarParametros(),
+        App.cargarCampanas(),
+        App.cargarAgricultores(),
+      ]);
+      if (generacion !== generacionCarga || !document.body.classList.contains("authed")) return;
+      if (resultados.every(Boolean)) return;
+    } catch (error) {
+      if (generacion !== generacionCarga || !document.body.classList.contains("authed")) return;
+      detalle = error?.message || "";
     }
-    // Los parámetros (precios, IVA, emisor) los necesitan las
-    // liquidaciones y el control de cajas.
-    App.cargarParametros();
-    App.cargarCampanas();
-    App.cargarAgricultores();
+
+    if (generacion !== generacionCarga || !document.body.classList.contains("authed")) return;
+    App.state.datosCargados = false;
+    mostrarErrorCargaInicial(detalle);
+  }
+
+  function mostrarErrorCargaInicial(detalle = "") {
+    const mensaje = detalle
+      ? `<br>${App.escapar(detalle)}`
+      : "";
+    App.dom.listaAgricultores.innerHTML =
+      `<div class="error">No se pudieron cargar todos los datos iniciales.${mensaje}<br>` +
+      "Comprueba la conexión y vuelve a intentarlo." +
+      '<br><button type="button" class="btn-primary" data-reintentar-carga>Reintentar carga</button></div>';
+  }
+
+  function configurarReintentoCarga() {
+    App.dom.listaAgricultores.addEventListener("click", (e) => {
+      const boton = e.target.closest("[data-reintentar-carga]");
+      if (!boton || App.state.datosCargados) return;
+      e.stopPropagation();
+      App.state.datosCargados = true;
+      boton.disabled = true;
+      boton.textContent = "Reintentando...";
+      cargarDatosOIrABascula();
+    });
   }
 
   function aplicarSesion(session) {
@@ -119,6 +159,7 @@
     }
 
     detenerVigilanciaInactividad();
+    generacionCarga++;
     App.state.datosCargados = false;
     App.state.agricultoresTodos = [];
     App.dom.listaAgricultores.innerHTML = "";
@@ -129,6 +170,8 @@
   }
 
   function configurarEventosAuth() {
+    configurarReintentoCarga();
+
     // El bloqueo por intentos fallidos lo lleva el servidor
     // (js/login-bloqueo.js).
     App.dom.loginForm.addEventListener("submit", async (e) => {

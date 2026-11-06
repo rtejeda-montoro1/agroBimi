@@ -43,6 +43,17 @@ dentro de su propia carpeta.
 - agroBimi/js/reportes.js: exportacion a Excel.
 - agroBimi/js/ui.js: eventos de interfaz e inicializacion.
 - agroBimi/js/bascula.js: logica del puesto de la bascula (no usa App).
+- agroBimi/tests/: pruebas unitarias de autenticacion, agricultores, ajustes
+  y campanas.
+
+### Pruebas
+
+Con Node.js 18 o posterior, ejecuta desde la raiz:
+
+    npm --prefix agroBimi test
+
+Las pruebas usan el test runner integrado de Node.js y no requieren instalar
+dependencias.
 
 ## Puesta en marcha / actualizacion
 

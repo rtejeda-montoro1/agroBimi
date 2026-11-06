@@ -20,12 +20,13 @@
       // avisamos pero no bloqueamos.
       App.toast("No se pudieron cargar los ajustes: " + error.message);
       App.state.parametros = { ...App.PARAMETROS_DEFECTO };
-      return;
+      return false;
     }
 
     const guardados = {};
     (data || []).forEach((p) => { guardados[p.clave] = p.valor; });
     App.state.parametros = { ...App.PARAMETROS_DEFECTO, ...guardados };
+    return true;
   }
 
   // Lectura de un parámetro como texto o como número.

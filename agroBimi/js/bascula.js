@@ -609,7 +609,7 @@
   // dos tickets seguidos): no hay que cortar nada. El tamaño del papel se
   // ajusta en bascula.css.
   function imprimirJustificante(e) {
-    encolarImpresion(() => justificanteParaImprimir(e));
+    encolarImpresion(() => justificanteParaImprimir(e), "el justificante");
   }
 
   function justificanteParaImprimir(e) {
@@ -629,11 +629,14 @@
   // ------------------------------------------------------------------
   let colaImpresion = Promise.resolve();
 
-  function encolarImpresion(preparar) {
+  function encolarImpresion(preparar, descripcion = "el documento") {
     colaImpresion = colaImpresion
       .then(preparar)
       .then((trabajo) => (trabajo ? imprimirAhora(trabajo) : undefined))
-      .catch(() => {});
+      .catch((error) => {
+        console.error(`Error al imprimir ${descripcion}`, error);
+        toast(`No se pudo imprimir ${descripcion}. Vuelve a intentarlo.`);
+      });
     return colaImpresion;
   }
 
@@ -823,7 +826,7 @@
         !confirm(`El palet ${p.codigo || ""} todavía no está completo. ¿Imprimir la etiqueta igualmente?`)) {
       return;
     }
-    encolarImpresion(() => etiquetaParaImprimir(p, state.palets));
+    encolarImpresion(() => etiquetaParaImprimir(p, state.palets), `la etiqueta del palet ${p.codigo || ""}`.trim());
   }
 
   function etiquetaParaImprimir(p, datos) {
@@ -860,7 +863,8 @@
     toast(nuevos.length === 1
       ? `Palet ${nuevos[0].codigo} completo: imprimiendo su etiqueta`
       : `${nuevos.length} palets completos: imprimiendo sus etiquetas`);
-    nuevos.forEach((p) => encolarImpresion(() => etiquetaParaImprimir(p, data)));
+    nuevos.forEach((p) =>
+      encolarImpresion(() => etiquetaParaImprimir(p, data), `la etiqueta del palet ${p.codigo || ""}`.trim()));
   }
 
   function cambiarVista(vista) {
@@ -1006,7 +1010,7 @@
         return null;
       }
       return justificanteParaImprimir({ ...entrada, creado: entrada.pesada_en, pendiente: estado !== "enviada" });
-    });
+    }, `el justificante de ${entrada.nombre}`);
   }
 
   async function anular(id) {

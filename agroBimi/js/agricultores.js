@@ -23,7 +23,7 @@
     });
     if (error) {
       App.dom.listaAgricultores.innerHTML = `<div class="error">Error al cargar: ${App.escapar(error.message)}</div>`;
-      return;
+      return false;
     }
 
     App.state.agricultoresActuales = data || [];
@@ -31,6 +31,7 @@
     // reutilizamos para los desplegables de los modales de gestión.
     if (!buscar) guardarListaCompleta(App.state.agricultoresActuales);
     pintarAgricultores(App.state.agricultoresActuales);
+    return true;
   }
 
   function guardarListaCompleta(agricultores) {

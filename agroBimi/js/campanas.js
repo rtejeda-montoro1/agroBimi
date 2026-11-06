@@ -26,11 +26,12 @@
 
     if (error) {
       App.toast("Error al cargar campanas: " + error.message);
-      return;
+      return false;
     }
 
     App.state.campanasActuales = data || [];
     SELECTS_CAMPANA.forEach((cfg) => poblarSelectCampanas(App.$(cfg.id), cfg));
+    return true;
   }
 
   // Campaña que se propone por defecto: la más reciente (la de mayor id,
