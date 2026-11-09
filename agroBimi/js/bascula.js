@@ -227,7 +227,7 @@
   function usarCache() {
     const c = almacen.leer(KEY_CACHE, null);
     if (!c) return false;
-    state.agricultores = c.agricultores || [];
+    state.agricultores = ordenarPorCodigo(c.agricultores || []);
     state.campanas = c.campanas || [];
     state.emisor = c.emisor || "";
     // Lo de "hoy" solo vale si es del mismo día.
@@ -269,12 +269,20 @@
     if (!error) state.emisor = data || "";
   }
 
+  // Por código de agricultor, como en la app (los que no tengan, al final).
+  // También se ordena aquí por si la caché o la función del servidor son de
+  // antes de este cambio y vienen por nombre.
+  function ordenarPorCodigo(agricultores) {
+    return [...agricultores].sort((a, b) =>
+      (a.codigo ?? Infinity) - (b.codigo ?? Infinity) || (a.id ?? 0) - (b.id ?? 0));
+  }
+
   async function cargarAgricultores() {
     const { data, error } = await db.rpc("bascula_agricultores", { p_campana_id: campanaId() });
     anotarRed(error);
     if (error) throw error;
     actualizacionesConError.delete("los agricultores");
-    state.agricultores = data || [];
+    state.agricultores = ordenarPorCodigo(data || []);
     // Los ciclos de las entradas sin enviar son más recientes que los del servidor.
     state.pendientes.forEach((p) => {
       const a = state.agricultores.find((x) => x.id === p.agricultor_id);

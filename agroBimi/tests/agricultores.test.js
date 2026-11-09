@@ -58,3 +58,15 @@ test("agricultores load failure returns false and escapes the error", async () =
   assert.equal(await module.cargarAgricultores(), false);
   assert.match(elements.get("listaAgricultores").innerHTML, /&lt;sin conexión&gt;/);
 });
+
+test("agricultores list and dropdowns are ordered by farmer code", async () => {
+  const { module, calls } = createAgricultoresHarness({ data: [], error: null });
+  const orderBy = { codigo: ["order", "codigo", { ascending: true, nullsFirst: false }], id: ["order", "id"] };
+
+  await module.cargarAgricultores();
+  assert.deepEqual(JSON.parse(JSON.stringify(calls.filter(([name]) => name === "order"))), [orderBy.codigo, orderBy.id]);
+
+  calls.length = 0;
+  await module.asegurarAgricultoresTodos(true);
+  assert.deepEqual(JSON.parse(JSON.stringify(calls.filter(([name]) => name === "order"))), [orderBy.codigo, orderBy.id]);
+});

@@ -212,3 +212,22 @@ test("bascula reports a rejected today refresh", async () => {
   assert.equal(logs.length, 1);
   assert.match(logs[0][0], /actualizar las entradas de hoy/);
 });
+
+test("bascula shows farmers ordered by code, with uncoded farmers last", async () => {
+  const { elements } = await loadBasculaWithLabelError(null, false, {
+    bascula_palets: async () => ({ data: { cajas_por_palet: 60, palets: [] }, error: null }),
+    bascula_agricultores: async () => ({
+      data: [
+        { id: 1, codigo: 12, nombre: "Alba" },
+        { id: 2, codigo: null, nombre: "Bravo" },
+        { id: 3, codigo: 3, nombre: "Zeta" },
+        { id: 4, codigo: 7, nombre: "Marta" },
+      ],
+      error: null,
+    }),
+  });
+
+  const html = elements.get("gridAgricultores").innerHTML;
+  const orden = [...html.matchAll(/data-agri="(\d+)"/g)].map((m) => m[1]);
+  assert.deepEqual(orden, ["3", "4", "1", "2"]);
+});

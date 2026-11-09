@@ -453,7 +453,7 @@ as $$
            limit 1)
   from agricultores a
   where auth.uid() is not null
-  order by a.nombre;
+  order by a.codigo nulls last, a.id;
 $$;
 
 create or replace function public.bascula_campanas()

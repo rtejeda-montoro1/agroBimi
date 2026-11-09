@@ -18,7 +18,7 @@
 
     const { data, error } = await App.traerTodo(() => {
       const q = App.db.from("agricultores").select("*")
-        .order("nombre", { ascending: true }).order("id");
+        .order("codigo", { ascending: true, nullsFirst: false }).order("id");
       return filtroOr ? q.or(filtroOr) : q;
     });
     if (error) {
@@ -49,7 +49,8 @@
     const { data, error } = await App.db
       .from("agricultores")
       .select("*")
-      .order("nombre", { ascending: true });
+      .order("codigo", { ascending: true, nullsFirst: false })
+      .order("id");
 
     if (error) {
       App.toast("Error al cargar agricultores: " + error.message);
