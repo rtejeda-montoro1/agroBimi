@@ -53,3 +53,20 @@ test("campanas load failure preserves current state and reports failure", async 
   assert.equal(app.state.campanasActuales[0].nombre, "Anterior");
   assert.match(app.lastToast, /offline/);
 });
+
+test("campanas are only added from the campaign search, and every wired button exists", () => {
+  const fs = require("node:fs");
+  const path = require("node:path");
+  const html = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
+  const js = fs.readFileSync(path.join(__dirname, "..", "js", "campanas.js"), "utf8");
+
+  const vistaAgricultor = html.match(/<section id="vistaRegistros"[\s\S]*?<\/section>/)[0];
+  assert.doesNotMatch(vistaAgricultor, /Añadir campaña/);
+  assert.doesNotMatch(html, /id="btnAnadirCampana"/);
+  assert.match(html, /id="btnAnadirCampanaBuscar"/);
+
+  const eventos = js.match(/function configurarEventosCampanas\(\) \{[\s\S]*?\n  \}/)[0];
+  const ids = [...eventos.matchAll(/App\.\$\("([^"]+)"\)\.addEventListener/g)].map((m) => m[1]);
+  assert.ok(ids.length > 0);
+  for (const id of ids) assert.match(html, new RegExp(`id="${id}"`), `falta #${id} en index.html`);
+});

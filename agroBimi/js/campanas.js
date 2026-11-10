@@ -280,7 +280,6 @@
   }
 
   function configurarEventosCampanas() {
-    App.$("btnAnadirCampana").addEventListener("click", () => abrirModalCampana());
     App.$("btnAnadirCampanaBuscar").addEventListener("click", () => abrirModalCampana());
     App.$("btnEditarCampana").addEventListener("click", editarCampanaSeleccionada);
     App.$("btnEliminarCampana").addEventListener("click", eliminarCampanaSeleccionada);
