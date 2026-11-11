@@ -2,7 +2,12 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const { createElement, loadModule, flush } = require("./helpers");
 
-function createAuthHarness(loaders, rpc = async () => ({ data: false, error: null })) {
+function createAuthHarness(
+  loaders,
+  rpc = async () => ({ data: false, error: null }),
+  { sesionGuardada = null, storage = new Map() } = {},
+) {
+  const signOuts = [];
   const listeners = new Map();
   const bodyClasses = new Set();
   const list = createElement();
@@ -21,7 +26,11 @@ function createAuthHarness(loaders, rpc = async () => ({ data: false, error: nul
     },
     db: {
       rpc,
-      auth: { signOut: async () => ({ error: null }) },
+      auth: {
+        signOut: async (opts) => { signOuts.push(opts); return { error: null }; },
+        getSession: async () => ({ data: { session: sesionGuardada } }),
+        onAuthStateChange: () => {},
+      },
     },
     $: (id) => elements.get(id),
     escapar: (value) => String(value).replace(/[&<>"]/g, (c) =>
@@ -48,9 +57,57 @@ function createAuthHarness(loaders, rpc = async () => ({ data: false, error: nul
     removeEventListener() {},
     querySelectorAll: () => [],
   };
-  const context = loadModule("auth.js", app, { document });
-  return { app, auth: context.window.App, list, bodyClasses };
+  const localStorage = {
+    getItem: (key) => storage.get(key) ?? null,
+    setItem: (key, value) => storage.set(key, String(value)),
+    removeItem: (key) => storage.delete(key),
+  };
+  const context = loadModule("auth.js", app, { document, localStorage });
+  return { app, auth: context.window.App, list, bodyClasses, signOuts, storage };
 }
+
+const LOADERS_OK = {
+  cargarParametros: async () => true,
+  cargarCampanas: async () => true,
+  cargarAgricultores: async () => true,
+};
+const MINUTO = 60 * 1000;
+
+test("initAuth closes a stored session whose last activity is older than 20 minutes", async () => {
+  const storage = new Map([["bimi_ultima_actividad", String(Date.now() - 21 * MINUTO)]]);
+  const { auth, bodyClasses, signOuts } = createAuthHarness(LOADERS_OK, undefined, {
+    sesionGuardada: { user: { id: "user-1" } },
+    storage,
+  });
+
+  await auth.initAuth();
+  assert.equal(signOuts.length, 1);
+  assert.equal(signOuts[0].scope, "local");
+  assert.equal(bodyClasses.has("authed"), false);
+});
+
+test("initAuth closes a stored session with no recorded activity", async () => {
+  const { auth, bodyClasses, signOuts } = createAuthHarness(LOADERS_OK, undefined, {
+    sesionGuardada: { user: { id: "user-1" } },
+  });
+
+  await auth.initAuth();
+  assert.equal(signOuts.length, 1);
+  assert.equal(bodyClasses.has("authed"), false);
+});
+
+test("initAuth keeps a stored session with recent activity", async () => {
+  const storage = new Map([["bimi_ultima_actividad", String(Date.now() - 5 * MINUTO)]]);
+  const { auth, bodyClasses, signOuts } = createAuthHarness(LOADERS_OK, undefined, {
+    sesionGuardada: { user: { id: "user-1" } },
+    storage,
+  });
+
+  await auth.initAuth();
+  await flush();
+  assert.equal(signOuts.length, 0);
+  assert.equal(bodyClasses.has("authed"), true);
+});
 
 test("auth marks initial data loaded only when all loaders succeed", async () => {
   const calls = [];

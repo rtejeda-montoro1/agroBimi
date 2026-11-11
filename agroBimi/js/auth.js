@@ -82,8 +82,23 @@
       document.removeEventListener(ev, alHaberActividad, { passive: true }));
   }
 
+  // El temporizador de inactividad solo corre con la app abierta. Si se
+  // cierra el navegador sin pulsar "Salir", Supabase guarda la sesión en
+  // localStorage y al volver a abrir entraba directamente, aunque hubieran
+  // pasado horas. Al arrancar se mira la última actividad apuntada: si es
+  // de hace más de 20 minutos (o no hay ninguna), se cierra la sesión.
+  function sesionGuardadaCaducada() {
+    let ultima = 0;
+    try { ultima = Number(localStorage.getItem(KEY_ACTIVIDAD)) || 0; } catch { return false; }
+    return Date.now() - ultima >= INACTIVIDAD_MS;
+  }
+
   async function initAuth() {
-    const { data: { session } } = await App.db.auth.getSession();
+    let { data: { session } } = await App.db.auth.getSession();
+    if (session && sesionGuardadaCaducada()) {
+      try { await App.db.auth.signOut({ scope: "local" }); } catch { /* se borra igualmente */ }
+      session = null;
+    }
     aplicarSesion(session);
     App.db.auth.onAuthStateChange((_evento, nuevaSesion) => aplicarSesion(nuevaSesion));
   }
