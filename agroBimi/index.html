@@ -149,7 +149,7 @@
   <div class="modal-backdrop" id="modalAgricultor">
     <div class="modal modal-ancho">
       <h2 id="modalAgricultorTitulo">Añadir agricultor</h2>
-      <form id="formAgricultor">
+      <form id="formAgricultor" data-guardar-con-cambios>
         <input type="hidden" id="agricultorId" />
         <div class="grid-campos">
           <div class="field" id="campoCodigoAgricultor" hidden>
@@ -211,12 +211,33 @@
   </div>
 
   <!-- ============================================================= -->
+  <!--  Modal: Ver datos de un agricultor (solo lectura)             -->
+  <!-- ============================================================= -->
+  <div class="modal-backdrop" id="modalVerAgricultor">
+    <div class="modal modal-ancho">
+      <h2 id="verAgricultorTitulo">Datos del agricultor</h2>
+      <div class="factura-bloque">
+        <h3 class="factura-titulo">Agricultor</h3>
+        <div class="factura-datos" id="verAgricultorGenerales"></div>
+      </div>
+      <div class="factura-bloque">
+        <h3 class="factura-titulo">Datos fiscales</h3>
+        <div class="factura-datos" id="verAgricultorFiscales"></div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn-ghost" data-cerrar="modalVerAgricultor">Cerrar</button>
+        <button type="button" class="btn-primary" id="btnEditarDesdeVer">✏ Editar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================= -->
   <!--  Modal: Añadir / Editar registro                              -->
   <!-- ============================================================= -->
   <div class="modal-backdrop" id="modalRegistro">
     <div class="modal modal-ancho">
       <h2 id="modalRegistroTitulo">Añadir registro</h2>
-      <form id="formRegistro">
+      <form id="formRegistro" data-guardar-con-cambios>
         <input type="hidden" id="registroId" />
         <div class="grid-campos">
           <div class="field campo-ancho">
@@ -356,7 +377,7 @@
   <div class="modal-backdrop modal-nivel2" id="modalPlanta">
     <div class="modal">
       <h2 id="modalPlantaTitulo">Nueva retirada de plantas</h2>
-      <form id="formPlanta">
+      <form id="formPlanta" data-guardar-con-cambios>
         <input type="hidden" id="plantaId" />
         <div class="grid-campos">
           <div class="field campo-ancho">
@@ -885,7 +906,7 @@
         ⚙ Este palet tiene cajas de antes de la paletización automática (sin
         pesada asociada): se mantienen tal cual.
       </p>
-      <form id="formPalet">
+      <form id="formPalet" data-guardar-con-cambios>
         <input type="hidden" id="paletId" />
         <input type="hidden" id="paletTotalFijo" value="0" />
         <div class="tabla-wrap">
@@ -1097,7 +1118,7 @@
         Datos del emisor de las facturas, precios por defecto y series de
         numeración de los documentos.
       </p>
-      <form id="formAjustes">
+      <form id="formAjustes" data-guardar-con-cambios>
         <div class="factura-bloque">
           <h3 class="factura-titulo">Emisor de los recibos</h3>
           <div class="grid-campos">
@@ -1246,7 +1267,7 @@
   <div class="modal-backdrop" id="modalCampana">
     <div class="modal">
       <h2 id="modalCampanaTitulo">Añadir campaña</h2>
-      <form id="formCampana">
+      <form id="formCampana" data-guardar-con-cambios>
         <input type="hidden" id="campanaId" />
         <div class="field">
           <label for="nombreCampana">Nombre de la campaña *</label>

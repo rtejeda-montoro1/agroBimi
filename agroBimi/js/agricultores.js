@@ -95,6 +95,7 @@
         <div class="agricultor" data-abrir="${a.id}">
           <div class="agricultor-nombre"><span class="agricultor-codigo">${App.fmtCodigo(a.codigo)}</span> ${App.escapar(a.nombre)}</div>
           <div class="acciones">
+            <button class="btn-edit btn-sm" data-ver-agri="${a.id}">Ver datos</button>
             <button class="btn-edit btn-sm" data-edit-agri="${a.id}">Editar</button>
             <button class="btn-del btn-sm" data-del-agri="${a.id}">Eliminar</button>
             <span class="chevron">></span>
@@ -126,6 +127,44 @@
 
     App.abrirModal(App.dom.modalAgricultor);
     App.$("nombre").focus();
+  }
+
+  // ---- Ficha de solo lectura ("Ver datos") ---------------------------
+  // Para revisar de un vistazo los datos fiscales que saldrán en los
+  // recibos; si algo está mal, «Editar» abre el formulario ya relleno.
+  const ETIQUETAS_FISCALES = {
+    nif: "NIF / CIF",
+    telefono: "Teléfono",
+    direccion: "Dirección",
+    codigo_postal: "Código postal",
+    poblacion: "Población",
+    provincia: "Provincia",
+    email: "Email",
+    iban: "IBAN",
+  };
+
+  let agricultorVisto = null;
+
+  function filaDato(etiqueta, valor) {
+    return `<div class="factura-fila"><span>${App.escapar(etiqueta)}</span><b>${App.valor(valor)}</b></div>`;
+  }
+
+  function abrirVerAgricultor(agricultor) {
+    agricultorVisto = agricultor;
+    App.$("verAgricultorTitulo").textContent = `Datos de ${agricultor.nombre}`;
+    App.$("verAgricultorGenerales").innerHTML =
+      filaDato("Código", App.fmtCodigo(agricultor.codigo)) +
+      filaDato("Nombre", agricultor.nombre);
+    App.$("verAgricultorFiscales").innerHTML = Object.entries(ETIQUETAS_FISCALES)
+      .map(([campo, etiqueta]) => filaDato(etiqueta, agricultor[campo]))
+      .join("");
+    App.abrirModal(App.dom.modalVerAgricultor);
+  }
+
+  function editarDesdeVer() {
+    if (!agricultorVisto) return;
+    App.cerrarModal(App.dom.modalVerAgricultor);
+    abrirModalAgricultor(agricultorVisto);
   }
 
   async function siguienteCodigo() {
@@ -230,9 +269,17 @@
   }
 
   async function clickListaAgricultores(e) {
+    const ver = e.target.closest("[data-ver-agri]");
     const editar = e.target.closest("[data-edit-agri]");
     const eliminar = e.target.closest("[data-del-agri]");
     const abrir = e.target.closest("[data-abrir]");
+
+    if (ver) {
+      e.stopPropagation();
+      const a = App.state.agricultoresActuales.find((x) => String(x.id) === ver.dataset.verAgri);
+      if (a) abrirVerAgricultor(a);
+      return;
+    }
 
     if (editar) {
       e.stopPropagation();
@@ -266,6 +313,7 @@
   function configurarEventosAgricultores() {
     App.dom.listaAgricultores.addEventListener("click", clickListaAgricultores);
     App.dom.formAgricultor.addEventListener("submit", guardarAgricultor);
+    App.$("btnEditarDesdeVer").addEventListener("click", editarDesdeVer);
   }
 
   Object.assign(App, {
@@ -274,6 +322,7 @@
     poblarSelectAgricultores,
     pintarAgricultores,
     abrirModalAgricultor,
+    abrirVerAgricultor,
     siguienteCodigo,
     configurarEventosAgricultores,
   });

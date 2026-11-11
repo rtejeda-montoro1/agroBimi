@@ -24,20 +24,54 @@
   // ---- Detección de cambios sin guardar en un modal ------------------
   // Serializa los campos editables del formulario del modal para poder
   // comparar el estado actual con el que había al abrirlo.
+  // Entran también los campos sin id (las casillas de cajas del palet, que
+  // se pintan por filas) y las casillas de marcar según estén marcadas o no
+  // (su value no cambia al marcarlas).
   function serializarForm(form) {
     if (!form) return "";
     return Array.from(form.elements)
       .filter((el) =>
-        el.id && !el.disabled && el.type !== "hidden" &&
+        !el.disabled && el.type !== "hidden" &&
         ["INPUT", "SELECT", "TEXTAREA"].includes(el.tagName))
-      .map((el) => `${el.id}=${el.value}`)
+      .map((el, i) => {
+        const clave = el.id || el.name || el.dataset?.registro || `#${i}`;
+        return el.type === "checkbox" || el.type === "radio"
+          ? `${clave}:${el.value}=${el.checked ? 1 : 0}`
+          : `${clave}=${el.value}`;
+      })
       .join("");
+  }
+
+  // ---- Guardar bloqueado mientras no haya cambios ---------------------
+  // Los formularios marcados con data-guardar-con-cambios tienen su botón
+  // de guardar desactivado hasta que algo difiere de lo que había al
+  // abrirlos (y vuelve a bloquearse si se deshace el cambio). No se marcan
+  // los formularios de acciones (facturar, dar salida) ni la liquidación,
+  // que se puede guardar tras recalcular aunque no se toque ningún campo.
+  function actualizarBotonGuardar(modal) {
+    const form = modal?.querySelector("form");
+    if (!form?.hasAttribute("data-guardar-con-cambios")) return;
+    const sinCambios = !modalTieneCambios(modal);
+    form.querySelectorAll('[type="submit"]').forEach((b) => { b.disabled = sinCambios; });
+  }
+
+  function vigilarCambios(modal) {
+    const form = modal?.querySelector("form");
+    if (!form?.hasAttribute("data-guardar-con-cambios") || form._vigilado) return;
+    form._vigilado = true;
+    const actualizar = () => actualizarBotonGuardar(modal);
+    // "click": cambios hechos por código al pulsar un botón del formulario
+    // (p. ej. «Completar» en el palet), que no lanzan input ni change.
+    ["input", "change", "click"].forEach((ev) => form.addEventListener(ev, actualizar));
   }
 
   // Guarda la "foto" del formulario. Se llama al abrir el modal (después
   // de rellenar/resetear los campos).
   function snapshotModal(modal) {
-    if (modal) modal._snapshot = serializarForm(modal.querySelector("form"));
+    if (!modal) return;
+    modal._snapshot = serializarForm(modal.querySelector("form"));
+    vigilarCambios(modal);
+    actualizarBotonGuardar(modal);
   }
 
   // true si el formulario del modal difiere de su foto inicial.
@@ -388,6 +422,7 @@
     abrirModal,
     snapshotModal,
     modalTieneCambios,
+    actualizarBotonGuardar,
     formatearFecha,
     hoyISO,
     primerDiaMes,

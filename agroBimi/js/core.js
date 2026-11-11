@@ -11,6 +11,7 @@
     listaAgricultores: $("listaAgricultores"),
     cuerpoRegistros: $("cuerpoRegistros"),
     modalAgricultor: $("modalAgricultor"),
+    modalVerAgricultor: $("modalVerAgricultor"),
     modalRegistro: $("modalRegistro"),
     modalFactura: $("modalFactura"),
     modalFacturar: $("modalFacturar"),

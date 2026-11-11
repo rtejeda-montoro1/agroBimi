@@ -70,3 +70,97 @@ test("agricultores list and dropdowns are ordered by farmer code", async () => {
   await module.asegurarAgricultoresTodos(true);
   assert.deepEqual(JSON.parse(JSON.stringify(calls.filter(([name]) => name === "order"))), [orderBy.codigo, orderBy.id]);
 });
+
+const CAMPOS_AGRICULTOR = ["nif", "direccion", "codigo_postal", "poblacion", "provincia", "telefono", "email", "iban"];
+
+function createFichaHarness(agricultores) {
+  const elements = new Map();
+  for (const id of [
+    "buscarAgricultor", "listaAgricultores", "countAgricultores",
+    "verAgricultorTitulo", "verAgricultorGenerales", "verAgricultorFiscales",
+    "btnEditarDesdeVer", "modalAgricultorTitulo", "agricultorId", "nombre",
+    "codigoAgricultor", "campoCodigoAgricultor",
+    ...CAMPOS_AGRICULTOR.map((c) => `agri_${c}`),
+  ]) elements.set(id, createElement({ focus() {} }));
+  const modalVerAgricultor = createElement();
+  const modalAgricultor = createElement();
+  const abiertos = new Set();
+  const app = {
+    state: { agricultoresActuales: agricultores, agricultoresTodos: agricultores },
+    dom: {
+      listaAgricultores: elements.get("listaAgricultores"),
+      formAgricultor: createElement({ reset() {} }),
+      modalVerAgricultor,
+      modalAgricultor,
+    },
+    db: { from: () => fakeQuery({ data: [], error: null }) },
+    $: (id) => elements.get(id),
+    CAMPOS_AGRICULTOR,
+    escapar: escapeHtml,
+    valor: (v) => (v === null || v === undefined || v === "" ? "—" : escapeHtml(v)),
+    fmtCodigo: (value) => String(value).padStart(3, "0"),
+    actualizarContador() {},
+    abrirModal: (m) => abiertos.add(m),
+    cerrarModal: (m) => abiertos.delete(m),
+  };
+  const context = loadModule("agricultores.js", app);
+  const module = context.window.App;
+  module.configurarEventosAgricultores();
+  return { module, elements, abiertos, modalVerAgricultor, modalAgricultor };
+}
+
+function clickEn(lista, atributo, id) {
+  lista.dispatch("click", {
+    target: { closest: (selector) => (selector === `[${atributo}]` ? { dataset: datasetDe(atributo, id) } : null) },
+    stopPropagation() {},
+  });
+}
+
+function datasetDe(atributo, id) {
+  const clave = atributo.replace(/^data-/, "").replace(/-(\w)/g, (_, c) => c.toUpperCase());
+  return { [clave]: String(id) };
+}
+
+const AGRICULTOR = {
+  id: 3, codigo: 12, nombre: "<Pepe & Hijos>",
+  nif: "12345678Z", direccion: "C/ Mayor 1", codigo_postal: "18001",
+  poblacion: "Granada", provincia: "Granada", telefono: null, email: "", iban: "ES91 2100 0418 4502 0005 1332",
+};
+
+test("agricultores list offers a 'Ver datos' button next to Editar", () => {
+  const { module, elements } = createFichaHarness([AGRICULTOR]);
+  module.pintarAgricultores([AGRICULTOR]);
+  const html = elements.get("listaAgricultores").innerHTML;
+  assert.match(html, /data-ver-agri="3">Ver datos</);
+  assert.match(html, /data-edit-agri="3">Editar</);
+});
+
+test("agricultores 'Ver datos' shows general and fiscal data read-only and escaped", () => {
+  const { elements, abiertos, modalVerAgricultor } = createFichaHarness([AGRICULTOR]);
+  clickEn(elements.get("listaAgricultores"), "data-ver-agri", 3);
+
+  assert.equal(abiertos.has(modalVerAgricultor), true);
+  assert.equal(elements.get("verAgricultorTitulo").textContent, "Datos de <Pepe & Hijos>");
+  const generales = elements.get("verAgricultorGenerales").innerHTML;
+  assert.match(generales, /Código<\/span><b>012</);
+  assert.match(generales, /&lt;Pepe &amp; Hijos&gt;/);
+  const fiscales = elements.get("verAgricultorFiscales").innerHTML;
+  assert.match(fiscales, /NIF \/ CIF<\/span><b>12345678Z</);
+  assert.match(fiscales, /IBAN<\/span><b>ES91 2100 0418 4502 0005 1332</);
+  assert.match(fiscales, /Teléfono<\/span><b>—</, "empty values show a dash");
+  assert.match(fiscales, /Email<\/span><b>—</);
+});
+
+test("agricultores 'Editar' from the data view opens the edit form already filled in", () => {
+  const { elements, abiertos, modalVerAgricultor, modalAgricultor } = createFichaHarness([AGRICULTOR]);
+  clickEn(elements.get("listaAgricultores"), "data-ver-agri", 3);
+  elements.get("btnEditarDesdeVer").dispatch("click");
+
+  assert.equal(abiertos.has(modalVerAgricultor), false);
+  assert.equal(abiertos.has(modalAgricultor), true);
+  assert.equal(elements.get("modalAgricultorTitulo").textContent, "Editar agricultor");
+  assert.equal(elements.get("agricultorId").value, 3);
+  assert.equal(elements.get("nombre").value, "<Pepe & Hijos>");
+  assert.equal(elements.get("agri_nif").value, "12345678Z");
+  assert.equal(elements.get("agri_telefono").value, "");
+});
