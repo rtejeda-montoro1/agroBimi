@@ -251,12 +251,17 @@ mismo email, ese email queda bloqueado 24 horas desde cualquier navegador
 antes, en el editor SQL de Supabase:
 `delete from login_bloqueos where email = 'el-email@...';`
 
-Etiqueta automatica: cuando una pesada enviada desde la tablet completa un
-palet, la tablet abre sola la impresion de su etiqueta (detras del
-justificante, si se pidio). La tablet recuerda los palets completos que ya
-conoce (`bascula_palets_completos` en localStorage); al entrar solo los
-apunta, sin imprimir. Para imprimir sin el dialogo del navegador, Chrome de
-escritorio con `--kiosk-printing` (va a la impresora predeterminada).
+Etiquetas de palet en la bascula: DESACTIVADAS (`ETIQUETAS_EN_BASCULA` en
+`js/bascula.js`). El puesto imprime con Chrome `--kiosk-printing`, que lo
+manda todo a la impresora predeterminada (la de tickets, 80 mm), y la
+etiqueta de 105 x 75 mm no cabe: se imprimen desde la oficina. Con el
+interruptor a true (cuando la impresora de pegatinas este en ese equipo,
+con QZ Tray o similar para elegir impresora), la vista de palets vuelve a
+tener "Imprimir etiqueta" y, cuando una pesada enviada desde la tablet
+completa un palet, la tablet abre sola la impresion de su etiqueta (detras
+del justificante, si se pidio). Para eso recuerda los palets completos que
+ya conoce (`bascula_palets_completos` en localStorage); al entrar solo los
+apunta, sin imprimir.
 
 Sin red: cada entrada se guarda primero en la tablet (localStorage) y
 despues se envia; si no hay conexion se queda en cola y se reintenta sola

@@ -250,6 +250,10 @@ PDF, el archivo ya se llama con el agricultor, la fecha y la hora (por
 ejemplo «Justificante José Pérez 2026-10-08 10.32.pdf»). La primera vez,
 en el diálogo de impresión elige la impresora y que se recuerde.
 
+**Etiquetas de palet:** no se imprimen en la báscula (su impresora es la de
+tickets y la etiqueta no cabe). En la vista **📦 Palets** se ve cómo va cada
+palet; la etiqueta se imprime desde la oficina, en **🧱 Paletización**.
+
 **Si se va la red:** se puede seguir apuntando (e imprimiendo) igual. Arriba
 sale un aviso naranja y las entradas aparecen en **Hoy** como
 «⏳ pendiente de envío». Al volver la conexión se envían solas, sin hacer

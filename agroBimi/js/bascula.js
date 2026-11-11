@@ -33,6 +33,13 @@
   // Palets completos que la tablet ya conoce: los que no estén aquí se
   // acaban de completar y se imprime su etiqueta sola.
   const KEY_ETIQUETAS = "bascula_palets_completos";
+  // Etiquetas de palet desde la báscula: desactivadas. Con
+  // --kiosk-printing todo sale por la impresora predeterminada, que aquí
+  // es la de tickets (80 mm), y la etiqueta (105×75 mm) no cabe. Las
+  // etiquetas se imprimen desde la oficina (Paletización). Para volver a
+  // activarlas cuando la impresora de pegatinas esté en este equipo (con
+  // QZ Tray o similar para elegir impresora), poner esto a true.
+  const ETIQUETAS_EN_BASCULA = window.BASCULA_ETIQUETAS ?? false;
   const MAX_CAJAS = 5000;
   // Si se apunta lo mismo al mismo agricultor en este margen, se pregunta
   // antes: casi siempre es un doble toque.
@@ -780,7 +787,9 @@
             : `<span class="badge badge-aviso">Faltan ${cap - (p.num_cajas || 0)}</span>`}
         </div>
         <ul class="palet-card-agris">${agris || '<li><span>Vacío</span></li>'}</ul>
-        <button type="button" class="btn-etiqueta" data-etiqueta="${p.id}">🏷 Imprimir etiqueta</button>
+        ${ETIQUETAS_EN_BASCULA
+          ? `<button type="button" class="btn-etiqueta" data-etiqueta="${p.id}">🏷 Imprimir etiqueta</button>`
+          : ""}
       </article>`;
   }
 
@@ -839,6 +848,7 @@
   }
 
   function imprimirEtiqueta(id) {
+    if (!ETIQUETAS_EN_BASCULA) return;
     const p = (state.palets?.palets || []).find((x) => String(x.id) === String(id));
     if (!p) return;
     if (!paletCompleto(p) &&
@@ -866,6 +876,7 @@
   // soloAnotar: al entrar solo se apuntan los que ya hay, para no
   // imprimir de golpe los de antes.
   async function etiquetasDePaletsCompletados({ soloAnotar = false } = {}) {
+    if (!ETIQUETAS_EN_BASCULA) return;
     const { data, error } = await db.rpc("bascula_palets");
     if (error) {
       anotarRed(error);

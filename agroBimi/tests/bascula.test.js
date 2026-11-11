@@ -2,7 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const { createElement, loadModule, flush } = require("./helpers");
 
-async function loadBasculaWithLabelError(labelError, rejectLabelQuery = false, rpcOverrides = {}) {
+async function loadBasculaWithLabelError(labelError, rejectLabelQuery = false, rpcOverrides = {}, { etiquetas = true, rpcCalls = [] } = {}) {
   const elements = new Map();
   const getElement = (id) => {
     if (!elements.has(id)) elements.set(id, createElement());
@@ -17,6 +17,7 @@ async function loadBasculaWithLabelError(labelError, rejectLabelQuery = false, r
       windowListeners.get(type).push(handler);
     },
     print() {},
+    BASCULA_ETIQUETAS: etiquetas,
   };
   const document = {
     title: "Báscula",
@@ -42,6 +43,7 @@ async function loadBasculaWithLabelError(labelError, rejectLabelQuery = false, r
       signOut: async () => ({ error: null }),
     },
     rpc: async (name) => {
+      rpcCalls.push(name);
       if (rpcOverrides[name]) return rpcOverrides[name]();
       if (name === "bascula_palets") {
         if (rejectLabelQuery) throw labelError;
@@ -230,4 +232,38 @@ test("bascula shows farmers ordered by code, with uncoded farmers last", async (
   const html = elements.get("gridAgricultores").innerHTML;
   const orden = [...html.matchAll(/data-agri="(\d+)"/g)].map((m) => m[1]);
   assert.deepEqual(orden, ["3", "4", "1", "2"]);
+});
+
+test("bascula does not look up or print pallet labels while they are disabled", async () => {
+  const rpcCalls = [];
+  const { elements, logs } = await loadBasculaWithLabelError(
+    { message: "offline", code: "NETWORK" }, false, {}, { etiquetas: false, rpcCalls });
+
+  assert.equal(rpcCalls.includes("bascula_palets"), false);
+  assert.doesNotMatch(elements.get("toast")?.textContent || "", /palets completos/);
+  assert.equal(logs.length, 0);
+});
+
+async function tarjetasDePalets(etiquetas) {
+  const palets = {
+    cajas_por_palet: 60,
+    en_camara: 0,
+    palets: [{ id: 9, codigo: "P-9", secuencia: 9, num_cajas: 20, lineas: [] }],
+  };
+  const { elements } = await loadBasculaWithLabelError(null, false, {
+    bascula_palets: async () => ({ data: palets, error: null }),
+  }, { etiquetas });
+  elements.get("btnVista").dispatch("click");
+  await flush();
+  return elements.get("listaPalets").innerHTML;
+}
+
+test("bascula hides the pallet label button while labels are disabled", async () => {
+  const html = await tarjetasDePalets(false);
+  assert.match(html, /P-9/);
+  assert.doesNotMatch(html, /Imprimir etiqueta/);
+});
+
+test("bascula shows the pallet label button when labels are enabled", async () => {
+  assert.match(await tarjetasDePalets(true), /data-etiqueta="9"/);
 });
