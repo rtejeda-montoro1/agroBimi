@@ -190,6 +190,7 @@ button:disabled {
 }
 .summary .total { font-size: 1.1rem; font-weight: 700; }
 .summary .count { color: var(--muted); font-size: .85rem; }
+.summary-acciones { display: flex; gap: 8px; flex-wrap: wrap; }
 
 /* ---- Lista de agricultores ---- */
 .card-list { display: flex; flex-direction: column; gap: 10px; }
