@@ -442,6 +442,22 @@ button:disabled {
   overflow-y: auto;
 }
 .modal.modal-ancho { max-width: 640px; }
+/* ✕ de cerrar arriba a la derecha. Es sticky para que siga a mano al bajar
+   por un modal largo (p. ej. "Buscar por campaña" con cientos de filas). */
+.modal-x {
+  position: sticky; top: 0;
+  float: right;
+  margin: -8px -8px 0 8px;
+  width: 36px; height: 36px;
+  padding: 0;
+  border: none; border-radius: 50%;
+  background: var(--card);
+  color: var(--muted);
+  font-size: 1.6rem; line-height: 1;
+  cursor: pointer;
+  z-index: 5;
+}
+.modal-x:hover { background: var(--border); color: var(--text); }
 .modal h2 { margin: 0 0 16px; font-size: 1.15rem; }
 /* Nº del recibo, debajo del título y algo más pequeño. */
 .titulo-numero { display: block; margin-top: 2px; font-size: .9em; font-weight: 600; }

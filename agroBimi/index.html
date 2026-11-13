@@ -150,6 +150,7 @@
   <!-- ============================================================= -->
   <div class="modal-backdrop" id="modalAgricultor">
     <div class="modal modal-ancho">
+      <button type="button" class="modal-x" data-cerrar="modalAgricultor" aria-label="Cerrar" title="Cerrar">&times;</button>
       <h2 id="modalAgricultorTitulo">Añadir agricultor</h2>
       <form id="formAgricultor" data-guardar-con-cambios>
         <input type="hidden" id="agricultorId" />
@@ -217,6 +218,7 @@
   <!-- ============================================================= -->
   <div class="modal-backdrop" id="modalVerAgricultor">
     <div class="modal modal-ancho">
+      <button type="button" class="modal-x" data-cerrar="modalVerAgricultor" aria-label="Cerrar" title="Cerrar">&times;</button>
       <h2 id="verAgricultorTitulo">Datos del agricultor</h2>
       <div class="factura-bloque">
         <h3 class="factura-titulo">Agricultor</h3>
@@ -238,6 +240,7 @@
   <!-- ============================================================= -->
   <div class="modal-backdrop" id="modalRegistro">
     <div class="modal modal-ancho">
+      <button type="button" class="modal-x" data-cerrar="modalRegistro" aria-label="Cerrar" title="Cerrar">&times;</button>
       <h2 id="modalRegistroTitulo">Añadir registro</h2>
       <form id="formRegistro" data-guardar-con-cambios>
         <input type="hidden" id="registroId" />
@@ -309,6 +312,7 @@
   <!-- ============================================================= -->
   <div class="modal-backdrop" id="modalPlantas">
     <div class="modal modal-xl">
+      <button type="button" class="modal-x" data-cerrar="modalPlantas" aria-label="Cerrar" title="Cerrar">&times;</button>
       <h2>🌱 Plantas retiradas por ciclo</h2>
       <p class="sub-modal">
         Lo que retira cada agricultor en cada ciclo. Puede haber varias retiradas
@@ -378,6 +382,7 @@
   <!-- ============================================================= -->
   <div class="modal-backdrop modal-nivel2" id="modalPlanta">
     <div class="modal">
+      <button type="button" class="modal-x" data-cerrar="modalPlanta" aria-label="Cerrar" title="Cerrar">&times;</button>
       <h2 id="modalPlantaTitulo">Nueva retirada de plantas</h2>
       <form id="formPlanta" data-guardar-con-cambios>
         <input type="hidden" id="plantaId" />
@@ -428,6 +433,7 @@
   <!-- ============================================================= -->
   <div class="modal-backdrop" id="modalCajas">
     <div class="modal modal-xl">
+      <button type="button" class="modal-x" data-cerrar="modalCajas" aria-label="Cerrar" title="Cerrar">&times;</button>
       <h2>⚖ Control de cajas vacías</h2>
       <p class="sub-modal">
         Descuadre = cajas vacías retiradas − cajas llenas devueltas − cajas vacías devueltas.
@@ -500,6 +506,7 @@
   <!-- ============================================================= -->
   <div class="modal-backdrop" id="modalLiquidaciones">
     <div class="modal modal-xl">
+      <button type="button" class="modal-x" data-cerrar="modalLiquidaciones" aria-label="Cerrar" title="Cerrar">&times;</button>
       <h2>🧾 Liquidaciones y facturas</h2>
       <p class="sub-modal">
         Una liquidación agrupa por fechas los registros de un agricultor que
@@ -580,6 +587,7 @@
   <!-- ============================================================= -->
   <div class="modal-backdrop modal-nivel2" id="modalLiquidacion">
     <div class="modal modal-ancho">
+      <button type="button" class="modal-x" data-cerrar="modalLiquidacion" aria-label="Cerrar" title="Cerrar">&times;</button>
       <h2 id="modalLiquidacionTitulo">Nueva liquidación</h2>
       <form id="formLiquidacion">
         <input type="hidden" id="liqId" />
@@ -693,6 +701,7 @@
   <!-- ============================================================= -->
   <div class="modal-backdrop modal-nivel2" id="modalFacturar">
     <div class="modal">
+      <button type="button" class="modal-x" data-cerrar="modalFacturar" aria-label="Cerrar" title="Cerrar">&times;</button>
       <h2 id="modalFacturarTitulo">🧾 Facturar liquidación</h2>
       <form id="formFacturar">
         <input type="hidden" id="facturarLiqId" />
@@ -738,6 +747,7 @@
   <!-- ============================================================= -->
   <div class="modal-backdrop modal-nivel2" id="modalFactura">
     <div class="modal modal-ancho">
+      <button type="button" class="modal-x" data-cerrar="modalFactura" aria-label="Cerrar" title="Cerrar">&times;</button>
       <h2 id="modalFacturaTitulo">🧾 RECIBO DE COMPENSACIÓN - FACTURA</h2>
       <p class="aviso-campana" id="facturaAviso" hidden>
         ⚙ Esta liquidación todavía no está facturada: no tiene número de recibo.
@@ -801,6 +811,7 @@
   <!-- ============================================================= -->
   <div class="modal-backdrop" id="modalPalets">
     <div class="modal modal-xl">
+      <button type="button" class="modal-x" data-cerrar="modalPalets" aria-label="Cerrar" title="Cerrar">&times;</button>
       <h2>🧱 Paletización</h2>
       <p class="sub-modal">
         Todas las cajas que pasan por la báscula van a la cámara y se reparten
@@ -897,6 +908,7 @@
   <!-- ============================================================= -->
   <div class="modal-backdrop modal-nivel2" id="modalPalet">
     <div class="modal modal-ancho">
+      <button type="button" class="modal-x" data-cerrar="modalPalet" aria-label="Cerrar" title="Cerrar">&times;</button>
       <h2 id="modalPaletTitulo">Editar palet</h2>
       <p class="sub-modal">
         Cambia cuántas cajas de cada pesada lleva el palet. Para completarlo,
@@ -945,6 +957,7 @@
   <!-- ============================================================= -->
   <div class="modal-backdrop" id="modalSalidas">
     <div class="modal modal-xl">
+      <button type="button" class="modal-x" data-cerrar="modalSalidas" aria-label="Cerrar" title="Cerrar">&times;</button>
       <h2>🚚 Salidas</h2>
       <p class="sub-modal">
         Cada salida de palets genera un albarán con el destinatario, el
@@ -1004,6 +1017,7 @@
   <!-- ============================================================= -->
   <div class="modal-backdrop modal-nivel2" id="modalSalida">
     <div class="modal modal-ancho">
+      <button type="button" class="modal-x" data-cerrar="modalSalida" aria-label="Cerrar" title="Cerrar">&times;</button>
       <h2>🚚 Nueva salida</h2>
       <form id="formSalida">
         <div class="grid-campos">
@@ -1115,6 +1129,7 @@
   <!-- ============================================================= -->
   <div class="modal-backdrop" id="modalAjustes">
     <div class="modal modal-ancho">
+      <button type="button" class="modal-x" data-cerrar="modalAjustes" aria-label="Cerrar" title="Cerrar">&times;</button>
       <h2>⚙ Ajustes</h2>
       <p class="sub-modal">
         Datos del emisor de las facturas, precios por defecto y series de
@@ -1268,6 +1283,7 @@
   <!-- ============================================================= -->
   <div class="modal-backdrop" id="modalCampana">
     <div class="modal">
+      <button type="button" class="modal-x" data-cerrar="modalCampana" aria-label="Cerrar" title="Cerrar">&times;</button>
       <h2 id="modalCampanaTitulo">Añadir campaña</h2>
       <form id="formCampana" data-guardar-con-cambios>
         <input type="hidden" id="campanaId" />
@@ -1291,6 +1307,7 @@
   <!-- ============================================================= -->
   <div class="modal-backdrop" id="modalBuscarCampana">
     <div class="modal modal-ancho">
+      <button type="button" class="modal-x" data-cerrar="modalBuscarCampana" aria-label="Cerrar" title="Cerrar">&times;</button>
       <h2>🔎 Buscar por campaña</h2>
       <div class="field">
         <label for="selBuscarCampana">Campaña</label>

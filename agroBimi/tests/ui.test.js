@@ -44,3 +44,14 @@ test("ui wires sorting controls and confirms closing changed modals", () => {
   assert.equal(modal.classList.contains("open"), false);
   assert.equal(confirms, 2);
 });
+
+test("every modal has a close ✕ at the top wired to its own modal", () => {
+  const fs = require("node:fs");
+  const path = require("node:path");
+  const html = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
+  const modales = [...html.matchAll(/<div class="modal-backdrop[^"]*" id="(\w+)">\s*<div class="modal[^"]*">\s*(<button[^>]*>)/g)];
+  assert.equal(modales.length, (html.match(/class="modal-backdrop/g) || []).length);
+  for (const [, id, primerBoton] of modales) {
+    assert.match(primerBoton, new RegExp(`class="modal-x" data-cerrar="${id}"`), id);
+  }
+});
