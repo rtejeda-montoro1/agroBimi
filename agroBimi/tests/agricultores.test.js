@@ -47,7 +47,16 @@ test("agricultores search escapes filter syntax and matches numeric codes", asyn
   await module.cargarAgricultores();
 
   const orCall = calls.find(([name]) => name === "or");
-  assert.deepEqual(orCall, ["or", 'nombre.ilike."%007%",codigo.eq.7']);
+  assert.deepEqual(orCall, ["or", 'nombre.ilike."%007%",codigo.in.(7)']);
+});
+
+test("agricultores search by a code prefix matches every code that starts with it", async () => {
+  const { module, elements, calls } = createAgricultoresHarness({ data: [], error: null });
+  elements.get("buscarAgricultor").value = "01";
+  await module.cargarAgricultores();
+
+  const orCall = calls.find(([name]) => name === "or");
+  assert.deepEqual(orCall, ["or", 'nombre.ilike."%01%",codigo.in.(1,10,11,12,13,14,15,16,17,18,19)']);
 });
 
 test("agricultores load failure returns false and escapes the error", async () => {

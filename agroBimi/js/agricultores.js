@@ -3,6 +3,22 @@
 // =====================================================================
 
 (function initAgricultoresModule(App) {
+  // Misma regla que el buscador de la báscula: "01" encuentra 001 y también
+  // 010, 011, 012…; "1" encuentra 1, 10-19 y 100-199. Los códigos son de 3
+  // dígitos como mucho, así que basta con recorrer 0-999.
+  function codigosQueEmpiezanPor(buscar) {
+    if (!/^\d+$/.test(buscar)) return [];
+    const n = parseInt(buscar, 10);
+    const codigos = [];
+    for (let c = 0; c <= 999; c++) {
+      if (c === n || String(c).padStart(3, "0").startsWith(buscar) || String(c).startsWith(buscar)) {
+        codigos.push(c);
+      }
+    }
+    if (n > 999) codigos.push(n);
+    return codigos;
+  }
+
   async function cargarAgricultores() {
     const buscar = App.$("buscarAgricultor").value.trim();
     let filtroOr = null;
@@ -11,8 +27,8 @@
       // rompería el filtro de Supabase.
       const literal = `%${buscar}%`.replace(/["\\]/g, "\\$&");
       const filtros = [`nombre.ilike."${literal}"`];
-      const num = parseInt(buscar, 10);
-      if (/^\d+$/.test(buscar) && !Number.isNaN(num)) filtros.push(`codigo.eq.${num}`);
+      const codigos = codigosQueEmpiezanPor(buscar);
+      if (codigos.length) filtros.push(`codigo.in.(${codigos.join(",")})`);
       filtroOr = filtros.join(",");
     }
 
