@@ -40,6 +40,7 @@
     );
     if (data === null) {
       cuerpo.innerHTML = App.filaMensaje(7, "No se pudieron cargar los albaranes.", "error");
+      App.$("btnExportSalidas").disabled = true;
       return;
     }
     App.state.albaranesActuales = data;
@@ -79,6 +80,7 @@
         </tr>`;
         }).join("");
     App.actualizarContador("countAlbaranes", albaranes.length, "albarán", "albaranes");
+    App.$("btnExportSalidas").disabled = albaranes.length === 0;
   }
 
   // ------------------------------------------------------------------

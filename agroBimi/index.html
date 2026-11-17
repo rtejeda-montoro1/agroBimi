@@ -350,6 +350,9 @@
 
       <div class="summary">
         <span class="count" id="countPlantas">0 retiradas</span>
+        <div class="summary-acciones">
+          <button type="button" class="btn-primary" id="btnExportPlantas" disabled>⬇ Export</button>
+        </div>
       </div>
 
       <div class="tabla-wrap">
@@ -372,7 +375,6 @@
 
       <div class="modal-actions">
         <button type="button" class="btn-ghost" data-cerrar="modalPlantas">Cerrar</button>
-        <button type="button" class="btn-primary" id="btnExportPlantas" disabled>⬇ Export</button>
       </div>
     </div>
   </div>
@@ -474,6 +476,9 @@
 
       <div class="summary">
         <span class="count" id="countCajas">0 agricultores</span>
+        <div class="summary-acciones">
+          <button type="button" class="btn-primary" id="btnExportCajas" disabled>⬇ Export</button>
+        </div>
       </div>
 
       <div class="tabla-wrap">
@@ -496,7 +501,6 @@
 
       <div class="modal-actions">
         <button type="button" class="btn-ghost" data-cerrar="modalCajas">Cerrar</button>
-        <button type="button" class="btn-primary" id="btnExportCajas" disabled>⬇ Export</button>
       </div>
     </div>
   </div>
@@ -532,13 +536,15 @@
             <option value="facturada">Facturada</option>
           </select>
         </div>
-        <div class="field">
-          <label for="filtroDesdeLiq">Periodo desde</label>
-          <input type="date" id="filtroDesdeLiq" />
-        </div>
-        <div class="field">
-          <label for="filtroHastaLiq">Periodo hasta</label>
-          <input type="date" id="filtroHastaLiq" />
+        <div class="field-par">
+          <div class="field">
+            <label for="filtroDesdeLiq">Periodo desde</label>
+            <input type="date" id="filtroDesdeLiq" />
+          </div>
+          <div class="field">
+            <label for="filtroHastaLiq">Periodo hasta</label>
+            <input type="date" id="filtroHastaLiq" />
+          </div>
         </div>
       </div>
 
@@ -553,6 +559,9 @@
 
       <div class="summary">
         <span class="count" id="countLiquidaciones">0 liquidaciones</span>
+        <div class="summary-acciones">
+          <button type="button" class="btn-primary" id="btnExportLiquidaciones" disabled>⬇ Export</button>
+        </div>
       </div>
 
       <div class="tabla-wrap">
@@ -577,7 +586,6 @@
 
       <div class="modal-actions">
         <button type="button" class="btn-ghost" data-cerrar="modalLiquidaciones">Cerrar</button>
-        <button type="button" class="btn-primary" id="btnExportLiquidaciones" disabled>⬇ Export</button>
       </div>
     </div>
   </div>
@@ -986,6 +994,9 @@
 
       <div class="summary">
         <span class="count" id="countAlbaranes">0 albaranes</span>
+        <div class="summary-acciones">
+          <button type="button" class="btn-primary" id="btnExportSalidas" disabled>⬇ Export</button>
+        </div>
       </div>
 
       <div class="tabla-wrap">
@@ -1007,7 +1018,6 @@
 
       <div class="modal-actions">
         <button type="button" class="btn-ghost" data-cerrar="modalSalidas">Cerrar</button>
-        <button type="button" class="btn-primary" id="btnExportSalidas">⬇ Export</button>
       </div>
     </div>
   </div>
@@ -1320,6 +1330,9 @@
       </div>
       <div class="summary">
         <span class="count" id="countBuscarCampana">0 registros</span>
+        <div class="summary-acciones">
+          <button type="button" class="btn-primary" id="btnExportCampana" disabled>⬇ Export</button>
+        </div>
       </div>
       <div class="tabla-wrap">
         <table class="tabla-registros">
@@ -1340,7 +1353,6 @@
       </div>
       <div class="modal-actions">
         <button type="button" class="btn-ghost" data-cerrar="modalBuscarCampana">Cerrar</button>
-        <button type="button" class="btn-primary" id="btnExportCampana" disabled>⬇ Export</button>
       </div>
     </div>
   </div>

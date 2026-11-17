@@ -37,7 +37,7 @@ function createSalidaHarness(queryResponse) {
 }
 
 test("salidas loads and filters albaranes, safely rendering totals and destinations", async () => {
-  const ids = ["cuerpoAlbaranes", "filtroDesdeSalidas", "filtroHastaSalidas", "filtroDestinoSalidas", "countAlbaranes"];
+  const ids = ["cuerpoAlbaranes", "filtroDesdeSalidas", "filtroHastaSalidas", "filtroDestinoSalidas", "countAlbaranes", "btnExportSalidas"];
   const elements = new Map(ids.map((id) => [id, createElement()]));
   const modal = createElement();
   modal.classList.add("open");
@@ -75,6 +75,13 @@ test("salidas loads and filters albaranes, safely rendering totals and destinati
   assert.match(elements.get("cuerpoAlbaranes").innerHTML, /AA-1/);
   assert.match(elements.get("cuerpoAlbaranes").innerHTML, />70</);
   assert.doesNotMatch(elements.get("cuerpoAlbaranes").innerHTML, /ALB-2/);
+  assert.equal(elements.get("btnExportSalidas").disabled, false);
+
+  // Sin albaranes que mostrar no hay nada que exportar.
+  elements.get("filtroDestinoSalidas").value = "nadie";
+  await module.cargarAlbaranes();
+  assert.equal(app.count, "0 albaranes");
+  assert.equal(elements.get("btnExportSalidas").disabled, true);
 });
 
 test("salidas report history errors and do not open an incomplete form", async () => {

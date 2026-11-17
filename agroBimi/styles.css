@@ -251,6 +251,12 @@ button:disabled {
   touch-action: none;
 }
 .scroll-flotante[hidden] { display: none; }
+/* Dentro de un modal el halo del color del modal tapa el hueco entre la
+   barra y el borde de abajo: si no, por ahí se veían las filas al bajar. */
+.modal .scroll-flotante {
+  bottom: 6px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, .15), 0 0 0 7px var(--card);
+}
 .scroll-flotante-tirador {
   position: absolute;
   top: 1px;
@@ -440,7 +446,12 @@ button:disabled {
   box-shadow: 0 10px 40px rgba(0, 0, 0, .3);
   max-height: 90vh;
   overflow-y: auto;
+  /* Sin padding abajo: lo pegado abajo (la barra de scroll horizontal) se
+     pega al padding y dejaba un hueco de 20px por el que se veían las filas.
+     El espacio lo pone .modal::after. */
+  padding-bottom: 0;
 }
+.modal::after { content: ""; display: block; clear: both; height: 20px; }
 .modal.modal-ancho { max-width: 640px; }
 /* ✕ de cerrar arriba a la derecha. Es sticky para que siga a mano al bajar
    por un modal largo (p. ej. "Buscar por campaña" con cientos de filas). */
@@ -505,7 +516,13 @@ button:disabled {
   padding: 12px 14px;
   margin-top: 4px;
 }
-.toolbar-filtros .field { flex: 1 1 160px; }
+.toolbar-filtros .field { flex: 1 1 160px; min-width: 0; }
+/* Sin esto un desplegable con un nombre largo ensancha su campo y empuja
+   los demás a otra fila. */
+.toolbar-filtros .field select { min-width: 0; width: 100%; }
+/* "Desde" y "hasta" van juntos: si no caben en la fila bajan los dos, y
+   no se queda "hasta" solo ocupando una fila entera. */
+.field-par { display: flex; gap: 12px; flex: 2 1 332px; min-width: 0; }
 /* En los modales .field lleva margen inferior: aquí lo quitamos para que
    campos, casillas y botones queden a la misma altura. */
 .modal .toolbar-filtros .field { margin-bottom: 0; }
