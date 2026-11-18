@@ -68,9 +68,11 @@
     ordenCajas: "codigo",      // control de cajas: "codigo", "az" o "za"
     liquidacionesActuales: [],
     liquidacionPrevia: null,   // borrador calculado antes de guardar
-    paletsActuales: [],
+    paletsActuales: [],        // la página del listado de Paletización
+    paletsCamara: [],          // palets sin salida (resumen, editor y salidas)
     entradasPaletizado: [],    // vista paletizado_entradas
-    albaranesActuales: [],
+    albaranesActuales: [],     // la página del listado de Salidas
+    albaranesHistorial: [],    // últimos albaranes, para proponer la nueva salida
     parametros: {},
   };
 

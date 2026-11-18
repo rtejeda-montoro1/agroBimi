@@ -33,24 +33,103 @@
     return App.dom.modalPalets.classList.contains("open");
   }
 
+  // Lo que está en la cámara: los palets sin salida (con sus líneas) y las
+  // pesadas que aún tienen cajas en cámara. Es poco aunque la historia
+  // crezca, porque lo que sale deja de estar aquí. Lo usan el resumen de
+  // arriba, el editor de palets y la nueva salida (js/salidas.js).
+  // El listado de abajo va aparte y por páginas (js/paginacion.js).
+  const SELECT_PALET = "*, albaranes_salida(numero), palet_lineas(id,agricultor_id,registro_id,num_cajas,registros(fecha))";
+
   async function cargarDatosPaletizado() {
     const [palets, entradas] = await Promise.all([
       App.consultar(
         App.traerTodo(() => App.db.from("palets")
-          .select("*, albaranes_salida(numero), palet_lineas(id,agricultor_id,registro_id,num_cajas,registros(fecha))")
+          .select(SELECT_PALET)
+          .is("fecha_salida", null)
           .order("secuencia", { ascending: false, nullsFirst: false })
           .order("id")),
         "los palets"
       ),
       App.consultar(
-        App.traerTodo(() => App.db.from("paletizado_entradas").select("*").order("registro_id")),
+        App.traerTodo(() => App.db.from("paletizado_entradas").select("*")
+          .or("en_formacion.gt.0,sin_palet.gt.0")
+          .order("registro_id")),
         "las cajas en cámara"
       ),
     ]);
     if (palets === null || entradas === null) return false;
-    App.state.paletsActuales = palets;
+    App.state.paletsCamara = palets;
     App.state.entradasPaletizado = entradas;
     return true;
+  }
+
+  // ------------------------------------------------------------------
+  //  Listado por páginas
+  //  Los filtros se aplican en el servidor y solo se traen 150 palets
+  //  cada vez: con miles de palets ya salidos la ventana abre igual de
+  //  rápido. El nº de palet busca en todos, sin mirar los demás filtros.
+  // ------------------------------------------------------------------
+  // Nº de palet escrito ("12", "P-000012"...) → su número, o null.
+  function numeroBuscado() {
+    const digitos = String(App.$("filtroNumeroPalets").value || "").replace(/\D+/g, "");
+    return digitos ? parseInt(digitos, 10) : null;
+  }
+
+  // Monta la consulta de palets con los filtros de la barra.
+  function consultaPalets({ contar = false } = {}) {
+    const numero = numeroBuscado();
+    const agri = numero === null ? App.$("filtroAgriPalets").value : "";
+    // Con filtro de agricultor se une otra vez palet_lineas (con alias y
+    // !inner) solo para filtrar: así palet_lineas sigue trayendo todas las
+    // líneas del palet y no solo las de ese agricultor.
+    const select = SELECT_PALET + (agri ? ", filtro_agri:palet_lineas!inner(agricultor_id)" : "");
+    let q = App.db.from("palets").select(select, contar ? { count: "exact" } : undefined);
+
+    if (numero !== null) {
+      return q.eq("secuencia", numero).order("id");
+    }
+
+    const estado = App.$("filtroEstadoPalets").value;
+    const cap = cajasPorPalet();
+    if (estado === "salido") q = q.not("fecha_salida", "is", null);
+    else if (estado) q = q.is("fecha_salida", null);
+    if (estado === "completo") q = q.gte("num_cajas", cap);
+    if (estado === "formacion") q = q.lt("num_cajas", cap);
+
+    if (agri) q = q.eq("filtro_agri.agricultor_id", agri);
+
+    // Las fechas miran cuándo se llenó (o se abrió, si sigue en formación).
+    const desde = App.$("filtroDesdePalets").value;
+    const hasta = App.$("filtroHastaPalets").value;
+    if (desde || hasta) {
+      const rango = (campo) => [desde && `${campo}.gte.${desde}`, hasta && `${campo}.lte.${hasta}`]
+        .filter(Boolean).join(",");
+      q = q.or(`and(${rango("fecha_completo")}),and(fecha_completo.is.null,${rango("fecha")})`);
+    }
+
+    return q.order("secuencia", { ascending: false, nullsFirst: false }).order("id");
+  }
+
+  // Se crea al primer uso: App.crearPaginador está en js/paginacion.js.
+  let paginadorPalets = null;
+  function paginador() {
+    paginadorPalets ||= App.crearPaginador({
+      nombre: "Palets",
+      consulta: consultaPalets,
+      cuerpoId: "cuerpoPalets",
+      columnas: 7,
+      texto: "los palets",
+      contadorId: "countPalets",
+      alCargar: (filas) => {
+        App.state.paletsActuales = filas;
+        pintarPalets();
+      },
+    });
+    return paginadorPalets;
+  }
+
+  function filtrarPalets() {
+    return paginador().filtrar();
   }
 
   async function cargarPalets() {
@@ -60,10 +139,11 @@
       cuerpo.innerHTML = App.filaMensaje(7, "No se pudieron cargar los palets.", "error");
       return;
     }
-    pintarPalets();
+    pintarResumenCamara();
+    await paginador().cargar();
   }
 
-  // Tras cualquier cambio: refrescar lo que esté abierto.
+  // Tras cualquier cambio: refrescar lo que esté abierto (en la misma página).
   async function refrescarPalets() {
     if (paletsAbierto()) await cargarPalets();
     if (App.salidasAbierto()) await App.cargarAlbaranes();
@@ -98,23 +178,6 @@
   // ------------------------------------------------------------------
   //  Listado
   // ------------------------------------------------------------------
-  function paletsFiltrados() {
-    const agri = App.$("filtroAgriPalets").value;
-    const estado = App.$("filtroEstadoPalets").value;
-    const desde = App.$("filtroDesdePalets").value;
-    const hasta = App.$("filtroHastaPalets").value;
-
-    return App.state.paletsActuales.filter((p) => {
-      const e = estadoPalet(p);
-      if (estado === "pendientes" && e === "salido") return false;
-      if (estado && estado !== "pendientes" && e !== estado) return false;
-      if (agri && !lineas(p).some((l) => String(l.agricultor_id) === agri)) return false;
-      // Las fechas miran cuándo se llenó (o se abrió, si sigue en formación).
-      if ((desde || hasta) && !App.fechaEnRango(p.fecha_completo || p.fecha, desde, hasta)) return false;
-      return true;
-    });
-  }
-
   function textoLineas(p) {
     const ls = lineas(p);
     if (ls.length === 0) return '<span class="nota-liq">Vacío</span>';
@@ -128,7 +191,7 @@
   function pintarResumenCamara() {
     const entradas = App.state.entradasPaletizado;
     const enCamara = entradas.reduce((s, x) => s + App.num(x.en_formacion) + App.num(x.sin_palet), 0);
-    const completos = App.state.paletsActuales.filter((p) => estadoPalet(p) === "completo");
+    const completos = App.state.paletsCamara.filter((p) => estadoPalet(p) === "completo");
 
     App.$("paletsEnCamara").textContent = App.fmtNum(enCamara);
     App.$("paletsCompletos").textContent = App.fmtNum(completos.length);
@@ -159,9 +222,7 @@
   }
 
   function pintarPalets() {
-    pintarResumenCamara();
-
-    const palets = paletsFiltrados();
+    const palets = App.state.paletsActuales;
     const cap = cajasPorPalet();
     App.$("btnExportPalets").disabled = palets.length === 0;
 
@@ -188,7 +249,7 @@
         </tr>`;
         }).join("");
 
-    App.actualizarContador("countPalets", palets.length, "palet", "palets");
+    App.actualizarContador("countPalets", paginador().total(), "palet", "palets");
     actualizarBotonesSeleccion();
   }
 
@@ -204,8 +265,10 @@
     App.$("btnSalidaPalets").textContent = n === 0 ? "🚚 Dar salida" : `🚚 Dar salida (${n})`;
   }
 
+  // De la página que se ve o, si no está, de los que siguen en cámara.
   function paletPorId(id) {
-    return App.state.paletsActuales.find((p) => String(p.id) === String(id));
+    const igual = (p) => String(p.id) === String(id);
+    return App.state.paletsActuales.find(igual) || App.state.paletsCamara.find(igual);
   }
 
   // ------------------------------------------------------------------
@@ -232,10 +295,28 @@
         String(b.fecha).localeCompare(String(a.fecha)) || b.registro_id - a.registro_id);
   }
 
+  // Solo se cargan las pesadas con cajas en cámara, pero las de un palet
+  // completo pueden no tener ya nada en cámara: el editor tiene que
+  // mostrarlas igual (si no, al guardar se quitarían del palet).
+  async function cargarEntradasDelPalet(p) {
+    const yaEstan = new Set(App.state.entradasPaletizado.map((x) => String(x.registro_id)));
+    const faltan = [...new Set(lineas(p).map((l) => l.registro_id)
+      .filter((id) => id && !yaEstan.has(String(id))))];
+    if (faltan.length === 0) return true;
+    const extra = await App.consultar(
+      App.db.from("paletizado_entradas").select("*").in("registro_id", faltan),
+      "las entradas del palet"
+    );
+    if (extra === null) return false;
+    App.state.entradasPaletizado = [...App.state.entradasPaletizado, ...extra];
+    return true;
+  }
+
   // Sin palet: nuevo palet. No se crea nada hasta pulsar «Guardar palet».
   async function abrirModalPalet(palet = null) {
     if (!(await cargarDatosPaletizado())) return;
     const p = (palet && paletPorId(palet.id)) || palet || { id: null, num_cajas: 0, palet_lineas: [] };
+    if (!(await cargarEntradasDelPalet(p))) return;
 
     App.dom.formPalet.reset();
     App.$("paletId").value = p.id ?? "";
@@ -494,9 +575,12 @@
   // ------------------------------------------------------------------
   const ESTADO_TEXTO = { formacion: "En progreso", completo: "Completo", salido: "Con salida" };
 
-  function exportarPalets() {
+  // Exporta todos los palets que cumplen los filtros, no solo la página.
+  async function exportarPalets() {
+    const palets = await App.consultar(App.traerTodo(() => consultaPalets()), "los palets");
+    if (palets === null) return;
     const filas = [];
-    paletsFiltrados().forEach((p) => {
+    palets.forEach((p) => {
       const ls = lineas(p).length ? lineas(p) : [{ agricultor_id: null, num_cajas: 0 }];
       ls.forEach((l) => {
         const a = App.agricultorPorId(l.agricultor_id) || {};
@@ -540,7 +624,13 @@
     });
 
     ["filtroAgriPalets", "filtroEstadoPalets", "filtroDesdePalets", "filtroHastaPalets"].forEach((id) =>
-      App.$(id).addEventListener("change", pintarPalets));
+      App.$(id).addEventListener("change", filtrarPalets));
+    let esperaNumero;
+    App.$("filtroNumeroPalets").addEventListener("input", () => {
+      clearTimeout(esperaNumero);
+      esperaNumero = setTimeout(filtrarPalets, 300);
+    });
+    paginador().conectar();
 
     App.$("btnMarcarTodosPalets").addEventListener("click", () => {
       const checks = Array.from(document.querySelectorAll(".check-palet:not(:disabled)"));
@@ -557,6 +647,8 @@
     cajasPorPalet,
     estadoPalet,
     cargarDatosPaletizado,
+    cargarPalets,
+    filtrarPalets,
     refrescarPalets,
     configurarEventosPalets,
   });

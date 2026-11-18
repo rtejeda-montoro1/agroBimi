@@ -563,6 +563,11 @@
 
       <div class="summary">
         <span class="count" id="countLiquidaciones">0 liquidaciones</span>
+        <div class="paginacion" id="paginacionLiquidaciones" hidden>
+          <button type="button" class="btn-ghost btn-sm" id="btnPaginaAnteriorLiquidaciones">‹ Anterior</button>
+          <span class="paginacion-texto" id="paginaLiquidaciones"></span>
+          <button type="button" class="btn-ghost btn-sm" id="btnPaginaSiguienteLiquidaciones">Siguiente ›</button>
+        </div>
         <div class="summary-acciones">
           <button type="button" class="btn-primary" id="btnExportLiquidaciones" disabled>⬇ Export</button>
         </div>
@@ -586,6 +591,12 @@
           </thead>
           <tbody id="cuerpoLiquidaciones"></tbody>
         </table>
+      </div>
+
+      <div class="paginacion paginacion-abajo" id="paginacionLiquidacionesAbajo" hidden>
+        <button type="button" class="btn-ghost btn-sm" id="btnPaginaAnteriorLiquidacionesAbajo">‹ Anterior</button>
+        <span class="paginacion-texto" id="paginaLiquidacionesAbajo"></span>
+        <button type="button" class="btn-ghost btn-sm" id="btnPaginaSiguienteLiquidacionesAbajo">Siguiente ›</button>
       </div>
 
       <div class="modal-actions">
@@ -857,6 +868,10 @@
 
       <div class="toolbar toolbar-filtros">
         <div class="field">
+          <label for="filtroNumeroPalets">Nº de palet</label>
+          <input type="search" id="filtroNumeroPalets" inputmode="numeric" placeholder="Ej. 12 (busca en todos)" />
+        </div>
+        <div class="field">
           <label for="filtroEstadoPalets">Estado</label>
           <select id="filtroEstadoPalets">
             <option value="pendientes">Sin salida</option>
@@ -889,6 +904,11 @@
 
       <div class="summary">
         <span class="count" id="countPalets">0 palets</span>
+        <div class="paginacion" id="paginacionPalets" hidden>
+          <button type="button" class="btn-ghost btn-sm" id="btnPaginaAnteriorPalets">‹ Anterior</button>
+          <span class="paginacion-texto" id="paginaPalets"></span>
+          <button type="button" class="btn-ghost btn-sm" id="btnPaginaSiguientePalets">Siguiente ›</button>
+        </div>
         <div class="summary-acciones">
           <button type="button" class="btn-primary" id="btnExportPalets" disabled>⬇ Export</button>
         </div>
@@ -909,6 +929,14 @@
           </thead>
           <tbody id="cuerpoPalets"></tbody>
         </table>
+      </div>
+
+      <!-- La misma paginación debajo de la tabla: al bajar buscando un palet
+           no hay que volver arriba para pasar de página. -->
+      <div class="paginacion paginacion-abajo" id="paginacionPaletsAbajo" hidden>
+        <button type="button" class="btn-ghost btn-sm" id="btnPaginaAnteriorPaletsAbajo">‹ Anterior</button>
+        <span class="paginacion-texto" id="paginaPaletsAbajo"></span>
+        <button type="button" class="btn-ghost btn-sm" id="btnPaginaSiguientePaletsAbajo">Siguiente ›</button>
       </div>
 
       <div class="modal-actions">
@@ -1000,6 +1028,11 @@
 
       <div class="summary">
         <span class="count" id="countAlbaranes">0 albaranes</span>
+        <div class="paginacion" id="paginacionSalidas" hidden>
+          <button type="button" class="btn-ghost btn-sm" id="btnPaginaAnteriorSalidas">‹ Anterior</button>
+          <span class="paginacion-texto" id="paginaSalidas"></span>
+          <button type="button" class="btn-ghost btn-sm" id="btnPaginaSiguienteSalidas">Siguiente ›</button>
+        </div>
         <div class="summary-acciones">
           <button type="button" class="btn-primary" id="btnExportSalidas" disabled>⬇ Export</button>
         </div>
@@ -1020,6 +1053,12 @@
           </thead>
           <tbody id="cuerpoAlbaranes"></tbody>
         </table>
+      </div>
+
+      <div class="paginacion paginacion-abajo" id="paginacionSalidasAbajo" hidden>
+        <button type="button" class="btn-ghost btn-sm" id="btnPaginaAnteriorSalidasAbajo">‹ Anterior</button>
+        <span class="paginacion-texto" id="paginaSalidasAbajo"></span>
+        <button type="button" class="btn-ghost btn-sm" id="btnPaginaSiguienteSalidasAbajo">Siguiente ›</button>
       </div>
 
       <div class="modal-actions">
@@ -1389,6 +1428,7 @@
   <script src="config.js"></script>
   <script src="js/core.js"></script>
   <script src="js/utils.js"></script>
+  <script src="js/paginacion.js"></script>
   <script src="js/ajustes.js"></script>
   <script src="js/login-bloqueo.js"></script>
   <script src="js/auth.js"></script>

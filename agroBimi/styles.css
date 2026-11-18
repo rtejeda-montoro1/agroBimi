@@ -191,6 +191,11 @@ button:disabled {
 .summary .total { font-size: 1.1rem; font-weight: 700; }
 .summary .count { color: var(--muted); font-size: .85rem; }
 .summary-acciones { display: flex; gap: 8px; flex-wrap: wrap; }
+/* Listados por páginas (js/paginacion.js): palets, liquidaciones y salidas. */
+.paginacion { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.paginacion[hidden] { display: none; }
+.paginacion-texto { color: var(--muted); font-size: .85rem; font-variant-numeric: tabular-nums; }
+.paginacion-abajo { justify-content: flex-end; margin-top: 12px; }
 
 /* ---- Lista de agricultores ---- */
 .card-list { display: flex; flex-direction: column; gap: 10px; }

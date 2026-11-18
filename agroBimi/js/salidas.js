@@ -20,46 +20,57 @@
   async function abrirModalSalidas() {
     await App.asegurarAgricultoresTodos();
     App.abrirModal(App.dom.modalSalidas);
-    await cargarAlbaranes();
+    await filtrarAlbaranes();
   }
 
   function salidasAbierto() {
     return App.dom.modalSalidas.classList.contains("open");
   }
 
-  async function cargarAlbaranes() {
-    const cuerpo = App.$("cuerpoAlbaranes");
-    cuerpo.innerHTML = App.spinnerFila(7, "Cargando albaranes...");
-
-    const data = await App.consultar(
-      App.traerTodo(() => App.db.from("albaranes_salida")
-        .select("*, palets(id,num_cajas)")
-        .order("secuencia", { ascending: false, nullsFirst: false })
-        .order("id")),
-      "los albaranes"
-    );
-    if (data === null) {
-      cuerpo.innerHTML = App.filaMensaje(7, "No se pudieron cargar los albaranes.", "error");
-      App.$("btnExportSalidas").disabled = true;
-      return;
-    }
-    App.state.albaranesActuales = data;
-    pintarAlbaranes();
-  }
-
-  function albaranesFiltrados() {
+  // El listado va por páginas (js/paginacion.js): los filtros se aplican
+  // en el servidor y solo se traen 150 albaranes cada vez.
+  function consultaAlbaranes({ contar = false } = {}) {
     const desde = App.$("filtroDesdeSalidas").value;
     const hasta = App.$("filtroHastaSalidas").value;
-    const texto = App.$("filtroDestinoSalidas").value.trim().toLowerCase();
-    return App.state.albaranesActuales.filter((a) => {
-      if ((desde || hasta) && !App.fechaEnRango(a.fecha, desde, hasta)) return false;
-      if (texto && !String(a.destinatario_nombre || "").toLowerCase().includes(texto)) return false;
-      return true;
+    const texto = App.$("filtroDestinoSalidas").value.trim();
+    let q = App.db.from("albaranes_salida")
+      .select("*, palets(id,num_cajas)", contar ? { count: "exact" } : undefined);
+    if (desde) q = q.gte("fecha", desde);
+    if (hasta) q = q.lte("fecha", hasta);
+    if (texto) q = q.ilike("destinatario_nombre", App.patronContiene(texto));
+    return q.order("secuencia", { ascending: false, nullsFirst: false }).order("id");
+  }
+
+  let paginadorSalidas = null;
+  function paginador() {
+    paginadorSalidas ||= App.crearPaginador({
+      nombre: "Salidas",
+      consulta: consultaAlbaranes,
+      cuerpoId: "cuerpoAlbaranes",
+      columnas: 7,
+      texto: "los albaranes",
+      contadorId: "countAlbaranes",
+      alCargar: (filas, { error }) => {
+        App.state.albaranesActuales = filas;
+        if (!error) pintarAlbaranes();
+        else App.$("btnExportSalidas").disabled = true;
+      },
     });
+    return paginadorSalidas;
+  }
+
+  // Tras dar salida o anular se recarga la página en la que se estaba.
+  function cargarAlbaranes() {
+    return paginador().cargar();
+  }
+
+  // Al cambiar un filtro se vuelve a la primera página.
+  function filtrarAlbaranes() {
+    return paginador().filtrar();
   }
 
   function pintarAlbaranes() {
-    const albaranes = albaranesFiltrados();
+    const albaranes = App.state.albaranesActuales;
     App.$("cuerpoAlbaranes").innerHTML = albaranes.length === 0
       ? App.filaMensaje(7, "No hay albaranes de salida con esos filtros.")
       : albaranes.map((a) => {
@@ -79,7 +90,7 @@
           </td>
         </tr>`;
         }).join("");
-    App.actualizarContador("countAlbaranes", albaranes.length, "albarán", "albaranes");
+    App.actualizarContador("countAlbaranes", paginador().total(), "albarán", "albaranes");
     App.$("btnExportSalidas").disabled = albaranes.length === 0;
   }
 
@@ -91,7 +102,7 @@
   async function abrirModalSalida(idsMarcados = []) {
     await App.asegurarAgricultoresTodos();
     if (!(await App.cargarDatosPaletizado())) return;
-    if (App.state.albaranesActuales.length === 0 && !(await cargarAlbaranesSilencioso())) return;
+    if (!(await cargarHistorialSalidas())) return;
 
     App.dom.formSalida.reset();
     App.$("salidaFecha").value = App.hoyISO();
@@ -99,7 +110,7 @@
     proponerDatosSalida();
 
     const marcados = new Set(idsMarcados.map(String));
-    const disponibles = App.state.paletsActuales
+    const disponibles = App.state.paletsCamara
       .filter((p) => !p.fecha_salida && App.num(p.num_cajas) > 0)
       .sort((a, b) => App.num(a.secuencia) - App.num(b.secuencia));
 
@@ -124,16 +135,23 @@
     App.abrirModal(App.dom.modalSalida);
   }
 
-  async function cargarAlbaranesSilencioso() {
-    const { data, error } = await App.traerTodo(() => App.db.from("albaranes_salida")
-      .select("*, palets(id,num_cajas)")
+  // Para proponer los datos de la nueva salida (destinatarios, transporte,
+  // lugar de carga...) basta con los últimos albaranes: así no se traen
+  // todos aunque haya miles.
+  const ALBARANES_HISTORIAL = 500;
+
+  async function cargarHistorialSalidas() {
+    const { data, error } = await App.db.from("albaranes_salida")
+      .select("destinatario_nombre,destinatario_nif,destinatario_direccion,lugar_entrega," +
+        "matricula,matricula_remolque,transportista,lugar_carga,marcas,embalaje,naturaleza,temperatura")
       .order("secuencia", { ascending: false, nullsFirst: false })
-      .order("id"));
+      .order("id")
+      .range(0, ALBARANES_HISTORIAL - 1);
     if (error) {
       App.toast(`Error al cargar los albaranes anteriores: ${error.message}`);
       return false;
     }
-    App.state.albaranesActuales = data || [];
+    App.state.albaranesHistorial = data || [];
     return true;
   }
 
@@ -148,7 +166,7 @@
   function proponerDatosSalida() {
     // Campo a campo: una salida anterior sin ese dato (p. ej. de antes del
     // CMR) no lo deja vacío, se usa el del ejemplo.
-    const ultima = App.state.albaranesActuales[0] || {};
+    const ultima = App.state.albaranesHistorial[0] || {};
     const poner = (id, campo) => {
       const v = ultima[campo] ?? PROPUESTA_INICIAL[campo];
       App.$(id).value = v == null ? "" : String(v);
@@ -164,14 +182,14 @@
   // Los destinatarios de albaranes anteriores se proponen al escribir y,
   // al elegir uno, se rellenan sus datos con los del último albarán.
   function rellenarDestinatarios() {
-    const nombres = [...new Set(App.state.albaranesActuales.map((a) => a.destinatario_nombre).filter(Boolean))];
+    const nombres = [...new Set(App.state.albaranesHistorial.map((a) => a.destinatario_nombre).filter(Boolean))];
     App.$("listaDestinatarios").innerHTML = nombres
       .map((n) => `<option value="${App.escapar(n)}"></option>`).join("");
   }
 
   function autocompletarDestinatario() {
     const nombre = App.$("salidaDestNombre").value.trim().toLowerCase();
-    const previo = App.state.albaranesActuales
+    const previo = App.state.albaranesHistorial
       .find((a) => String(a.destinatario_nombre || "").trim().toLowerCase() === nombre);
     if (!previo) return;
     const poner = (id, v) => { if (!App.$(id).value) App.$(id).value = v || ""; };
@@ -222,7 +240,7 @@
       return;
     }
     const incompletos = checks.filter((c) => App.estadoPalet(
-      App.state.paletsActuales.find((p) => String(p.id) === c.dataset.palet) || {}) === "formacion");
+      App.state.paletsCamara.find((p) => String(p.id) === c.dataset.palet) || {}) === "formacion");
     if (incompletos.length &&
         !confirm(`${incompletos.length === 1 ? "Un palet no está completo" : `${incompletos.length} palets no están completos`}. ¿Darles salida igualmente?`)) {
       return;
@@ -259,7 +277,6 @@
       App.cerrarModal(App.dom.modalSalida);
       App.toast("Salida registrada");
       await App.refrescarPalets();
-      if (!salidasAbierto()) await cargarAlbaranesSilencioso();
       await imprimirSalida(id);
     } finally {
       guardandoSalida = false;
@@ -578,8 +595,11 @@ EN FRIGORÍFICO DE <u class="cmr-dato">&nbsp;${temperatura}&nbsp;</u> ºC</div>`
     }
   }
 
-  function exportarAlbaranes() {
-    const filas = albaranesFiltrados().map((a) => ({
+  // Exporta todos los que cumplen los filtros, no solo la página.
+  async function exportarAlbaranes() {
+    const todos = await App.consultar(App.traerTodo(() => consultaAlbaranes()), "los albaranes");
+    if (todos === null) return;
+    const filas = todos.map((a) => ({
       "Albarán": a.numero || "",
       "Fecha": a.fecha || "",
       "Destinatario": a.destinatario_nombre || "",
@@ -606,8 +626,13 @@ EN FRIGORÍFICO DE <u class="cmr-dato">&nbsp;${temperatura}&nbsp;</u> ºC</div>`
     App.$("cuerpoAlbaranes").addEventListener("click", clickAlbaranes);
     App.$("btnExportSalidas").addEventListener("click", exportarAlbaranes);
     ["filtroDesdeSalidas", "filtroHastaSalidas"].forEach((id) =>
-      App.$(id).addEventListener("change", pintarAlbaranes));
-    App.$("filtroDestinoSalidas").addEventListener("input", pintarAlbaranes);
+      App.$(id).addEventListener("change", filtrarAlbaranes));
+    let esperaDestino;
+    App.$("filtroDestinoSalidas").addEventListener("input", () => {
+      clearTimeout(esperaDestino);
+      esperaDestino = setTimeout(filtrarAlbaranes, 300);
+    });
+    paginador().conectar();
 
     App.dom.formSalida.addEventListener("submit", guardarSalida);
     App.$("salidaPalets").addEventListener("change", actualizarResumenSalida);

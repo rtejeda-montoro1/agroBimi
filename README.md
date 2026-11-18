@@ -36,6 +36,8 @@ dentro de su propia carpeta.
 - agroBimi/js/registros.js: logica CRUD de registros.
 - agroBimi/js/plantas.js: retiradas de plantas por ciclo y calculo de rendimiento.
 - agroBimi/js/cajas.js: control de cajas vacias y descuadres.
+- agroBimi/js/paginacion.js: listados por paginas (palets, liquidaciones y
+  salidas), con los filtros aplicados en el servidor.
 - agroBimi/js/palets.js: paletizacion (camara, palets y etiquetas).
 - agroBimi/js/salidas.js: salidas de palets y albaranes de salida.
 - agroBimi/js/liquidaciones.js: liquidaciones por fechas y generacion de facturas.

@@ -77,6 +77,14 @@ function fakeQuery(response, onCall = () => {}) {
     insert(...args) { onCall("insert", args); return this; },
     delete(...args) { onCall("delete", args); return this; },
     eq(...args) { onCall("eq", args); return this; },
+    is(...args) { onCall("is", args); return this; },
+    not(...args) { onCall("not", args); return this; },
+    gte(...args) { onCall("gte", args); return this; },
+    lt(...args) { onCall("lt", args); return this; },
+    in(...args) { onCall("in", args); return this; },
+    range(...args) { onCall("range", args); return this; },
+    lte(...args) { onCall("lte", args); return this; },
+    ilike(...args) { onCall("ilike", args); return this; },
     then(resolve, reject) { return Promise.resolve(response).then(resolve, reject); },
   };
   return query;

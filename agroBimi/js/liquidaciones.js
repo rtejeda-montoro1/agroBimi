@@ -38,48 +38,80 @@
     await App.asegurarAgricultoresTodos();
     App.$("filtroAgriLiq").value = agricultorId ? String(agricultorId) : "";
     App.abrirModal(App.dom.modalLiquidaciones);
-    await cargarLiquidaciones();
+    await filtrarLiquidaciones();
   }
 
-  async function cargarLiquidaciones() {
-    const cuerpo = App.$("cuerpoLiquidaciones");
-    cuerpo.innerHTML = App.spinnerFila(10, "Cargando liquidaciones...");
-
-    const data = await App.consultar(
-      App.traerTodo(() => App.db.from("liquidaciones")
-        .select("*, liquidacion_lineas(*)")
-        .order("fecha", { ascending: false })
-        .order("secuencia", { ascending: false, nullsFirst: false })
-        .order("id")),
-      "las liquidaciones"
-    );
-
-    if (data === null) {
-      cuerpo.innerHTML = App.filaMensaje(10, "No se pudieron cargar las liquidaciones.", "error");
-      return;
-    }
-
-    App.state.liquidacionesActuales = data;
-    pintarLiquidaciones();
-  }
-
-  function liquidacionesFiltradas() {
+  // El listado va por páginas (js/paginacion.js): los filtros se aplican
+  // en el servidor y solo se traen 150 liquidaciones cada vez. Los totales
+  // de arriba (base y total) sí suman todas las que cumplen los filtros.
+  function filtrarConsultaLiq(q) {
     const agri = App.$("filtroAgriLiq").value;
     const campana = App.$("filtroCampanaLiq").value;
     const estado = App.$("filtroEstadoLiq").value;
     const desde = App.$("filtroDesdeLiq").value;
     const hasta = App.$("filtroHastaLiq").value;
+    if (agri) q = q.eq("agricultor_id", agri);
+    if (campana) q = q.eq("campana_id", campana);
+    if (estado) q = q.eq("estado", estado);
+    // El filtro de fechas mira el periodo liquidado: entra cualquier
+    // liquidación que se solape con el rango buscado.
+    if (desde) q = q.gte("fecha_hasta", desde);
+    if (hasta) q = q.lte("fecha_desde", hasta);
+    return q;
+  }
 
-    return App.state.liquidacionesActuales.filter((l) => {
-      if (agri && String(l.agricultor_id) !== agri) return false;
-      if (campana && String(l.campana_id ?? "") !== campana) return false;
-      if (estado && l.estado !== estado) return false;
-      // El filtro de fechas mira el periodo liquidado: entra cualquier
-      // liquidación que se solape con el rango buscado.
-      if (desde && l.fecha_hasta < desde) return false;
-      if (hasta && l.fecha_desde > hasta) return false;
-      return true;
+  function consultaLiquidaciones({ contar = false } = {}) {
+    return filtrarConsultaLiq(App.db.from("liquidaciones")
+      .select("*, liquidacion_lineas(*)", contar ? { count: "exact" } : undefined))
+      .order("fecha", { ascending: false })
+      .order("secuencia", { ascending: false, nullsFirst: false })
+      .order("id");
+  }
+
+  let paginadorLiq = null;
+  function paginador() {
+    paginadorLiq ||= App.crearPaginador({
+      nombre: "Liquidaciones",
+      consulta: consultaLiquidaciones,
+      cuerpoId: "cuerpoLiquidaciones",
+      columnas: 10,
+      texto: "las liquidaciones",
+      contadorId: "countLiquidaciones",
+      alCargar: (filas, { error }) => {
+        App.state.liquidacionesActuales = filas;
+        if (!error) pintarLiquidaciones();
+        else App.$("btnExportLiquidaciones").disabled = true;
+      },
     });
+    return paginadorLiq;
+  }
+
+  // Base y total de todas las que cumplen los filtros (no solo la página).
+  // Son dos números por liquidación: se traen enteras sin problema.
+  async function pintarTotalesLiq() {
+    App.$("liqTotalBase").textContent = "…";
+    App.$("liqTotalTotal").textContent = "…";
+    const filas = await App.consultar(
+      App.traerTodo(() => filtrarConsultaLiq(App.db.from("liquidaciones").select("base,total")).order("id")),
+      "los totales de las liquidaciones"
+    );
+    const suma = (campo) => filas === null ? "—" : App.fmtEuro(filas.reduce((s, l) => s + App.num(l[campo]), 0));
+    App.$("liqTotalBase").textContent = suma("base");
+    App.$("liqTotalTotal").textContent = suma("total");
+  }
+
+  // Tras crear, editar o borrar se recarga la página en la que se estaba.
+  async function cargarLiquidaciones() {
+    await Promise.all([paginador().cargar(), pintarTotalesLiq()]);
+  }
+
+  // Al cambiar un filtro se vuelve a la primera página.
+  async function filtrarLiquidaciones() {
+    await Promise.all([paginador().filtrar(), pintarTotalesLiq()]);
+  }
+
+  function liquidacionDeLaPagina(id) {
+    return App.state.liquidacionesActuales.find((x) => String(x.id) === String(id));
   }
 
   function cajasDeLiquidacion(l) {
@@ -88,11 +120,9 @@
   }
 
   function pintarLiquidaciones() {
-    const filas = liquidacionesFiltradas();
+    const filas = App.state.liquidacionesActuales;
     const cuerpo = App.$("cuerpoLiquidaciones");
 
-    App.$("liqTotalBase").textContent = App.fmtEuro(filas.reduce((s, l) => s + App.num(l.base), 0));
-    App.$("liqTotalTotal").textContent = App.fmtEuro(filas.reduce((s, l) => s + App.num(l.total), 0));
     App.$("btnExportLiquidaciones").disabled = filas.length === 0;
 
     cuerpo.innerHTML = filas.length === 0
@@ -127,7 +157,7 @@
         </tr>`;
         }).join("");
 
-    App.actualizarContador("countLiquidaciones", filas.length, "liquidación", "liquidaciones");
+    App.actualizarContador("countLiquidaciones", paginador().total(), "liquidación", "liquidaciones");
   }
 
   // ------------------------------------------------------------------
@@ -519,7 +549,7 @@
   // compensación (nº automático de la serie) o apuntar la factura que trae
   // el agricultor (su nº y su fecha, a mano, sin gastar nº de la serie).
   async function abrirModalFacturar(id) {
-    const l = App.state.liquidacionesActuales.find((x) => String(x.id) === String(id));
+    const l = liquidacionDeLaPagina(id);
     if (!l) return;
 
     let secuencia;
@@ -573,7 +603,7 @@
   }
 
   async function facturar() {
-    const l = App.state.liquidacionesActuales.find((x) => String(x.id) === App.$("facturarLiqId").value);
+    const l = liquidacionDeLaPagina(App.$("facturarLiqId").value);
     if (!l) return;
 
     const deAgricultor = tipoFacturaElegido() === "agricultor";
@@ -589,8 +619,15 @@
       }
       // El mismo nº ya apuntado a otra liquidación de este agricultor suele
       // ser un error al teclear.
-      const repetida = App.state.liquidacionesActuales.find((x) =>
-        x.id !== l.id && x.agricultor_id === l.agricultor_id &&
+      // Se busca en todas sus liquidaciones, no solo en la página que se ve.
+      const otras = await App.consultar(
+        App.db.from("liquidaciones").select("id,numero,num_factura")
+          .eq("agricultor_id", l.agricultor_id)
+          .ilike("num_factura", App.patronContiene(numAgricultor)),
+        "las facturas del agricultor"
+      );
+      if (otras === null) return;
+      const repetida = otras.find((x) => String(x.id) !== String(l.id) &&
         (x.num_factura || "").trim().toLowerCase() === numAgricultor.toLowerCase());
       if (repetida &&
           !confirm(`La factura ${numAgricultor} ya está apuntada en la liquidación ${repetida.numero}. ¿Apuntarla también aquí?`)) {
@@ -622,8 +659,12 @@
 
     // Solo el recibo propio se abre para imprimirlo: la factura del
     // agricultor ya la tiene él en papel.
-    const actualizada = App.state.liquidacionesActuales.find((x) => String(x.id) === String(l.id));
-    if (actualizada && !deAgricultor) App.abrirModalFactura(actualizada);
+    if (deAgricultor) return;
+    const actualizada = liquidacionDeLaPagina(l.id) || (await App.consultar(
+      App.db.from("liquidaciones").select("*, liquidacion_lineas(*)").eq("id", l.id),
+      "la liquidación"
+    ))?.[0];
+    if (actualizada) App.abrirModalFactura(actualizada);
   }
 
   // Recibo de compensación emitido por nosotros (con nº de nuestra serie).
@@ -633,7 +674,7 @@
   }
 
   async function eliminarLiquidacion(id) {
-    const l = App.state.liquidacionesActuales.find((x) => String(x.id) === String(id));
+    const l = liquidacionDeLaPagina(id);
     if (!l) return;
 
     // Con recibo propio no se borra: su número podría volver a darse a otro
@@ -675,12 +716,12 @@
     const eliminar = e.target.closest("[data-del-liq]");
 
     if (ver) {
-      const l = App.state.liquidacionesActuales.find((x) => String(x.id) === ver.dataset.verLiq);
+      const l = liquidacionDeLaPagina(ver.dataset.verLiq);
       if (l) App.abrirModalFactura(l);
       return;
     }
     if (editar) {
-      const l = App.state.liquidacionesActuales.find((x) => String(x.id) === editar.dataset.editLiq);
+      const l = liquidacionDeLaPagina(editar.dataset.editLiq);
       if (l) await abrirModalLiquidacion(l);
       return;
     }
@@ -720,8 +761,11 @@
   // ------------------------------------------------------------------
   //  Export
   // ------------------------------------------------------------------
-  function exportarLiquidaciones() {
-    const filas = liquidacionesFiltradas().map((l) => {
+  // Exporta todas las que cumplen los filtros, no solo la página.
+  async function exportarLiquidaciones() {
+    const todas = await App.consultar(App.traerTodo(() => consultaLiquidaciones()), "las liquidaciones");
+    if (todas === null) return;
+    const filas = todas.map((l) => {
       const a = App.agricultorPorId(l.agricultor_id) || {};
       const linea = (tipo) => (l.liquidacion_lineas || []).find((x) => x.tipo === tipo);
       return {
@@ -778,7 +822,8 @@
 
     ["filtroAgriLiq", "filtroCampanaLiq", "filtroEstadoLiq",
      "filtroDesdeLiq", "filtroHastaLiq"].forEach((id) =>
-      App.$(id).addEventListener("change", pintarLiquidaciones));
+      App.$(id).addEventListener("change", filtrarLiquidaciones));
+    paginador().conectar();
 
     // Cambiar cualquier dato del cálculo invalida el resultado anterior:
     // hay que volver a pulsar «Calcular».
