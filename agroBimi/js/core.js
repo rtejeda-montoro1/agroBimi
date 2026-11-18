@@ -65,6 +65,7 @@
     // Listados cargados en cada modal de gestión.
     plantasActuales: [],
     cajasActuales: [],
+    ordenCajas: "codigo",      // control de cajas: "codigo", "az" o "za"
     liquidacionesActuales: [],
     liquidacionPrevia: null,   // borrador calculado antes de guardar
     paletsActuales: [],

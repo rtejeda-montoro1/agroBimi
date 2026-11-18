@@ -37,3 +37,25 @@ test("cajas calculates outstanding empty-box charges for one farmer", async () =
   assert.equal(saldo.importe, 1.5);
   assert.ok(calls.some((call) => call[0] === "registros" && call[1] === "eq" && call[2] === "agricultor_id" && call[3] === 7));
 });
+
+test("cajas sort by farmer code by default and by name A→Z / Z→A from the header", () => {
+  const agricultores = {
+    1: { id: 1, codigo: 12, nombre: "Ana" },
+    2: { id: 2, codigo: 3, nombre: "Zoe" },
+    3: { id: 3, codigo: null, nombre: "Bruno" },
+    4: { id: 4, codigo: 7, nombre: "álvaro" },
+  };
+  const app = {
+    state: {},
+    agricultorPorId: (id) => agricultores[id],
+    $: () => createElement(),
+  };
+  const module = loadModule("cajas.js", app).window.App;
+  const saldos = [1, 2, 3, 4].map((id) => ({ agricultor_id: id }));
+  const ordenar = (orden) => [...saldos].sort(module.compararSaldos(orden)).map((s) => s.agricultor_id);
+
+  assert.deepEqual(ordenar(), [2, 4, 1, 3]);         // por código, sin código al final
+  assert.deepEqual(ordenar("codigo"), [2, 4, 1, 3]);
+  assert.deepEqual(ordenar("az"), [4, 1, 3, 2]);     // álvaro, Ana, Bruno, Zoe
+  assert.deepEqual(ordenar("za"), [2, 3, 1, 4]);
+});

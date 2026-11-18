@@ -169,13 +169,32 @@
     return saldos
       .filter((s) => !agri || String(s.agricultor_id) === agri)
       .filter((s) => !soloDescuadres || s.pendiente > 0)
-      .sort((a, b) => {
-        // Primero los que más deben: es lo que hay que reclamar.
-        if (b.pendiente !== a.pendiente) return b.pendiente - a.pendiente;
-        const na = App.agricultorPorId(a.agricultor_id);
-        const nb = App.agricultorPorId(b.agricultor_id);
-        return (na?.nombre || "").localeCompare(nb?.nombre || "", "es");
-      });
+      .sort(compararSaldos(App.state.ordenCajas));
+  }
+
+  // Orden de la tabla: por código de agricultor (por defecto, para
+  // localizarlos igual que en la báscula) o por nombre A→Z / Z→A, que se
+  // eligen pulsando la cabecera "Agricultor". Sin código van al final.
+  const ORDENES_CAJAS = ["codigo", "az", "za"];
+  const ICONOS_ORDEN_CAJAS = { codigo: "nº ↑", az: "A→Z", za: "Z→A" };
+
+  function compararSaldos(orden = "codigo") {
+    const nombre = (s) => App.agricultorPorId(s.agricultor_id)?.nombre || "";
+    const codigo = (s) => {
+      const c = App.agricultorPorId(s.agricultor_id)?.codigo;
+      return c === null || c === undefined || c === "" ? Infinity : Number(c);
+    };
+    const porNombre = (a, b) => nombre(a).localeCompare(nombre(b), "es", { sensitivity: "base" });
+    const porCodigo = (a, b) => codigo(a) - codigo(b) || porNombre(a, b);
+    if (orden === "az") return (a, b) => porNombre(a, b) || porCodigo(a, b);
+    if (orden === "za") return (a, b) => porNombre(b, a) || porCodigo(a, b);
+    return porCodigo;
+  }
+
+  function cambiarOrdenCajas() {
+    const actual = ORDENES_CAJAS.indexOf(App.state.ordenCajas || "codigo");
+    App.state.ordenCajas = ORDENES_CAJAS[(actual + 1) % ORDENES_CAJAS.length];
+    pintarCajas();
   }
 
   function pintarCajas() {
@@ -187,6 +206,7 @@
     App.$("cajasTotalPendiente").textContent = App.fmtNum(pendiente);
     App.$("cajasTotalImporte").textContent = App.fmtEuro(importe);
     App.$("btnExportCajas").disabled = saldos.length === 0;
+    App.$("ordenCajasIcono").textContent = ICONOS_ORDEN_CAJAS[App.state.ordenCajas || "codigo"];
 
     cuerpo.innerHTML = saldos.length === 0
       ? App.filaMensaje(8, "No hay movimientos de cajas con esos filtros.")
@@ -247,6 +267,7 @@
     App.$("btnControlCajas").addEventListener("click", abrirModalCajas);
     App.$("btnLimpiarFiltrosCajas").addEventListener("click", limpiarFiltrosCajas);
     App.$("btnExportCajas").addEventListener("click", exportarCajas);
+    App.$("btnOrdenCajas").addEventListener("click", cambiarOrdenCajas);
 
     ["filtroAgriCajas", "filtroCampanaCajas", "filtroDesdeCajas",
      "filtroHastaCajas", "filtroSoloDescuadres"].forEach((id) =>
@@ -265,6 +286,7 @@
   Object.assign(App, {
     saldoCajasAgricultor,
     abrirModalCajas,
+    compararSaldos,
     configurarEventosCajas,
   });
 })(window.App);

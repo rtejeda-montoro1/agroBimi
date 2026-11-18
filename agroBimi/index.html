@@ -62,7 +62,7 @@
       <nav class="barra-modulos">
         <button class="btn-modulo" id="btnPlantas">🌱 Plantas retiradas</button>
         <button class="btn-modulo" id="btnControlCajas">⚖ Control de cajas</button>
-        <button class="btn-modulo" id="btnPaletizacion">🧱 Paletización</button>
+        <button class="btn-modulo" id="btnPaletizacion">📦 Paletización</button>
         <button class="btn-modulo" id="btnSalidas">🚚 Salidas</button>
         <button class="btn-modulo" id="btnLiquidaciones">🧾 Liquidaciones</button>
         <button class="btn-modulo" id="btnAjustes">⚙ Ajustes</button>
@@ -485,7 +485,11 @@
         <table class="tabla-registros">
           <thead>
             <tr>
-              <th>Agricultor</th>
+              <th>
+                <button type="button" class="th-sort" id="btnOrdenCajas" title="Ordenar por código o por nombre">
+                  Agricultor <span id="ordenCajasIcono">nº ↑</span>
+                </button>
+              </th>
               <th class="col-num">Vacías retiradas</th>
               <th class="col-num">Llenas devueltas</th>
               <th class="col-num">Vacías devueltas</th>
@@ -820,7 +824,7 @@
   <div class="modal-backdrop" id="modalPalets">
     <div class="modal modal-xl">
       <button type="button" class="modal-x" data-cerrar="modalPalets" aria-label="Cerrar" title="Cerrar">&times;</button>
-      <h2>🧱 Paletización</h2>
+      <h2>📦 Paletización</h2>
       <p class="sub-modal">
         Todas las cajas que pasan por la báscula van a la cámara y se reparten
         solas en palets: cuando un palet llega a sus cajas se le pone la fecha
