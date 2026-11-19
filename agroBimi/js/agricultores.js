@@ -19,6 +19,21 @@
     return codigos;
   }
 
+  // Sin acentos ni mayúsculas: "jose" encuentra a "José".
+  function normalizar(texto) {
+    return String(texto || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+  }
+
+  // Agricultores de la lista completa cuyo nombre contiene el texto o cuyo
+  // código encaja con él (misma regla de código que el buscador de arriba).
+  function agricultoresQueCoinciden(texto) {
+    const buscar = String(texto || "").trim();
+    const nombre = normalizar(buscar);
+    const codigos = new Set(codigosQueEmpiezanPor(buscar));
+    return App.state.agricultoresTodos.filter((a) =>
+      normalizar(a.nombre).includes(nombre) || (a.codigo != null && codigos.has(Number(a.codigo))));
+  }
+
   async function cargarAgricultores() {
     const buscar = App.$("buscarAgricultor").value.trim();
     let filtroOr = null;
@@ -335,6 +350,7 @@
   Object.assign(App, {
     cargarAgricultores,
     asegurarAgricultoresTodos,
+    agricultoresQueCoinciden,
     poblarSelectAgricultores,
     pintarAgricultores,
     abrirModalAgricultor,

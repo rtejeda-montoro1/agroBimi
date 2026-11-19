@@ -2,7 +2,7 @@
 //  Listados por páginas
 //  ---------------------------------------------------------------------
 //  Para los listados que crecen sin límite con los años (palets,
-//  liquidaciones, albaranes de salida): los filtros se aplican en el
+//  liquidaciones, albaranes de salida, registros de una campaña): los filtros se aplican en el
 //  servidor y solo se traen 150 filas cada vez, así la ventana abre igual
 //  de rápido con 100 filas que con 100.000.
 //

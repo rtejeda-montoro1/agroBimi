@@ -191,7 +191,22 @@ button:disabled {
 .summary .total { font-size: 1.1rem; font-weight: 700; }
 .summary .count { color: var(--muted); font-size: .85rem; }
 .summary-acciones { display: flex; gap: 8px; flex-wrap: wrap; }
-/* Listados por páginas (js/paginacion.js): palets, liquidaciones y salidas. */
+/* Menú de Export de "Buscar por campaña": la página que se ve o todo. */
+.menu-export-wrap { position: relative; }
+.menu-export {
+  position: absolute; right: 0; top: calc(100% + 4px); z-index: 20;
+  display: flex; flex-direction: column; min-width: 230px;
+  background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+  box-shadow: 0 6px 18px rgba(0,0,0,.15); overflow: hidden;
+}
+.menu-export[hidden] { display: none; }
+.menu-export button {
+  background: none; border: 0; text-align: left; padding: 10px 14px;
+  font: inherit; color: inherit; cursor: pointer;
+}
+.menu-export button + button { border-top: 1px solid var(--border); }
+.menu-export button:hover, .menu-export button:focus-visible { background: var(--bg, rgba(0,0,0,.05)); }
+/* Listados por páginas (js/paginacion.js): palets, liquidaciones, salidas y buscar por campaña. */
 .paginacion { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .paginacion[hidden] { display: none; }
 .paginacion-texto { color: var(--muted); font-size: .85rem; font-variant-numeric: tabular-nums; }

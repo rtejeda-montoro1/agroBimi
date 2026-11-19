@@ -1364,9 +1364,15 @@
     <div class="modal modal-ancho">
       <button type="button" class="modal-x" data-cerrar="modalBuscarCampana" aria-label="Cerrar" title="Cerrar">&times;</button>
       <h2>🔎 Buscar por campaña</h2>
-      <div class="field">
-        <label for="selBuscarCampana">Campaña</label>
-        <select id="selBuscarCampana"></select>
+      <div class="toolbar toolbar-filtros">
+        <div class="field">
+          <label for="selBuscarCampana">Campaña</label>
+          <select id="selBuscarCampana"></select>
+        </div>
+        <div class="field">
+          <label for="filtroAgriCampana">Agricultor</label>
+          <input type="search" id="filtroAgriCampana" placeholder="Nombre o código" autocomplete="off" />
+        </div>
       </div>
       <div class="campana-acciones">
         <button type="button" class="btn-primary" id="btnAnadirCampanaBuscar">+ Añadir campaña</button>
@@ -1375,8 +1381,20 @@
       </div>
       <div class="summary">
         <span class="count" id="countBuscarCampana">0 registros</span>
+        <div class="paginacion" id="paginacionCampana" hidden>
+          <button type="button" class="btn-ghost btn-sm" id="btnPaginaAnteriorCampana">‹ Anterior</button>
+          <span class="paginacion-texto" id="paginaCampana"></span>
+          <button type="button" class="btn-ghost btn-sm" id="btnPaginaSiguienteCampana">Siguiente ›</button>
+        </div>
         <div class="summary-acciones">
-          <button type="button" class="btn-primary" id="btnExportCampana" disabled>⬇ Export</button>
+          <!-- Con varias páginas, Export pregunta qué exportar. -->
+          <div class="menu-export-wrap">
+            <button type="button" class="btn-primary" id="btnExportCampana" disabled aria-haspopup="menu">⬇ Export</button>
+            <div class="menu-export" id="menuExportCampana" role="menu" hidden>
+              <button type="button" role="menuitem" id="btnExportCampanaPagina">Vista actual</button>
+              <button type="button" role="menuitem" id="btnExportCampanaTodo">Todos los registros</button>
+            </div>
+          </div>
         </div>
       </div>
       <div class="tabla-wrap">
@@ -1395,6 +1413,11 @@
           </thead>
           <tbody id="cuerpoBuscarCampana"></tbody>
         </table>
+      </div>
+      <div class="paginacion paginacion-abajo" id="paginacionCampanaAbajo" hidden>
+        <button type="button" class="btn-ghost btn-sm" id="btnPaginaAnteriorCampanaAbajo">‹ Anterior</button>
+        <span class="paginacion-texto" id="paginaCampanaAbajo"></span>
+        <button type="button" class="btn-ghost btn-sm" id="btnPaginaSiguienteCampanaAbajo">Siguiente ›</button>
       </div>
       <div class="modal-actions">
         <button type="button" class="btn-ghost" data-cerrar="modalBuscarCampana">Cerrar</button>

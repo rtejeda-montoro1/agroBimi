@@ -157,10 +157,10 @@
   }
 
   // -------------------------------------------------------------------
-  //  Export: registros filtrados por campaña
+  //  Export: registros filtrados por campaña (la página que se ve o todos
+  //  los de la búsqueda: lo elige el buscador de campañas)
   // -------------------------------------------------------------------
-  function exportarExcelCampana() {
-    const regs = App.state.registrosCampanaActuales;
+  function exportarExcelCampana(regs = App.state.registrosCampanaActuales) {
     if (!regs || regs.length === 0) {
       App.toast("No hay registros que exportar.");
       return;

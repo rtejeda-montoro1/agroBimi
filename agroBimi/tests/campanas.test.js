@@ -70,3 +70,94 @@ test("campanas are only added from the campaign search, and every wired button e
   assert.ok(ids.length > 0);
   for (const id of ids) assert.match(html, new RegExp(`id="${id}"`), `falta #${id} en index.html`);
 });
+
+test("campaign search lists one page filtered by campaign and farmer, and Export asks what to export", async () => {
+  const elements = new Map();
+  const getElement = (id) => {
+    if (!elements.has(id)) elements.set(id, createElement());
+    return elements.get(id);
+  };
+  const pagina = Array.from({ length: 150 }, (_, i) => ({ id: i + 1, agricultor_id: 3, agricultores: { nombre: "Ana", codigo: 3 } }));
+  const consultas = [];
+  const exportados = [];
+  const app = {
+    state: { campanasActuales: [{ id: 8, nombre: "2026/27" }], registrosCampanaActuales: [] },
+    dom: { modalBuscarCampana: createElement(), formCampana: createElement() },
+    $: getElement,
+    db: { from: (table) => {
+      assert.equal(table, "registros");
+      const llamadas = [];
+      consultas.push(llamadas);
+      return fakeQuery({ data: pagina, error: null, count: 400 }, (method, args) => llamadas.push([method, ...args]));
+    } },
+    traerTodo: async (createQuery) => {
+      const r = await createQuery();
+      return { data: [...r.data, ...r.data], error: null };
+    },
+    agricultoresQueCoinciden: (texto) => (texto === "ana" ? [{ id: 3 }, { id: 9 }] : []),
+    escapar: String,
+    valor: String,
+    fmtNum: String,
+    fmtCodigo: String,
+    formatearFecha: String,
+    botonCajas: () => "",
+    spinnerFila: () => "",
+    filaMensaje: (_columns, text) => text,
+    actualizarContador: (_id, count) => { app.count = count; },
+    exportarExcelCampana: (regs) => exportados.push(regs),
+    toast() {},
+  };
+  loadModule("paginacion.js", app);
+  const module = loadModule("campanas.js", app, { document: { addEventListener() {} } }).window.App;
+  module.configurarEventosCampanas();
+  const sel = getElement("selBuscarCampana");
+  sel.value = "8";
+  getElement("filtroAgriCampana").value = "ana";
+
+  sel.dispatch("change", { target: sel });
+  await new Promise((resolve) => setImmediate(resolve));
+
+  const q = consultas.at(-1);
+  assert.ok(q.some((c) => c[0] === "eq" && c[1] === "campana_id" && c[2] === "8"));
+  assert.ok(q.some((c) => c[0] === "in" && c[1] === "agricultor_id" && c[2].join() === "3,9"));
+  assert.ok(q.some((c) => c[0] === "range" && c[1] === 0 && c[2] === 149));
+  assert.equal(app.count, 400);
+  assert.equal(getElement("paginaCampana").textContent, "1–150 · página 1 de 3");
+  assert.equal(getElement("paginacionCampanaAbajo").hidden, false);
+  assert.equal(getElement("btnExportCampana").disabled, false);
+
+  // Hay más registros que los de la página: Export pregunta.
+  getElement("btnExportCampana").dispatch("click", { stopPropagation() {} });
+  assert.equal(getElement("menuExportCampana").hidden, false);
+  assert.match(getElement("btnExportCampanaTodo").textContent, /400/);
+
+  getElement("btnExportCampanaPagina").dispatch("click");
+  assert.equal(exportados.at(-1).length, 150);
+  assert.equal(getElement("menuExportCampana").hidden, true);
+
+  getElement("btnExportCampanaTodo").dispatch("click");
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(exportados.at(-1).length, 300);
+  assert.ok(!consultas.at(-1).some((c) => c[0] === "range"));
+  assert.ok(consultas.at(-1).some((c) => c[0] === "in"));
+
+  // Ningún agricultor encaja con el texto: la consulta sale vacía.
+  getElement("filtroAgriCampana").value = "zzz";
+  sel.dispatch("change", { target: sel });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.ok(consultas.at(-1).some((c) => c[0] === "in" && c[2].join() === "-1"));
+});
+
+test("farmers match the campaign filter by name without accents or by code", () => {
+  const app = {
+    state: { agricultoresTodos: [
+      { id: 1, nombre: "José Pérez", codigo: 7 },
+      { id: 2, nombre: "Ana", codigo: 12 },
+      { id: 3, nombre: "Luis", codigo: 120 },
+    ] },
+  };
+  const module = loadModule("agricultores.js", app).window.App;
+  assert.deepEqual(module.agricultoresQueCoinciden("jose").map((a) => a.id), [1]);
+  assert.deepEqual(module.agricultoresQueCoinciden("007").map((a) => a.id), [1]);
+  assert.deepEqual(module.agricultoresQueCoinciden("12").map((a) => a.id), [2, 3]);
+});

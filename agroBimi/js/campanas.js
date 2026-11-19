@@ -180,6 +180,13 @@
     App.$("btnExportCampana").disabled = true;
     App.$("btnEditarCampana").disabled = true;
     App.$("btnEliminarCampana").disabled = true;
+    ocultarBotoneras();
+    cerrarMenuExport();
+  }
+
+  function ocultarBotoneras() {
+    App.$("paginacionCampana").hidden = true;
+    App.$("paginacionCampanaAbajo").hidden = true;
   }
 
   // El buscador abre directamente con la campaña por defecto ya buscada.
@@ -193,51 +200,88 @@
 
   async function abrirBuscarCampana() {
     App.dom.modalBuscarCampana.classList.add("open");
+    App.$("filtroAgriCampana").value = "";
+    // El filtro por agricultor busca en la lista completa.
+    await App.asegurarAgricultoresTodos();
     // Refrescamos las campañas por si la carga inicial (al iniciar sesión)
     // fue lenta o falló y el select quedó sin opciones.
     await mostrarCampanaPorDefecto();
   }
 
+  // Es la ventana con más filas (todas las pesadas de una campaña), así
+  // que va por páginas (js/paginacion.js): campaña y agricultor se filtran
+  // en el servidor y solo se traen 150 registros cada vez.
+  function consultaCampana({ contar = false } = {}) {
+    let q = App.db.from("registros")
+      .select("*, agricultores(nombre,codigo)", contar ? { count: "exact" } : undefined)
+      .eq("campana_id", App.$("selBuscarCampana").value);
+    const texto = App.$("filtroAgriCampana").value.trim();
+    if (texto) {
+      const ids = App.agricultoresQueCoinciden(texto).map((a) => a.id);
+      // Ningún agricultor encaja: -1 no es un id, así la consulta sale vacía.
+      q = q.in("agricultor_id", ids.length ? ids : [-1]);
+    }
+    return q
+      .order("agricultor_id", { ascending: true })
+      .order("fecha", { ascending: false, nullsFirst: false })
+      .order("id");
+  }
+
+  let paginadorCampana = null;
+  function paginador() {
+    paginadorCampana ||= App.crearPaginador({
+      nombre: "Campana",
+      consulta: consultaCampana,
+      cuerpoId: "cuerpoBuscarCampana",
+      columnas: 8,
+      texto: "los registros",
+      contadorId: "countBuscarCampana",
+      alCargar: (filas, { error }) => {
+        App.state.registrosCampanaActuales = filas;
+        if (!error) pintarRegistrosCampana();
+        else App.$("btnExportCampana").disabled = true;
+      },
+    });
+    return paginadorCampana;
+  }
+
   async function buscarPorCampana(e) {
-    const id = e.target.value;
-    const cuerpo = App.$("cuerpoBuscarCampana");
+    const sel = e.target;
+    const id = sel.value;
     const hayCampana = Boolean(id);
     App.$("btnEditarCampana").disabled = !hayCampana;
     App.$("btnEliminarCampana").disabled = !hayCampana;
+    cerrarMenuExport();
 
     if (!id) {
-      cuerpo.innerHTML = "";
+      App.$("cuerpoBuscarCampana").innerHTML = "";
       App.actualizarContador("countBuscarCampana", 0, "registro", "registros");
       App.state.registrosCampanaActuales = [];
       App.state.campanaBuscadaNombre = "";
       App.$("btnExportCampana").disabled = true;
+      ocultarBotoneras();
       return;
     }
 
-    cuerpo.innerHTML = App.spinnerFila(8, "Buscando registros...");
+    App.state.campanaBuscadaNombre = sel.options?.[sel.selectedIndex]?.text || "";
+    await paginador().filtrar();
+  }
 
-    const { data, error } = await App.traerTodo(() => App.db
-      .from("registros")
-      .select("*, agricultores(nombre,codigo)")
-      .eq("campana_id", id)
-      .order("agricultor_id", { ascending: true })
-      .order("fecha", { ascending: false, nullsFirst: false })
-      .order("id"));
+  // Escribiendo en el filtro de agricultor no se consulta en cada tecla.
+  let esperaAgri = null;
+  function filtrarPorAgricultor() {
+    clearTimeout(esperaAgri);
+    esperaAgri = setTimeout(() => buscarPorCampana({ target: App.$("selBuscarCampana") }), 300);
+  }
 
-    if (error) {
-      cuerpo.innerHTML = `<tr><td colspan="8" class="error">Error: ${App.escapar(error.message)}</td></tr>`;
-      App.state.registrosCampanaActuales = [];
-      App.$("btnExportCampana").disabled = true;
-      return;
-    }
-
-    const regs = data || [];
-    App.state.registrosCampanaActuales = regs;
-    App.state.campanaBuscadaNombre =
-      e.target.options[e.target.selectedIndex]?.text || "";
+  function pintarRegistrosCampana() {
+    const regs = App.state.registrosCampanaActuales;
+    const filtrando = Boolean(App.$("filtroAgriCampana").value.trim());
     App.$("btnExportCampana").disabled = regs.length === 0;
-    cuerpo.innerHTML = regs.length === 0
-      ? '<tr><td colspan="8" class="empty">No hay registros para esta campana.</td></tr>'
+    App.$("cuerpoBuscarCampana").innerHTML = regs.length === 0
+      ? App.filaMensaje(8, filtrando
+        ? "No hay registros de ese agricultor en esta campaña."
+        : "No hay registros para esta campaña.")
       : regs.map((r) => {
           const a = r.agricultores || {};
           const cajasBtn = App.botonCajas(r);
@@ -254,7 +298,55 @@
         </tr>`;
         }).join("");
 
-    App.actualizarContador("countBuscarCampana", regs.length, "registro", "registros");
+    App.actualizarContador("countBuscarCampana", paginador().total(), "registro", "registros");
+  }
+
+  // -------------------------------------------------------------------
+  //  Export: la página que se ve o todos los registros de la búsqueda
+  // -------------------------------------------------------------------
+  function cerrarMenuExport() {
+    const menu = App.$("menuExportCampana");
+    if (menu) menu.hidden = true;
+  }
+
+  // Si todo cabe en una página no hay nada que elegir: se exporta directamente.
+  function pulsarExportCampana(e) {
+    e?.stopPropagation(); // que el clic fuera del menú no lo cierre al abrirlo
+    const enPagina = App.state.registrosCampanaActuales.length;
+    const total = paginador().total();
+    if (total <= enPagina) {
+      App.exportarExcelCampana(App.state.registrosCampanaActuales);
+      return;
+    }
+    const menu = App.$("menuExportCampana");
+    if (!menu.hidden) {
+      menu.hidden = true;
+      return;
+    }
+    App.$("btnExportCampanaPagina").textContent = `Vista actual (${App.fmtNum(enPagina)} registros)`;
+    App.$("btnExportCampanaTodo").textContent = `Todos los registros (${App.fmtNum(total)})`;
+    menu.hidden = false;
+  }
+
+  function exportarPaginaCampana() {
+    cerrarMenuExport();
+    App.exportarExcelCampana(App.state.registrosCampanaActuales);
+  }
+
+  async function exportarTodoCampana() {
+    cerrarMenuExport();
+    const boton = App.$("btnExportCampana");
+    boton.disabled = true;
+    try {
+      const { data, error } = await App.traerTodo(() => consultaCampana());
+      if (error) {
+        App.toast("Error al exportar: " + error.message);
+        return;
+      }
+      App.exportarExcelCampana(data || []);
+    } finally {
+      boton.disabled = App.state.registrosCampanaActuales.length === 0;
+    }
   }
 
   // Clic en la tabla de resultados: el icono abre el popover de cajas;
@@ -286,8 +378,19 @@
     App.dom.formCampana.addEventListener("submit", guardarCampana);
     App.$("btnBuscarCampana").addEventListener("click", abrirBuscarCampana);
     App.$("selBuscarCampana").addEventListener("change", buscarPorCampana);
-    App.$("btnExportCampana").addEventListener("click", App.exportarExcelCampana);
+    App.$("filtroAgriCampana").addEventListener("input", filtrarPorAgricultor);
+    App.$("btnExportCampana").addEventListener("click", pulsarExportCampana);
+    App.$("btnExportCampanaPagina").addEventListener("click", exportarPaginaCampana);
+    App.$("btnExportCampanaTodo").addEventListener("click", exportarTodoCampana);
     App.$("cuerpoBuscarCampana").addEventListener("click", clickBuscarCampana);
+    paginador().conectar();
+    // El menú de export se cierra al pulsar fuera o con Escape.
+    document.addEventListener("click", (e) => {
+      if (!e.target.closest?.("#menuExportCampana")) cerrarMenuExport();
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") cerrarMenuExport();
+    });
   }
 
   Object.assign(App, {
