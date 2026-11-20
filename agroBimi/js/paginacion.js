@@ -26,8 +26,12 @@
   //   contadorId   el contador de encima de la tabla: al pasar de página
   //                desde abajo se sube hasta él
   //   alCargar     (filas, { total, error }) => pinta la página
+  //   local        opcional: () => todas las filas ya filtradas y ordenadas,
+  //                o null. Si da filas, las páginas salen de ahí sin
+  //                preguntar al servidor (p. ej. palets: lo que hay en cámara
+  //                ya está descargado entero).
   function crearPaginador({ nombre, consulta, cuerpoId, columnas, texto, contadorId, alCargar,
-                            porPagina = FILAS_POR_PAGINA }) {
+                            local = null, porPagina = FILAS_POR_PAGINA }) {
     let pagina = 0;      // empieza en 0
     let total = 0;
     let filas = [];
@@ -52,6 +56,16 @@
     // (los filtros son los mismos) y contar todas las filas cuesta.
     async function cargar({ contar = true } = {}) {
       const id = ++peticion;
+      const todas = local?.();
+      if (todas) {
+        total = todas.length;
+        pagina = Math.min(pagina, paginas() - 1);
+        const inicio = pagina * porPagina;
+        filas = todas.slice(inicio, inicio + porPagina);
+        pintarBotoneras();
+        alCargar(filas, { total, error: null });
+        return true;
+      }
       App.$(cuerpoId).innerHTML = App.spinnerFila(columnas, `Cargando ${texto}...`);
 
       const desde = pagina * porPagina;

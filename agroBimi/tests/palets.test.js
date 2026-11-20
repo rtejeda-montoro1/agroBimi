@@ -162,13 +162,14 @@ function createListadoHarness({ total = 0, pagina = [] } = {}) {
 test("palets list asks the server for one page of 150 and shows the total", async () => {
   const pagina = Array.from({ length: 150 }, (_, i) => ({ id: i + 1, codigo: `P-${i + 1}`, num_cajas: 60 }));
   const { app, elements, module, listado } = createListadoHarness({ total: 400, pagina });
+  // Los palets con salida no están en la cámara: van al servidor.
+  elements.get("filtroEstadoPalets").value = "salido";
 
   await module.cargarPalets();
 
   assert.ok(listado().some((c) => c[0] === "range" && c[1] === 0 && c[2] === 149));
   assert.ok(listado().some((c) => c[0] === "select" && c[2]?.count === "exact"));
-  // "Sin salida" (por defecto) se filtra en el servidor.
-  assert.ok(listado().some((c) => c[0] === "is" && c[1] === "fecha_salida" && c[2] === null));
+  assert.ok(listado().some((c) => c[0] === "not" && c[1] === "fecha_salida"));
   assert.equal(app.count, 400);
   assert.equal(elements.get("paginaPalets").textContent, "1–150 · página 1 de 3");
   assert.equal(elements.get("paginacionPalets").hidden, false);
@@ -185,6 +186,7 @@ test("palets list asks the server for one page of 150 and shows the total", asyn
 test("palets bottom pager moves to the next page and scrolls back to the top of the list", async () => {
   const pagina = Array.from({ length: 150 }, (_, i) => ({ id: i + 1, num_cajas: 60 }));
   const { elements, module, listado } = createListadoHarness({ total: 400, pagina });
+  elements.get("filtroEstadoPalets").value = "salido";
   let subido = false;
   elements.get("countPalets").scrollIntoView = () => { subido = true; };
   module.configurarEventosPalets();
@@ -209,7 +211,7 @@ test("palets list hides the pager when everything fits in one page", async () =>
 
 test("palets filters by state, farmer and dates on the server", async () => {
   const { elements, module, listado } = createListadoHarness();
-  elements.get("filtroEstadoPalets").value = "formacion";
+  elements.get("filtroEstadoPalets").value = "salido";
   elements.get("filtroAgriPalets").value = "7";
   elements.get("filtroDesdePalets").value = "2026-03-01";
   elements.get("filtroHastaPalets").value = "2026-03-31";
@@ -217,8 +219,7 @@ test("palets filters by state, farmer and dates on the server", async () => {
   await module.filtrarPalets();
 
   const q = listado();
-  assert.ok(q.some((c) => c[0] === "is" && c[1] === "fecha_salida"));
-  assert.ok(q.some((c) => c[0] === "lt" && c[1] === "num_cajas" && c[2] === 60));
+  assert.ok(q.some((c) => c[0] === "not" && c[1] === "fecha_salida" && c[2] === "is"));
   // El agricultor se filtra con otra unión de las líneas, para no recortar las del palet.
   assert.ok(q.some((c) => c[0] === "select" && /palet_lineas\(id,/.test(c[1]) && /filtro_agri:palet_lineas!inner/.test(c[1])));
   assert.ok(q.some((c) => c[0] === "eq" && c[1] === "filtro_agri.agricultor_id" && c[2] === "7"));
@@ -239,8 +240,62 @@ test("palets search by pallet number looks in every pallet, ignoring the other f
   assert.ok(!q.some((c) => c[0] === "eq" && c[1] === "filtro_agri.agricultor_id"));
 });
 
+test("palets without exit are paged from the camera data, without asking again", async () => {
+  // La cámara trae los 400 palets sin salida; el listado sale de ahí.
+  const camara = Array.from({ length: 400 }, (_, i) => ({ id: i + 1, num_cajas: 60 }));
+  const { app, elements, module } = createListadoHarness({ total: 400, pagina: camara });
+  const pedidas = [];
+  const from = app.db.from;
+  app.db.from = (table) => { pedidas.push(table); return from(table); };
+  module.configurarEventosPalets();
+
+  await module.cargarPalets();
+
+  // Solo la cámara: palets + paletizado_entradas, sin una página aparte.
+  assert.deepEqual(pedidas, ["palets", "paletizado_entradas"]);
+  assert.equal(app.state.paletsActuales.length, 150);
+  assert.equal(app.count, 400);
+  assert.equal(elements.get("paginaPalets").textContent, "1–150 · página 1 de 3");
+
+  await elements.get("btnPaginaSiguientePalets").listeners.get("click")[0]();
+  assert.equal(app.state.paletsActuales[0].id, 151);
+  assert.equal(pedidas.length, 2);
+});
+
+test("palets filter the camera locally by state, farmer and dates, like the server", async () => {
+  const camara = [
+    { id: 1, num_cajas: 60, fecha: "2026-02-20", fecha_completo: "2026-03-05", palet_lineas: [{ agricultor_id: 7 }] },
+    { id: 2, num_cajas: 30, fecha: "2026-03-10", fecha_completo: null, palet_lineas: [{ agricultor_id: 7 }, { agricultor_id: 8 }] },
+    { id: 3, num_cajas: 30, fecha: "2026-03-10", fecha_completo: null, palet_lineas: [{ agricultor_id: 8 }] },
+    { id: 4, num_cajas: 60, fecha: "2026-03-10", fecha_completo: "2026-04-02", palet_lineas: [{ agricultor_id: 7 }] },
+  ];
+  const { app, elements, module } = createListadoHarness({ total: 4, pagina: camara });
+  await module.cargarPalets();
+  const pedidas = [];
+  app.db.from = (table) => { pedidas.push(table); return fakeQuery({ data: [], error: null }); };
+  const ids = () => app.state.paletsActuales.map((p) => p.id);
+
+  elements.get("filtroAgriPalets").value = "7";
+  elements.get("filtroDesdePalets").value = "2026-03-01";
+  elements.get("filtroHastaPalets").value = "2026-03-31";
+  await module.filtrarPalets();
+  // Las fechas miran cuándo se llenó, o cuándo se abrió si sigue en formación.
+  assert.deepEqual(ids(), [1, 2]);
+
+  elements.get("filtroEstadoPalets").value = "formacion";
+  await module.filtrarPalets();
+  assert.deepEqual(ids(), [2]);
+
+  elements.get("filtroEstadoPalets").value = "completo";
+  await module.filtrarPalets();
+  assert.deepEqual(ids(), [1]);
+  assert.deepEqual(pedidas, []);
+});
+
 test("palets asks for the camera and the list page at the same time", async () => {
-  const { app, module } = createListadoHarness();
+  const { app, elements, module } = createListadoHarness();
+  // "Todos" incluye los que ya salieron: no están en la cámara.
+  elements.get("filtroEstadoPalets").value = "";
   const enCurso = [];
   app.db = { from: (table) => {
     let responder;

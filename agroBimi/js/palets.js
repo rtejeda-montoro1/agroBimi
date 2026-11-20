@@ -26,6 +26,7 @@
   async function abrirModalPalets() {
     await App.asegurarAgricultoresTodos();
     App.abrirModal(App.dom.modalPalets);
+    pintarCamaraGuardada();
     await cargarPalets();
   }
 
@@ -60,8 +61,13 @@
     if (palets === null || entradas === null) return false;
     App.state.paletsCamara = palets;
     App.state.entradasPaletizado = entradas;
+    camaraCargada = true;
     return true;
   }
+
+  // Si ya hay datos de la cámara (de esta vez o de la anterior que se abrió
+  // la ventana).
+  let camaraCargada = false;
 
   // ------------------------------------------------------------------
   //  Listado por páginas
@@ -110,12 +116,36 @@
     return q.order("secuencia", { ascending: false, nullsFirst: false }).order("id");
   }
 
+  // Los estados que solo miran palets sin salida: esos ya están todos en
+  // App.state.paletsCamara (mismo orden que el listado).
+  const ESTADOS_DE_CAMARA = ["pendientes", "formacion", "completo"];
+
+  function filtrosDeCamara() {
+    return numeroBuscado() === null && ESTADOS_DE_CAMARA.includes(App.$("filtroEstadoPalets").value);
+  }
+
+  // Lo mismo que consultaPalets(), pero sobre los palets de la cámara ya
+  // descargados. null si los filtros piden algo que no está ahí.
+  function paletsDeCamaraFiltrados() {
+    if (!camaraCargada || !filtrosDeCamara()) return null;
+    const estado = App.$("filtroEstadoPalets").value;
+    const agri = App.$("filtroAgriPalets").value;
+    const desde = App.$("filtroDesdePalets").value;
+    const hasta = App.$("filtroHastaPalets").value;
+    const enRango = (f) => !!f && (!desde || f >= desde) && (!hasta || f <= hasta);
+    return App.state.paletsCamara.filter((p) =>
+      (estado === "pendientes" || estadoPalet(p) === estado) &&
+      (!agri || lineas(p).some((l) => String(l.agricultor_id) === String(agri))) &&
+      (!(desde || hasta) || enRango(p.fecha_completo || p.fecha)));
+  }
+
   // Se crea al primer uso: App.crearPaginador está en js/paginacion.js.
   let paginadorPalets = null;
   function paginador() {
     paginadorPalets ||= App.crearPaginador({
       nombre: "Palets",
       consulta: consultaPalets,
+      local: paletsDeCamaraFiltrados,
       cuerpoId: "cuerpoPalets",
       columnas: 7,
       texto: "los palets",
@@ -132,16 +162,33 @@
     return paginador().filtrar();
   }
 
-  // La cámara (resumen de arriba) y la página del listado se piden a la
-  // vez: el listado no usa los datos de la cámara. Antes iban una detrás
-  // de otra y la ventana tardaba lo que las dos juntas.
+  // Con los filtros de la cámara (sin salida, en progreso, completos) el
+  // listado sale de los mismos datos que el resumen: una sola descarga, y
+  // cambiar de filtro o de página no pregunta al servidor. Con los demás
+  // (con salida, todos, nº de palet) la cámara y la página se piden a la vez.
   async function cargarPalets() {
-    const [camaraOk] = await Promise.all([cargarDatosPaletizado(), paginador().cargar()]);
+    const cuerpo = App.$("cuerpoPalets");
+    let camaraOk;
+    if (filtrosDeCamara()) {
+      if (!camaraCargada) cuerpo.innerHTML = App.spinnerFila(7, "Cargando palets...");
+      camaraOk = await cargarDatosPaletizado();
+      if (camaraOk) await paginador().cargar();
+    } else {
+      [camaraOk] = await Promise.all([cargarDatosPaletizado(), paginador().cargar()]);
+    }
     if (!camaraOk) {
-      App.$("cuerpoPalets").innerHTML = App.filaMensaje(7, "No se pudieron cargar los palets.", "error");
+      cuerpo.innerHTML = App.filaMensaje(7, "No se pudieron cargar los palets.", "error");
       return;
     }
     pintarResumenCamara();
+  }
+
+  // Al reabrir la ventana se enseña al momento lo de la última vez y se
+  // sustituye cuando llega lo nuevo.
+  function pintarCamaraGuardada() {
+    if (!camaraCargada || !filtrosDeCamara()) return;
+    pintarResumenCamara();
+    paginador().cargar();
   }
 
   // Tras cualquier cambio: refrescar lo que esté abierto (en la misma página).
@@ -578,7 +625,8 @@
 
   // Exporta todos los palets que cumplen los filtros, no solo la página.
   async function exportarPalets() {
-    const palets = await App.consultar(App.traerTodo(() => consultaPalets()), "los palets");
+    const palets = paletsDeCamaraFiltrados() ||
+      await App.consultar(App.traerTodo(() => consultaPalets()), "los palets");
     if (palets === null) return;
     const filas = [];
     palets.forEach((p) => {
