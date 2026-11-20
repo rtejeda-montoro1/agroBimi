@@ -105,7 +105,11 @@ create table if not exists liquidaciones (
 );
 
 create index if not exists liquidaciones_agricultor_idx on liquidaciones (agricultor_id);
-create index if not exists liquidaciones_fecha_idx      on liquidaciones (fecha);
+create index if not exists liquidaciones_campana_idx    on liquidaciones (campana_id);
+-- Orden del listado de liquidaciones (js/liquidaciones.js).
+create index if not exists liquidaciones_orden_idx
+  on liquidaciones (fecha desc, secuencia desc nulls last, id);
+drop index if exists liquidaciones_fecha_idx;  -- lo cubre liquidaciones_orden_idx
 create index if not exists liquidaciones_periodo_idx    on liquidaciones (fecha_desde, fecha_hasta);
 
 -- 4) REGISTROS
@@ -144,9 +148,16 @@ create table if not exists registros (
   constraint registros_ciclo_valido check (ciclo is not null and ciclo in ('1', '2', '3'))
 );
 
-create index if not exists registros_agricultor_idx  on registros (agricultor_id);
 create index if not exists registros_fecha_idx       on registros (fecha);
-create index if not exists registros_campana_idx     on registros (campana_id);
+-- Con el orden de los listados: registros de un agricultor
+-- (js/registros.js) y Buscar por campaña (js/campanas.js).
+create index if not exists registros_agricultor_orden_idx
+  on registros (agricultor_id, fecha desc nulls last, id);
+create index if not exists registros_campana_orden_idx
+  on registros (campana_id, agricultor_id, fecha desc nulls last, id);
+-- Los cubren los dos de arriba.
+drop index if exists registros_agricultor_idx;
+drop index if exists registros_campana_idx;
 create index if not exists registros_liquidacion_idx on registros (liquidacion_id);
 create unique index if not exists registros_client_uuid_key on registros (client_uuid);
 
@@ -201,6 +212,10 @@ create table if not exists albaranes_salida (
   temperatura            numeric(5,1)     -- 13
 );
 
+-- Orden y filtro por fecha del listado de salidas (js/salidas.js).
+create index if not exists albaranes_orden_idx on albaranes_salida (secuencia desc nulls last, id);
+create index if not exists albaranes_fecha_idx on albaranes_salida (fecha);
+
 -- 7) PALETS
 --    Las cajas de la báscula se reparten solas en palets (sección 16). Un
 --    palet puede llevar cajas de VARIOS agricultores: cuántas de cada
@@ -224,6 +239,10 @@ create index if not exists palets_campana_idx on palets (campana_id);
 create index if not exists palets_fecha_idx   on palets (fecha);
 create index if not exists palets_salida_idx  on palets (fecha_salida);
 create index if not exists palets_albaran_idx on palets (albaran_id);
+-- Orden del listado de palets y de los que siguen en la cámara.
+create index if not exists palets_orden_idx  on palets (secuencia desc nulls last, id);
+create index if not exists palets_camara_idx on palets (secuencia desc nulls last, id)
+  where fecha_salida is null;
 
 -- 8) LÍNEAS DE PALET
 --    Cuántas cajas de cada pesada lleva cada palet.
@@ -238,7 +257,9 @@ create table if not exists palet_lineas (
 );
 
 create index if not exists palet_lineas_palet_idx      on palet_lineas (palet_id);
-create index if not exists palet_lineas_agricultor_idx on palet_lineas (agricultor_id);
+-- Filtro de palets por agricultor (js/palets.js).
+create index if not exists palet_lineas_agricultor_palet_idx on palet_lineas (agricultor_id, palet_id);
+drop index if exists palet_lineas_agricultor_idx;  -- lo cubre el de arriba
 create index if not exists palet_lineas_registro_idx   on palet_lineas (registro_id);
 create unique index if not exists palet_lineas_palet_registro_key
   on palet_lineas (palet_id, registro_id) where registro_id is not null;
@@ -342,6 +363,9 @@ create table if not exists bascula_pesadas (
 );
 create index if not exists bascula_pesadas_registro_idx on bascula_pesadas (registro_id);
 create index if not exists bascula_pesadas_pesada_idx   on bascula_pesadas (pesada_en);
+-- Al borrar un agricultor o una campaña se buscan sus pesadas.
+create index if not exists bascula_pesadas_agricultor_idx on bascula_pesadas (agricultor_id);
+create index if not exists bascula_pesadas_campana_idx    on bascula_pesadas (campana_id);
 
 -- Nadie la lee desde la app: solo la consulta es_bascula().
 alter table usuarios_bascula enable row level security;
@@ -1761,21 +1785,59 @@ grant execute on function public.liquidacion_facturar(bigint, boolean, text, dat
 --     Supabase no pasa por aquí (para eso están los límites del propio
 --     Supabase).
 --
+--     El contador va por email Y por IP. Como login_fallido lo puede
+--     llamar cualquiera sin sesión, si fuera solo por email un extraño
+--     podría bloquear la cuenta de la oficina o de la báscula llamándolo
+--     5 veces. Así solo se bloquea esa cuenta desde SU conexión. Cada IP
+--     puede tener como mucho 50 emails apuntados, para que no se pueda
+--     llenar la tabla.
+--
 --     Para desbloquear un email antes de tiempo (editor SQL de Supabase):
 --       delete from login_bloqueos where email = 'oficina@tu-dominio.com';
 create table if not exists login_bloqueos (
-  email           text        primary key,
+  email           text        not null,
+  ip              text        not null default '',
   fallos          integer     not null default 0,
   ultimo_fallo    timestamptz not null default now(),
-  bloqueado_hasta timestamptz
+  bloqueado_hasta timestamptz,
+  primary key (email, ip)
 );
+
+-- Bases de datos de antes de noviembre de 2026 (clave solo por email).
+-- Va aquí y no al final del archivo porque login_bloqueado (más abajo)
+-- ya usa la columna ip. Se puede quitar cuando todas lo tengan.
+alter table login_bloqueos add column if not exists ip text not null default '';
+do $$
+begin
+  if (select array_length(conkey, 1) from pg_constraint
+      where conrelid = 'login_bloqueos'::regclass and contype = 'p') = 1 then
+    alter table login_bloqueos drop constraint login_bloqueos_pkey;
+    alter table login_bloqueos add primary key (email, ip);
+  end if;
+end $$;
 
 -- Nadie la lee directamente: solo a través de las funciones de abajo.
 alter table login_bloqueos enable row level security;
 revoke all on table login_bloqueos from anon, authenticated;
 
--- Hasta cuándo está bloqueado el email (null si no lo está). La llama la
--- pantalla de login, aún sin sesión.
+-- IP desde la que llega la petición. Supabase pasa las cabeceras HTTP en
+-- request.headers. cf-connecting-ip la pone Cloudflare y no la puede
+-- falsear el navegador; x-forwarded-for queda solo de reserva.
+create or replace function public.login_ip()
+returns text
+language sql
+stable
+set search_path = public
+as $$
+  select left(coalesce(
+    nullif(trim(h ->> 'cf-connecting-ip'), ''),
+    nullif(trim(split_part(h ->> 'x-forwarded-for', ',', 1)), ''),
+    ''), 64)
+  from (select coalesce(nullif(current_setting('request.headers', true), ''), '{}')::json as h) c;
+$$;
+
+-- Hasta cuándo está bloqueado el email desde esta IP (null si no lo
+-- está). La llama la pantalla de login, aún sin sesión.
 create or replace function public.login_bloqueado(p_email text)
 returns timestamptz
 language sql
@@ -1784,7 +1846,8 @@ security definer
 set search_path = public
 as $$
   select bloqueado_hasta from login_bloqueos
-  where email = lower(trim(p_email)) and bloqueado_hasta > now();
+  where email = lower(trim(p_email)) and ip = public.login_ip()
+    and bloqueado_hasta > now();
 $$;
 
 -- Apunta una contraseña incorrecta. Los fallos se cuentan seguidos: si el
@@ -1801,7 +1864,9 @@ as $$
 declare
   c_max      constant integer  := 5;
   c_bloqueo  constant interval := interval '24 hours';
+  c_max_ip   constant integer  := 50;
   v_email    text := lower(trim(coalesce(p_email, '')));
+  v_ip       text := public.login_ip();
   v_fallos   integer;
   v_hasta    timestamptz;
 begin
@@ -1814,9 +1879,15 @@ begin
   where ultimo_fallo < now() - interval '7 days'
     and (bloqueado_hasta is null or bloqueado_hasta < now());
 
-  insert into login_bloqueos as b (email, fallos, ultimo_fallo)
-  values (v_email, 1, now())
-  on conflict (email) do update set
+  -- Una IP con demasiados emails apuntados no apunta más.
+  if not exists (select 1 from login_bloqueos where email = v_email and ip = v_ip)
+     and (select count(*) from login_bloqueos where ip = v_ip) >= c_max_ip then
+    return null;
+  end if;
+
+  insert into login_bloqueos as b (email, ip, fallos, ultimo_fallo)
+  values (v_email, v_ip, 1, now())
+  on conflict (email, ip) do update set
     fallos = case
       when b.bloqueado_hasta > now() then b.fallos  -- ya bloqueado: no suma
       when b.bloqueado_hasta is not null
@@ -1829,7 +1900,8 @@ begin
 
   if v_hasta is null and v_fallos >= c_max then
     v_hasta := now() + c_bloqueo;
-    update login_bloqueos set bloqueado_hasta = v_hasta where email = v_email;
+    update login_bloqueos set bloqueado_hasta = v_hasta
+    where email = v_email and ip = v_ip;
   end if;
 
   return jsonb_build_object(
@@ -1838,9 +1910,9 @@ begin
 end;
 $$;
 
--- Al entrar bien: pone a cero el contador del propio usuario. Devuelve
--- false si su email está bloqueado (alguien lo bloqueó mientras tanto):
--- la página cierra entonces la sesión.
+-- Al entrar bien: pone a cero el contador del propio usuario (desde
+-- cualquier IP). Devuelve false si su email está bloqueado desde esta IP
+-- (p. ej. por fallos en otra pestaña): la página cierra entonces la sesión.
 create or replace function public.login_correcto()
 returns boolean
 language plpgsql
@@ -1855,7 +1927,8 @@ begin
     return true;
   end if;
   if exists (select 1 from login_bloqueos
-             where email = v_email and bloqueado_hasta > now()) then
+             where email = v_email and ip = public.login_ip()
+               and bloqueado_hasta > now()) then
     return false;
   end if;
   delete from login_bloqueos where email = v_email;
@@ -1863,6 +1936,7 @@ begin
 end;
 $$;
 
+revoke all on function public.login_ip() from public, anon, authenticated;
 revoke all on function public.login_bloqueado(text) from public;
 revoke all on function public.login_fallido(text) from public;
 revoke all on function public.login_correcto() from public, anon;

@@ -248,7 +248,9 @@ propio): abrir `bascula.html` en un navegador con la oficina abierta pide
 la contrasena en vez de entrar con el usuario de la oficina.
 
 Login (oficina y bascula): tras 5 contrasenas incorrectas seguidas con el
-mismo email, ese email queda bloqueado 24 horas desde cualquier navegador
+mismo email desde la misma conexion (IP), ese email queda bloqueado 24
+horas desde esa conexion. Va por IP para que nadie de fuera pueda bloquear
+la cuenta de la oficina o de la bascula a proposito
 (`schema.sql`, seccion 22; tabla `login_bloqueos`). Para desbloquearlo
 antes, en el editor SQL de Supabase:
 `delete from login_bloqueos where email = 'el-email@...';`

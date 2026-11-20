@@ -314,7 +314,8 @@ que tengas puestos.
   escriben a mano, la app avisa y no guarda.
 - **La sesión se cierra a los 20 minutos sin actividad.** Es normal tener que
   volver a entrar después de comer. (La tablet de la báscula no se cierra.)
-- **Cinco intentos fallidos de contraseña bloquean el acceso 24 horas.**
+- **Cinco intentos fallidos de contraseña bloquean el acceso 24 horas** en
+  desde esa misma conexión a internet.
 - **Al cerrar un formulario con datos escritos sin guardar, pregunta antes de
   descartarlos.**
 - **Eliminar un agricultor borra todos sus registros.** No se puede deshacer.

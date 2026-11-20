@@ -130,3 +130,11 @@ test("utils leave the submit button alone in forms that are not marked", () => {
   assert.equal(submit.disabled, false);
   assert.equal(listeners.size, 0);
 });
+
+test("utils escapes quotes so values are safe inside attributes", () => {
+  const app = createUtils();
+  assert.equal(app.escapar(`x" onmouseover='y' <b>&`),
+    "x&quot; onmouseover=&#39;y&#39; &lt;b&gt;&amp;");
+  assert.equal(app.escapar(null), "");
+  assert.equal(app.escapar(12), "12");
+});

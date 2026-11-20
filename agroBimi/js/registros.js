@@ -272,9 +272,14 @@
   async function confirmarSiLiquidado(registroId, accion) {
     // Se pregunta a la base de datos: lo que hay en memoria puede estar
     // desfasado (otra pestaña puede haberlo liquidado o cerrado).
-    const { data: r } = await App.db.from("registros")
+    const { data: r, error } = await App.db.from("registros")
       .select("liquidacion_id,liquidaciones(numero,num_factura,estado)")
       .eq("id", registroId).maybeSingle();
+    // Sin respuesta no se sabe si está liquidado: mejor no seguir.
+    if (error) {
+      App.toast("No se pudo comprobar si el registro está liquidado. Inténtalo de nuevo.");
+      return false;
+    }
     const l = r?.liquidaciones;
     if (!r?.liquidacion_id || !l) return true;
 

@@ -296,10 +296,12 @@
     return resto === 1;
   }
 
+  // Vale para texto y para atributos ("..." y '...'): por eso escapa
+  // también las comillas.
   function escapar(txt) {
-    const div = document.createElement("div");
-    div.textContent = txt;
-    return div.innerHTML;
+    return String(txt ?? "").replace(/[&<>"']/g, (c) => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+    }[c]));
   }
 
   function valor(v) {

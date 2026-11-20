@@ -103,3 +103,23 @@ test("registros reject non-integer numeric values instead of truncating them", a
   assert.equal(harness.inserted, null);
   assert.match(harness.app.lastToast, /número entero/);
 });
+
+test("registros do not save an edit when the settled check fails", async () => {
+  const harness = createRegistroSaveHarness("10");
+  harness.app.$("registroId").value = "7";
+  let updated = false;
+  harness.app.db = {
+    from: () => ({
+      select: () => ({
+        eq: () => ({ maybeSingle: () => Promise.resolve({ data: null, error: { message: "offline" } }) }),
+      }),
+      update: () => { updated = true; return { eq: () => Promise.resolve({ error: null }) }; },
+    }),
+  };
+  await harness.form.listeners.get("submit")[0]({
+    preventDefault() {},
+    submitter: harness.button,
+  });
+  assert.equal(updated, false);
+  assert.match(harness.app.lastToast, /No se pudo comprobar/);
+});
