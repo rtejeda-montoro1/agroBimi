@@ -367,6 +367,39 @@ create index if not exists bascula_pesadas_pesada_idx   on bascula_pesadas (pesa
 create index if not exists bascula_pesadas_agricultor_idx on bascula_pesadas (agricultor_id);
 create index if not exists bascula_pesadas_campana_idx    on bascula_pesadas (campana_id);
 
+-- Pesadas anuladas (o borradas desde la oficina). Si la tablet envió una
+-- pesada, no le llegó la respuesta y la reenvía DESPUÉS de anularla,
+-- bascula_registrar ya no la encuentra en bascula_pesadas y la volvería a
+-- sumar. Con esta lista sabe que se anuló y la ignora. Se guardan 90 días
+-- (la tablet no reenvía nada tan antiguo).
+create table if not exists bascula_anuladas (
+  client_uuid uuid        primary key,
+  anulada_en  timestamptz not null default now()
+);
+create index if not exists bascula_anuladas_fecha_idx on bascula_anuladas (anulada_en);
+alter table bascula_anuladas enable row level security;
+revoke all on table bascula_anuladas from anon, authenticated;
+
+create or replace function public.bascula_pesadas_anotar_anulada_trg()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  delete from bascula_anuladas where anulada_en < now() - interval '90 days';
+  insert into bascula_anuladas (client_uuid) values (old.client_uuid)
+  on conflict (client_uuid) do nothing;
+  return old;
+end;
+$$;
+revoke all on function public.bascula_pesadas_anotar_anulada_trg() from public, anon, authenticated;
+
+drop trigger if exists bascula_pesadas_anotar_anulada on bascula_pesadas;
+create trigger bascula_pesadas_anotar_anulada
+  after delete on bascula_pesadas
+  for each row execute function public.bascula_pesadas_anotar_anulada_trg();
+
 -- Nadie la lee desde la app: solo la consulta es_bascula().
 alter table usuarios_bascula enable row level security;
 revoke all on table usuarios_bascula from anon, authenticated;
@@ -529,6 +562,10 @@ begin
   select registro_id into v_registro from bascula_pesadas where client_uuid = p_client_uuid;
   if found then
     return v_registro;
+  end if;
+  -- Ya se anuló: es un reenvío tardío. Se da por enviada y no se suma.
+  if exists (select 1 from bascula_anuladas where client_uuid = p_client_uuid) then
+    return null;
   end if;
   -- Pesada enviada con la versión anterior (un registro por pesada).
   select id into v_registro from registros where client_uuid = p_client_uuid;
@@ -1328,7 +1365,10 @@ select r.id as registro_id,
        coalesce(sum(l.num_cajas) filter (where p.fecha_salida is null and p.num_cajas < c.cap), 0)::integer as en_formacion,
        (coalesce(r.cajas_entradas, 0) - coalesce(sum(l.num_cajas), 0))::integer as sin_palet
 from registros r
-cross join (select public.cajas_por_palet() as cap, public.paletizado_desde() as desde) c
+-- "offset 0": que los dos ajustes se lean UNA vez. Sin él Postgres mete la
+-- subconsulta en la principal y llama a cajas_por_palet() y
+-- paletizado_desde() (cada una lee parametros) una vez por fila.
+cross join (select public.cajas_por_palet() as cap, public.paletizado_desde() as desde offset 0) c
 left join palet_lineas l on l.registro_id = r.id
 left join palets p on p.id = l.palet_id
 where coalesce(r.cajas_entradas, 0) > 0
@@ -1358,7 +1398,21 @@ as $$
                           where clave = 'etiqueta_ancho_mm' and trim(valor) ~ '^\d+(\.\d+)?$'),
     'etiqueta_alto_mm',  (select trim(valor)::numeric from parametros
                           where clave = 'etiqueta_alto_mm' and trim(valor) ~ '^\d+(\.\d+)?$'),
-    'en_camara', (select coalesce(sum(en_formacion + sin_palet), 0) from paletizado_entradas),
+    -- Lo mismo que sum(en_formacion + sin_palet) de paletizado_entradas
+    -- (cajas entradas menos las que están en palets completos o salidos),
+    -- pero sin agrupar todas las pesadas: la tablet lo pide cada minuto.
+    'en_camara', (
+      select coalesce((select sum(r.cajas_entradas) from registros r
+                       where r.cajas_entradas > 0
+                         and (c.desde is null or r.fecha >= c.desde)), 0)
+           - coalesce((select sum(l.num_cajas)
+                       from palet_lineas l
+                       join palets p on p.id = l.palet_id
+                       join registros r on r.id = l.registro_id
+                       where (p.fecha_salida is not null or p.num_cajas >= c.cap)
+                         and r.cajas_entradas > 0
+                         and (c.desde is null or r.fecha >= c.desde)), 0)
+      from (select public.cajas_por_palet() as cap, public.paletizado_desde() as desde offset 0) c),
     'palets', coalesce((
       select jsonb_agg(jsonb_build_object(
                'id', p.id,

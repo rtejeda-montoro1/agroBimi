@@ -141,3 +141,62 @@ test("liquidaciones list one page filtered on the server and total every matchin
   });
   assert.equal(vista, pagina[41]);
 });
+
+// El cálculo con las utilidades de verdad (redondeo, números y fechas).
+function crearCalculo() {
+  const app = { state: { agricultoresTodos: [], agricultoresActuales: [] } };
+  loadModule("utils.js", app, { document: { createElement: () => ({}) } });
+  return loadModule("liquidaciones.js", app).window.App.calcularLiquidacion;
+}
+
+const datosLiq = (extra = {}) => ({
+  desde: "2026-11-01", hasta: "2026-11-15",
+  precioCaja: 0.3575, precioCajaPerdida: 1.2, iva: 10, retencion: 2,
+  incluirDescuento: true, otroConcepto: null, otraCantidad: 0, otroPrecio: 0,
+  ...extra,
+});
+
+test("liquidaciones calculate lines, VAT, withholding and total with euro rounding", () => {
+  const calcular = crearCalculo();
+  const r = calcular(
+    datosLiq({ otroConcepto: "Transporte", otraCantidad: 1, otroPrecio: 15.5 }),
+    [
+      { cajas_entradas: 100, descuento_cajas: 2 },
+      { cajas_entradas: 250, descuento_cajas: 3 },
+      { cajas_entradas: 37, descuento_cajas: null },
+    ],
+    { pendiente: 4 },
+  );
+
+  assert.deepEqual([...r.lineas].map((l) => [l.tipo, l.cantidad, l.importe]), [
+    ["bimi", 387, 138.35],          // 387 × 0,3575 = 138,3525
+    ["descuento", 5, -1.79],        // −5 × 0,3575 = −1,7875
+    ["cajas_perdidas", 4, -4.8],
+    ["otro", 1, 15.5],
+  ]);
+  assert.equal(r.cajas, 387);
+  assert.equal(r.base, 147.26);
+  assert.equal(r.ivaImporte, 14.73);       // 10 % de 147,26 = 14,726
+  assert.equal(r.retencionImporte, 3.24);  // 2 % de 161,99 = 3,2398
+  assert.equal(r.total, 158.75);
+  // Lo que comprueba el servidor al guardar (liquidacion_guardar).
+  assert.equal(Math.round(r.lineas.reduce((s, l) => s + l.importe, 0) * 100) / 100, r.base);
+  assert.equal(Math.round((r.base + r.ivaImporte - r.retencionImporte) * 100) / 100, r.total);
+});
+
+test("liquidaciones round half cents up, as on paper, not down by floating point", () => {
+  const calcular = crearCalculo();
+  // 3 × 0,335 = 1,005 en papel, 1,00499999… en coma flotante.
+  const r = calcular(datosLiq({ precioCaja: 0.335, iva: 0, retencion: 0 }), [{ cajas_entradas: 3 }], null);
+  assert.equal(r.lineas[0].importe, 1.01);
+  assert.equal(r.total, 1.01);
+});
+
+test("liquidaciones only add discount and empty-box lines when there is something to charge", () => {
+  const calcular = crearCalculo();
+  const registros = [{ cajas_entradas: 10, descuento_cajas: 4 }];
+  const tipos = (r) => [...r.lineas].map((l) => l.tipo);
+  assert.deepEqual(tipos(calcular(datosLiq({ incluirDescuento: false }), registros, null)), ["bimi"]);
+  assert.deepEqual(tipos(calcular(datosLiq(), registros, { pendiente: 0 })), ["bimi", "descuento"]);
+  assert.deepEqual(tipos(calcular(datosLiq(), [{ cajas_entradas: 10 }], { pendiente: 2 })), ["bimi", "cajas_perdidas"]);
+});

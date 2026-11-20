@@ -48,12 +48,14 @@
       });
     }
 
-    async function cargar() {
+    // contar: pedir también el total. Al solo pasar de página no hace falta
+    // (los filtros son los mismos) y contar todas las filas cuesta.
+    async function cargar({ contar = true } = {}) {
       const id = ++peticion;
       App.$(cuerpoId).innerHTML = App.spinnerFila(columnas, `Cargando ${texto}...`);
 
       const desde = pagina * porPagina;
-      const { data, error, count } = await consulta({ contar: true }).range(desde, desde + porPagina - 1);
+      const { data, error, count } = await consulta({ contar }).range(desde, desde + porPagina - 1);
       if (id !== peticion) return false;
 
       if (error) {
@@ -67,7 +69,7 @@
       }
 
       filas = data || [];
-      total = count ?? filas.length;
+      if (contar) total = count ?? filas.length;
       // Si al borrar o anular la página se queda vacía, se va a la última.
       if (filas.length === 0 && pagina > 0 && total > 0) {
         pagina = paginas() - 1;
@@ -91,7 +93,7 @@
       if (nueva === pagina) return;
       pagina = nueva;
       if (subir) App.$(contadorId).scrollIntoView?.({ block: "start", behavior: "smooth" });
-      await cargar();
+      await cargar({ contar: false });
     }
 
     function conectar() {

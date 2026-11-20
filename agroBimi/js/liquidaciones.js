@@ -331,34 +331,10 @@
       r.liquidacion_id === null || String(r.liquidacion_id) === String(datos.id));
   }
 
-  async function calcular() {
-    const datos = leerFormulario();
-    if (!datos) return;
-
-    App.$("cuerpoLiqLineas").innerHTML = App.spinnerFila(4, "Calculando...");
-
-    const registros = await registrosDelPeriodo(datos);
-    if (registros === null) {
-      limpiarCalculo();
-      return;
-    }
-
-    // Descuadre de cajas vacías del agricultor (todo el histórico, menos lo
-    // que ya se le haya cobrado en otras liquidaciones).
-    let saldoCajas = null;
-    if (datos.incluirCajas) {
-      // Sin filtro de campaña: las cajas son físicas y lo ya cobrado se
-      // cuenta de todas las campañas. Si solo se mirasen los movimientos
-      // de esta campaña, lo cobrado en campañas anteriores taparía los
-      // descuadres nuevos y no se cobrarían.
-      saldoCajas = await App.saldoCajasAgricultor(datos.agricultorId, {
-        // El precio de esta liquidación manda sobre el de Ajustes.
-        precioCaja: datos.precioCajaPerdida,
-        // Al reeditar, sus propias cajas ya cobradas no cuentan.
-        excluirLiquidacionId: datos.id,
-      });
-    }
-
+  // Líneas e importes de una liquidación. Sin consultas ni pantalla: solo
+  // la aritmética, para poder probarla. saldoCajas: el de
+  // App.saldoCajasAgricultor, o null si no se cobran las cajas vacías.
+  function calcularLiquidacion(datos, registros, saldoCajas) {
     const cajas = registros.reduce((s, r) => s + App.num(r.cajas_entradas), 0);
     const descuento = registros.reduce((s, r) => s + App.num(r.descuento_cajas), 0);
     const lineas = [];
@@ -410,18 +386,53 @@
     const retencionImporte = App.redondear((base + ivaImporte) * datos.retencion / 100);
     const total = App.redondear(base + ivaImporte - retencionImporte);
 
+    return { lineas, base, ivaImporte, retencionImporte, total, cajas };
+  }
+
+  // Sube con cada cálculo y con cada cambio del formulario: un cálculo que
+  // termina cuando ya se ha tocado algo se descarta, en vez de guardar como
+  // "calculado" algo que no es lo que hay en pantalla.
+  let calculoActual = 0;
+
+  async function calcular() {
+    const datos = leerFormulario();
+    if (!datos) return;
+    const id = ++calculoActual;
+
+    App.$("cuerpoLiqLineas").innerHTML = App.spinnerFila(4, "Calculando...");
+
+    const registros = await registrosDelPeriodo(datos);
+    if (id !== calculoActual) return;
+    if (registros === null) {
+      limpiarCalculo();
+      return;
+    }
+
+    // Descuadre de cajas vacías del agricultor (todo el histórico, menos lo
+    // que ya se le haya cobrado en otras liquidaciones).
+    let saldoCajas = null;
+    if (datos.incluirCajas) {
+      // Sin filtro de campaña: las cajas son físicas y lo ya cobrado se
+      // cuenta de todas las campañas. Si solo se mirasen los movimientos
+      // de esta campaña, lo cobrado en campañas anteriores taparía los
+      // descuadres nuevos y no se cobrarían.
+      saldoCajas = await App.saldoCajasAgricultor(datos.agricultorId, {
+        // El precio de esta liquidación manda sobre el de Ajustes.
+        precioCaja: datos.precioCajaPerdida,
+        // Al reeditar, sus propias cajas ya cobradas no cuentan.
+        excluirLiquidacionId: datos.id,
+      });
+    }
+
+    if (id !== calculoActual) return;
+    const calculo = calcularLiquidacion(datos, registros, saldoCajas);
     App.state.liquidacionPrevia = {
       datos,
-      lineas,
       registrosIds: registros.map((r) => r.id),
-      base,
-      ivaImporte,
-      retencionImporte,
-      total,
-      cajas,
+      ...calculo,
     };
 
-    pintarCalculo(registros.length, cajas);
+    pintarCalculo(registros.length, calculo.cajas);
   }
 
   function pintarCalculo(numRegistros, cajas) {
@@ -831,6 +842,7 @@
      "liqPrecioCajaPerdida", "liqIva", "liqRetencion", "liqIncluirCajas", "liqIncluirDescuento",
      "liqOtroConcepto", "liqOtraCantidad", "liqOtroPrecio"].forEach((id) =>
       App.$(id).addEventListener("change", () => {
+        calculoActual++;
         App.state.liquidacionPrevia = null;
         limpiarCalculo();
       }));
@@ -843,5 +855,6 @@
     liquidarRegistro,
     cargarLiquidaciones,
     configurarEventosLiquidaciones,
+    calcularLiquidacion,
   });
 })(window.App);

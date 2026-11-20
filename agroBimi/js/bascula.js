@@ -98,20 +98,29 @@
     return String(texto ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
   }
 
+  // Horas y días siempre en hora de España, como el servidor
+  // (bascula_hoy, bascula_registrar y bascula_anular usan Europe/Madrid).
+  // Si la tablet tuviera otra zona horaria (algunas vienen en UTC), cerca
+  // de medianoche "hoy" no sería el mismo día para la tablet y la oficina.
+  const ZONA = "Europe/Madrid";
+
   function hora(iso) {
-    return new Date(iso).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
+    return new Date(iso).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit", timeZone: ZONA });
   }
 
   function fechaLarga(iso) {
     return new Date(iso).toLocaleDateString("es-ES", {
-      weekday: "long", day: "numeric", month: "long", year: "numeric",
+      weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: ZONA,
     });
   }
 
-  // Fecha local AAAA-MM-DD, para saber si algo es "de hoy".
+  // Fecha AAAA-MM-DD en España, para saber si algo es "de hoy".
+  const formatoDia = new Intl.DateTimeFormat("en-CA", {
+    timeZone: ZONA, year: "numeric", month: "2-digit", day: "2-digit",
+  });
   function diaLocal(fecha = new Date()) {
-    const d = new Date(fecha);
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    const partes = Object.fromEntries(formatoDia.formatToParts(new Date(fecha)).map((x) => [x.type, x.value]));
+    return `${partes.year}-${partes.month}-${partes.day}`;
   }
 
   function nuevoUuid() {
@@ -134,9 +143,18 @@
 
   // El servidor ha rechazado los datos (no es un fallo de red): reintentar
   // no sirve de nada. P0001 = "raise exception" de las funciones bascula_*;
-  // 22xxx / 23xxx = datos no válidos.
+  // 22xxx / 23xxx = datos no válidos; 42501 = sin permiso; 42883 y
+  // PGRST202 = la función no existe (falta ejecutar el schema.sql). Antes
+  // estos últimos contaban como "sin red": reintentos sin fin y un aviso
+  // de conexión que no era verdad.
   function esRechazo(error) {
-    return /^(P0001|22|23)/.test(error?.code || "");
+    return /^(P0001|22|23|42501|42883|PGRST202)/.test(error?.code || "");
+  }
+
+  // El servidor no admite pesadas de hace más de una semana ni con la hora
+  // muy adelantada (bascula_registrar).
+  function esRechazoPorFecha(error) {
+    return /fecha de la pesada no v[aá]lida/i.test(String(error?.message ?? error ?? ""));
   }
 
   // El estado de la red se decide por lo que pasa con el servidor, no solo
@@ -192,8 +210,12 @@
     },
   };
 
+  // Si un guardado falla (p. ej. almacenamiento lleno un momento) la cola
+  // vive en memoria; en cuanto un guardado vuelve a funcionar, se vuelve a
+  // usar la de la tablet. Antes un solo fallo la dejaba solo en memoria
+  // hasta recargar la página.
   function guardarPendientes() {
-    if (!almacen.guardar(KEY_PENDIENTES, state.pendientes)) almacen.disponible = false;
+    almacen.disponible = almacen.guardar(KEY_PENDIENTES, state.pendientes);
   }
 
   // La cola guardada en la tablet es la buena: puede haber otra pestaña de
@@ -266,6 +288,7 @@
 
   async function cargarCampanas() {
     const { data, error } = await db.rpc("bascula_campanas");
+    anotarRed(error);
     if (error) throw error;
     state.campanas = data || [];
     pintarCampanas();
@@ -315,30 +338,45 @@
     pintarEntrada();
   }
 
+  // No lanza nunca: los fallos se pintan o se avisan aquí.
   async function cargarTodo() {
     try {
       await cargarCampanas();
-      await Promise.all([cargarAgricultores(), cargarHoy(), cargarEmisor()]);
-      state.sinRed = false;
-      state.cargaFallida = false;
     } catch (error) {
-      if (esRechazo(error) || !usarCache()) {
-        // Sin nada con lo que trabajar: se reintenta al volver la red y
-        // cada minuto, para no tener que recargar la página a mano.
-        state.cargaFallida = true;
-        $("gridAgricultores").innerHTML =
-          `<div class="error">No se pudieron cargar los datos.<br>${escapar(error.message)}<br>` +
-          "¿Hay conexión? ¿Se ha ejecutado el último schema.sql en Supabase?</div>";
-        return;
-      }
-      // Sin red pero con datos guardados en la tablet: se puede seguir.
-      state.sinRed = true;
-      pintarCampanas();
-      pintarAgricultores();
-      pintarHoy();
-      pintarEntrada();
+      cargaSinServidor(error);
+      pintarEstadoRed();
+      return;
+    }
+    // Cada parte por su lado: si falla una, lo que sí ha llegado no se
+    // pisa con la caché antigua (antes con Promise.all bastaba un fallo
+    // para volver a la caché entera).
+    const [agri, hoy] = await Promise.allSettled([cargarAgricultores(), cargarHoy(), cargarEmisor()]);
+    if (agri.status === "rejected" && !state.agricultores.length) {
+      cargaSinServidor(agri.reason);
+    } else {
+      state.cargaFallida = false;
+      if (agri.status === "rejected") notificarErrorActualizacion("los agricultores", agri.reason);
+      if (hoy.status === "rejected") notificarErrorActualizacion("las entradas de hoy", hoy.reason);
     }
     pintarEstadoRed();
+  }
+
+  function cargaSinServidor(error) {
+    if (esRechazo(error) || !usarCache()) {
+      // Sin nada con lo que trabajar: se reintenta al volver la red y
+      // cada minuto, para no tener que recargar la página a mano.
+      state.cargaFallida = true;
+      $("gridAgricultores").innerHTML =
+        `<div class="error">No se pudieron cargar los datos.<br>${escapar(error?.message)}<br>` +
+        "¿Hay conexión? ¿Se ha ejecutado el último schema.sql en Supabase?</div>";
+      return;
+    }
+    // Sin red pero con datos guardados en la tablet: se puede seguir.
+    state.sinRed = true;
+    pintarCampanas();
+    pintarAgricultores();
+    pintarHoy();
+    pintarEntrada();
   }
 
   // ------------------------------------------------------------------
@@ -346,14 +384,19 @@
   // ------------------------------------------------------------------
   // Con varias pestañas abiertas, solo una envía a la vez (si el navegador
   // lo permite; si no, el servidor ya ignora un uuid repetido).
+  // Siempre devuelve una promesa que no falla: se llama desde
+  // temporizadores y eventos, donde un error sin capturar no lo vería nadie.
   function enviarPendientes() {
-    if (state.enviando || !document.body.classList.contains("authed")) return;
-    if (!state.pendientes.some((p) => !p.error)) return;
-    if (navigator.locks) {
-      return navigator.locks.request("bascula_envio", { ifAvailable: true },
-        (lock) => (lock ? enviarCola() : undefined));
-    }
-    return enviarCola();
+    if (state.enviando || !document.body.classList.contains("authed")) return Promise.resolve();
+    if (!state.pendientes.some((p) => !p.error)) return Promise.resolve();
+    const envio = navigator.locks
+      ? navigator.locks.request("bascula_envio", { ifAvailable: true },
+        (lock) => (lock ? enviarCola() : undefined))
+      : enviarCola();
+    // Lo que no se envió sigue en la cola y se reintenta en el siguiente turno.
+    return Promise.resolve(envio).catch((error) => {
+      console.error("Error al enviar las entradas pendientes:", error);
+    });
   }
 
   async function enviarCola() {
@@ -496,9 +539,13 @@
     $("btnRegistrarImprimir").disabled = !listo;
   }
 
+  function diaCorto(iso) {
+    return new Date(iso).toLocaleDateString("es-ES", { day: "2-digit", month: "2-digit", timeZone: ZONA });
+  }
+
   function lineaHoy(h) {
     const cab = `
-      <span class="hoy-hora">${hora(h.creado)}</span>
+      <span class="hoy-hora">${h.antigua ? `${diaCorto(h.creado)} ` : ""}${hora(h.creado)}</span>
       <span class="hoy-agri"><b>${fmtCodigo(h.codigo)}</b> ${escapar(h.nombre)}</span>
       <span class="hoy-ciclo">C${escapar(h.ciclo ?? "—")}</span>
       <span class="hoy-cajas">${h.cajas || 0}${h.vacias
@@ -509,16 +556,18 @@
     if (h.pendiente && h.error) {
       return `
         <li class="hoy-item hoy-rechazada">${cab}
-          <button type="button" class="btn-del btn-sm" data-descartar="${h.uuid}">Descartar</button>
+          <button type="button" class="btn-del btn-sm" data-descartar="${escapar(h.uuid)}">Descartar</button>
           <div class="hoy-nota">⚠ No se ha podido guardar: ${escapar(h.error)}
-            <button type="button" class="btn-ghost btn-sm" data-reintentar="${h.uuid}">Reintentar</button>
+            ${esRechazoPorFecha(h.error)
+              ? `<button type="button" class="btn-ghost btn-sm" data-reenviar-hoy="${escapar(h.uuid)}">Enviar con fecha de hoy</button>`
+              : `<button type="button" class="btn-ghost btn-sm" data-reintentar="${escapar(h.uuid)}">Reintentar</button>`}
           </div>
         </li>`;
     }
     if (h.pendiente) {
       return `
         <li class="hoy-item hoy-pendiente">${cab}
-          <button type="button" class="btn-del btn-sm" data-descartar="${h.uuid}">Anular</button>
+          <button type="button" class="btn-del btn-sm" data-descartar="${escapar(h.uuid)}">Anular</button>
           <div class="hoy-nota">⏳ Guardada en la tablet, pendiente de envío</div>
         </li>`;
     }
@@ -526,7 +575,7 @@
       <li class="hoy-item">${cab}
         ${h.liquidado
           ? '<span class="badge badge-ok badge-mini" title="Ya liquidado: se corrige desde la oficina">Liquidado</span>'
-          : `<button type="button" class="btn-del btn-sm" data-anular="${h.id}">Anular</button>`}
+          : `<button type="button" class="btn-del btn-sm" data-anular="${escapar(h.id)}">Anular</button>`}
       </li>`;
   }
 
@@ -538,12 +587,15 @@
       ? `${lista.length} ${lista.length === 1 ? "entrada" : "entradas"} · ${resumenCajas({ cajas: total, vacias })}`
       : "";
 
-    // Pendientes de otros días (la tablet estuvo días sin red): se avisan
-    // aparte para que no queden escondidas.
-    const antiguas = state.pendientes.filter((p) => diaLocal(p.pesada_en) !== diaLocal());
+    // Pendientes de otros días (la tablet estuvo días sin red): se ponen
+    // todas debajo, con su fecha, para que se puedan ver y anular. Antes
+    // solo salían las rechazadas; las demás eran un número sin más.
+    const antiguas = state.pendientes
+      .filter((p) => diaLocal(p.pesada_en) !== diaLocal())
+      .sort((x, y) => new Date(y.pesada_en) - new Date(x.pesada_en));
     const extra = antiguas.length
-      ? `<li class="hoy-nota hoy-antiguas">⏳ Además hay ${antiguas.length} ${antiguas.length === 1 ? "entrada" : "entradas"} de días anteriores pendientes de envío.</li>` +
-        antiguas.filter((p) => p.error).map((p) => lineaHoy({ ...p, creado: p.pesada_en, pendiente: true })).join("")
+      ? `<li class="hoy-nota hoy-antiguas">⏳ ${antiguas.length === 1 ? "Entrada" : `${antiguas.length} entradas`} de días anteriores pendientes de envío:</li>` +
+        antiguas.map((p) => lineaHoy({ ...p, creado: p.pesada_en, pendiente: true, antigua: true })).join("")
       : "";
 
     $("hoyLista").innerHTML = lista.length || extra
@@ -737,7 +789,12 @@
     // Si se piden dos cargas a la vez (botón, minuto, vuelta de la red), solo
     // vale la última; y nada que llegue después de cerrar la sesión.
     const n = ++state.paletsReq;
-    const { data, error } = await db.rpc("bascula_palets");
+    let data, error;
+    try {
+      ({ data, error } = await db.rpc("bascula_palets"));
+    } catch (e) {
+      error = e;
+    }
     if (n !== state.paletsReq || !document.body.classList.contains("authed")) return;
     state.paletsFallo = !!error;
     if (error) {
@@ -1110,6 +1167,25 @@
     quitar();
   }
 
+  // La pesada es de hace más de una semana (o el reloj de la tablet iba
+  // mal) y el servidor no la admite: se envía con la fecha y hora de ahora,
+  // que es lo único que acepta. Así las cajas no se pierden. En la oficina
+  // queda con la fecha de hoy; la original se enseña al confirmar y se
+  // guarda en la cola (pesada_original) mientras no se haya enviado.
+  function reenviarConFechaDeHoy(uuid) {
+    const p = state.pendientes.find((x) => x.uuid === uuid);
+    if (!p) return;
+    if (!confirm(`¿Enviar esta entrada con la fecha de hoy?\n${p.nombre} · Ciclo ${p.ciclo} · ${resumenCajas(p)}\n` +
+      `Se apuntó el ${diaCorto(p.pesada_en)} a las ${hora(p.pesada_en)}, pero el servidor ya no admite esa fecha.`)) return;
+    const ahora = new Date().toISOString();
+    modificarCola((cola) => cola.map((x) => (x.uuid === uuid
+      ? { ...x, pesada_original: x.pesada_original || x.pesada_en, pesada_en: ahora, error: null }
+      : x)));
+    pintarHoy();
+    pintarEstadoRed();
+    enviarPendientes();
+  }
+
   function reintentarPendiente(uuid) {
     const p = state.pendientes.find((x) => x.uuid === uuid);
     if (!p) return;
@@ -1273,6 +1349,7 @@
       if (b.dataset.anular) anular(parseInt(b.dataset.anular, 10));
       else if (b.dataset.descartar) descartarPendiente(b.dataset.descartar);
       else if (b.dataset.reintentar) reintentarPendiente(b.dataset.reintentar);
+      else if (b.dataset.reenviarHoy) reenviarConFechaDeHoy(b.dataset.reenviarHoy);
       else if (b.dataset.imprimir) {
         const entrada = buscarEntrada(b.dataset.imprimir);
         if (entrada?.error) {
@@ -1323,8 +1400,6 @@
         cargarHoy().catch((error) => notificarErrorActualizacion("las entradas de hoy", error));
       }
     });
-    // Si se intenta cerrar la pestaña con entradas sin enviar, avisamos.
-    // (No se pierden, pero así nadie cree que ya están en la oficina.)
     // Otra pestaña ha cambiado la cola: se ve aquí también. Si ha enviado
     // algo, se trae el día para que no "desaparezca" de la lista.
     window.addEventListener("storage", (e) => {
@@ -1338,6 +1413,8 @@
         cargarHoy().catch((error) => notificarErrorActualizacion("las entradas de hoy", error));
       }
     });
+    // Si se intenta cerrar la pestaña con entradas sin enviar, avisamos.
+    // (No se pierden, pero así nadie cree que ya están en la oficina.)
     window.addEventListener("beforeunload", (e) => {
       if (state.pendientes.length) e.preventDefault();
     });

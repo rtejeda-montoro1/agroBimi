@@ -193,6 +193,8 @@ test("palets bottom pager moves to the next page and scrolls back to the top of 
   await elements.get("btnPaginaSiguientePaletsAbajo").listeners.get("click")[0]();
 
   assert.ok(listado().some((c) => c[0] === "range" && c[1] === 150 && c[2] === 299));
+  // Solo se pasa de página: el total ya se sabe y no se vuelve a contar.
+  assert.ok(listado().some((c) => c[0] === "select" && c[2] === undefined));
   assert.equal(subido, true);
   assert.equal(elements.get("paginaPaletsAbajo").textContent, "151–300 · página 2 de 3");
   assert.equal(elements.get("btnPaginaAnteriorPaletsAbajo").disabled, false);
