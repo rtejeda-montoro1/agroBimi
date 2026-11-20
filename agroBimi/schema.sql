@@ -1616,6 +1616,77 @@ create trigger liquidaciones_proteger
   before update on liquidaciones
   for each row execute function public.liquidaciones_proteger_trg();
 
+--     a2) Los datos de la factura (estado facturada, nº, fecha, si es del
+--         agricultor) solo los pone liquidacion_facturar (sección 21). Si
+--         no, un update directo desde el navegador podría poner un nº de
+--         recibo inventado sin pasar por el contador. Una liquidación
+--         nueva nace siempre como borrador y sin factura.
+create or replace function public.liquidaciones_facturacion_trg()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  if tg_op = 'INSERT' then
+    if new.estado <> 'borrador' or new.factura_secuencia is not null
+       or new.num_factura is not null or new.fecha_factura is not null
+       or new.factura_agricultor then
+      raise exception 'Una liquidación nueva empieza como borrador y sin factura: se factura después con «Facturar».';
+    end if;
+    return new;
+  end if;
+
+  if ((new.estado = 'facturada') is distinct from (old.estado = 'facturada')
+      or (new.factura_secuencia, new.num_factura, new.fecha_factura, new.factura_agricultor)
+         is distinct from
+         (old.factura_secuencia, old.num_factura, old.fecha_factura, old.factura_agricultor))
+     and current_setting('agrobimi.facturando_liquidacion', true) is distinct from old.id::text then
+    raise exception 'La liquidación % solo se puede facturar con el botón «Facturar».', old.numero;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists liquidaciones_facturacion on liquidaciones;
+create trigger liquidaciones_facturacion
+  before insert or update on liquidaciones
+  for each row execute function public.liquidaciones_facturacion_trg();
+
+-- Dos recibos propios no pueden llevar el mismo nº (las facturas que trae
+-- el agricultor sí pueden repetirse entre agricultores).
+create unique index if not exists liquidaciones_num_recibo_key
+  on liquidaciones (num_factura) where factura_secuencia is not null;
+
+--     d) Agricultores: al eliminar uno se borran sus registros, sus
+--        retiradas y sus liquidaciones en borrador (on delete cascade). Lo
+--        que ya es historia no: si tiene liquidaciones cerradas o
+--        facturadas, o cajas en palets que ya han salido, no se puede
+--        eliminar (se perderían pagos y albaranes ya entregados).
+create or replace function public.agricultores_proteger_trg()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  if exists (select 1 from liquidaciones
+             where agricultor_id = old.id and estado <> 'borrador') then
+    raise exception 'No se puede eliminar a %: tiene liquidaciones cerradas o facturadas, y su historial se tiene que conservar.',
+      old.nombre;
+  end if;
+  if exists (select 1 from palet_lineas pl join palets p on p.id = pl.palet_id
+             where pl.agricultor_id = old.id and p.fecha_salida is not null) then
+    raise exception 'No se puede eliminar a %: tiene cajas en palets que ya han salido, y los albaranes se tienen que conservar.',
+      old.nombre;
+  end if;
+  return old;
+end;
+$$;
+
+drop trigger if exists agricultores_proteger on agricultores;
+create trigger agricultores_proteger
+  before delete on agricultores
+  for each row execute function public.agricultores_proteger_trg();
+
 --     b) Líneas: solo se tocan mientras la liquidación es un borrador. Si
 --        la liquidación ya no existe es un borrado en cascada: se deja.
 create or replace function public.liquidacion_lineas_proteger_trg()
@@ -1752,6 +1823,9 @@ begin
       v_sec, 4);
   end if;
 
+  -- Aviso a liquidaciones_facturacion_trg (sección 20): solo aquí se
+  -- rellenan los datos de la factura. Solo dura esta transacción.
+  perform set_config('agrobimi.facturando_liquidacion', p_id::text, true);
   update liquidaciones set
     estado             = 'facturada',
     factura_agricultor = coalesce(p_agricultor, false),

@@ -319,6 +319,8 @@ que tengas puestos.
 - **Al cerrar un formulario con datos escritos sin guardar, pregunta antes de
   descartarlos.**
 - **Eliminar un agricultor borra todos sus registros.** No se puede deshacer.
+  Si ya tiene liquidaciones cerradas o facturadas, o cajas en palets que ya
+  han salido, no deja eliminarlo: ese historial se conserva.
 - **Todo va con campaña y ciclo.** Al anotar algo sale elegida la campaña
   más reciente (ahora la 26/27) y el ciclo 1; cámbialos si no son esos.
 - **Una campaña con datos no se puede eliminar.** Solo se borran campañas
