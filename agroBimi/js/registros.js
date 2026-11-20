@@ -9,9 +9,8 @@
     // Se vacían antes de cargar: si no, el resumen de rendimiento se pinta
     // un instante con las plantas del agricultor anterior.
     App.state.retiradasAgricultor = [];
-    App.$("filtroFacturaReg").value = "";
-    App.$("filtroFechaDesde").value = "";
-    App.$("filtroFechaHasta").value = "";
+    vaciarFiltros();
+    primeraPagina = true;
     App.$("nombreAgricultor").innerHTML =
       `<span class="agricultor-codigo">${App.fmtCodigo(agricultor.codigo)}</span>${App.escapar(agricultor.nombre)}`;
 
@@ -58,6 +57,10 @@
     App.$("registrosVacio").hidden = false;
     App.$("registrosVacio").innerHTML = App.spinner("Cargando registros...");
     App.$("btnExport").disabled = true;
+    ["paginacionRegistros", "paginacionRegistrosAbajo"].forEach((id) => {
+      const el = App.$(id);
+      if (el) el.hidden = true;
+    });
 
     const agricultorId = App.state.agricultorAbierto.id;
     const { data, error } = await App.traerTodo(() => App.db
@@ -83,23 +86,26 @@
     App.pintarResumenCiclos();
   }
 
+  const FILTROS = ["filtroFacturaReg", "filtroCampanaReg", "filtroCicloReg", "filtroFechaDesde", "filtroFechaHasta"];
+
   function hayFiltrosActivos() {
-    return Boolean(
-      App.$("filtroFacturaReg").value.trim() ||
-      App.$("filtroFechaDesde").value ||
-      App.$("filtroFechaHasta").value
-    );
+    return FILTROS.some((id) => String(App.$(id)?.value || "").trim());
   }
 
-  // Filtra los registros cargados por Nº de factura (texto) y por rango
-  // de fecha de entrada. Todo en cliente sobre registrosActuales.
+  // Filtra los registros cargados por Nº de factura (texto), campaña,
+  // ciclo y rango de fecha de entrada. Todo en cliente sobre
+  // registrosActuales: el resumen de rendimiento necesita todos.
   function registrosFiltrados() {
     const texto = App.$("filtroFacturaReg").value.trim().toLowerCase();
+    const campana = App.$("filtroCampanaReg")?.value || "";
+    const ciclo = App.$("filtroCicloReg")?.value || "";
     const desde = App.$("filtroFechaDesde").value;
     const hasta = App.$("filtroFechaHasta").value;
 
     return App.state.registrosActuales.filter((r) => {
       if (texto && !(r.num_factura || "").toLowerCase().includes(texto)) return false;
+      if (campana && String(r.campana_id ?? "") !== campana) return false;
+      if (ciclo && App.cicloValido(r.ciclo) !== ciclo) return false;
       const fecha = r.fecha || "";
       if (desde && (!fecha || fecha < desde)) return false;
       if (hasta && (!fecha || fecha > hasta)) return false;
@@ -107,24 +113,51 @@
     });
   }
 
-  function limpiarFiltros() {
-    App.$("filtroFacturaReg").value = "";
-    App.$("filtroFechaDesde").value = "";
-    App.$("filtroFechaHasta").value = "";
-    refrescarVista();
+  function vaciarFiltros() {
+    FILTROS.forEach((id) => { const el = App.$(id); if (el) el.value = ""; });
   }
 
-  // Aplica filtros + agrupación (si procede) y repinta.
-  function refrescarVista() {
+  function limpiarFiltros() {
+    vaciarFiltros();
+    refrescarVista({ primeraPagina: true });
+  }
+
+  // Lo que se ve, en el orden de la tabla (filtrado y, si toca, agrupado
+  // por factura), todas las páginas juntas.
+  function registrosVisibles() {
     const filtrados = registrosFiltrados();
-    const paraPintar = App.state.agrupadoPorFactura
-      ? agruparPorFactura(filtrados)
-      : filtrados;
-    pintarRegistros(paraPintar);
+    return App.state.agrupadoPorFactura ? agruparPorFactura(filtrados) : filtrados;
+  }
+
+  // Los registros del agricultor ya están todos descargados: las páginas
+  // salen de ahí (js/paginacion.js, opción local), sin ir al servidor.
+  let paginadorRegistros = null;
+  let primeraPagina = true;
+  function paginador() {
+    paginadorRegistros ||= App.crearPaginador({
+      nombre: "Registros",
+      consulta: null,
+      local: registrosVisibles,
+      cuerpoId: "cuerpoRegistros",
+      columnas: 8,
+      texto: "los registros",
+      contadorId: "countRegistros",
+      alCargar: (filas, { total }) => pintarRegistros(filas, total),
+    });
+    return paginadorRegistros;
+  }
+
+  // Aplica filtros + agrupación (si procede) y repinta la página. Al
+  // cambiar un filtro se vuelve a la primera; al recargar tras guardar,
+  // se queda en la que estaba.
+  function refrescarVista({ primeraPagina: alPrincipio = false } = {}) {
+    if (alPrincipio || primeraPagina) paginador().filtrar();
+    else paginador().cargar();
+    primeraPagina = false;
     actualizarIconoOrden();
   }
 
-  function pintarRegistros(registros) {
+  function pintarRegistros(registros, total = registros.length) {
     ocultarPopoverCajas(); // el repintado invalida los botones actuales
     const vacio = registros.length === 0;
     const hayTotal = App.state.registrosActuales.length > 0;
@@ -188,7 +221,44 @@
       }).join("");
     }
 
-    App.actualizarContador("countRegistros", registros.length, "registro", "registros");
+    App.actualizarContador("countRegistros", total, "registro", "registros");
+  }
+
+  // -------------------------------------------------------------------
+  //  Export: lo filtrado o todos los registros del agricultor
+  // -------------------------------------------------------------------
+  function cerrarMenuExportReg() {
+    const menu = App.$("menuExportReg");
+    if (menu) menu.hidden = true;
+  }
+
+  // Sin filtros no hay nada que elegir: se exporta todo directamente.
+  function pulsarExportRegistros(e) {
+    e?.stopPropagation(); // que el clic fuera del menú no lo cierre al abrirlo
+    if (!hayFiltrosActivos()) {
+      App.exportarExcel(App.state.registrosActuales);
+      return;
+    }
+    const menu = App.$("menuExportReg");
+    if (!menu.hidden) {
+      menu.hidden = true;
+      return;
+    }
+    App.$("btnExportRegFiltrados").textContent =
+      `Vista actual, con los filtros (${App.fmtNum(registrosVisibles().length)} registros)`;
+    App.$("btnExportRegTodo").textContent =
+      `Todos los registros (${App.fmtNum(App.state.registrosActuales.length)})`;
+    menu.hidden = false;
+  }
+
+  function exportarRegistrosFiltrados() {
+    cerrarMenuExportReg();
+    App.exportarExcel(registrosVisibles());
+  }
+
+  function exportarRegistrosTodos() {
+    cerrarMenuExportReg();
+    App.exportarExcel(App.state.registrosActuales);
   }
 
   function abrirModalRegistro(registro = null) {
@@ -535,14 +605,27 @@
     App.dom.cuerpoRegistros.addEventListener("click", clickRegistros);
     App.dom.formRegistro.addEventListener("submit", guardarRegistro);
 
+    // Cualquier filtro nuevo vuelve a la primera página.
+    const filtrar = () => refrescarVista({ primeraPagina: true });
     let debounce;
     App.$("filtroFacturaReg").addEventListener("input", () => {
       clearTimeout(debounce);
-      debounce = setTimeout(refrescarVista, 200);
+      debounce = setTimeout(filtrar, 200);
     });
-    App.$("filtroFechaDesde").addEventListener("change", refrescarVista);
-    App.$("filtroFechaHasta").addEventListener("change", refrescarVista);
+    ["filtroCampanaReg", "filtroCicloReg", "filtroFechaDesde", "filtroFechaHasta"].forEach((id) =>
+      App.$(id).addEventListener("change", filtrar));
     App.$("btnLimpiarFiltrosReg").addEventListener("click", limpiarFiltros);
+    paginador().conectar();
+
+    App.$("btnExportRegFiltrados").addEventListener("click", exportarRegistrosFiltrados);
+    App.$("btnExportRegTodo").addEventListener("click", exportarRegistrosTodos);
+    // El menú de export se cierra al pulsar fuera o con Escape.
+    document.addEventListener("click", (e) => {
+      if (!e.target.closest?.("#menuExportReg")) cerrarMenuExportReg();
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") cerrarMenuExportReg();
+    });
 
     const pop = App.$("cajasPopover");
     pop.addEventListener("click", clickPopoverCajas);
@@ -568,6 +651,8 @@
     pintarRegistros,
     abrirModalRegistro,
     configurarEventosRegistros,
+    pulsarExportRegistros,
+    registrosVisibles,
     botonCajas,
     alternarPopoverCajas,
     ocultarPopoverCajas,

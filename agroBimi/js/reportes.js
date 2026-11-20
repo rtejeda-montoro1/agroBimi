@@ -124,15 +124,17 @@
   // -------------------------------------------------------------------
   //  Export: registros de un agricultor
   // -------------------------------------------------------------------
-  function exportarExcel() {
+  // regs: los que se exportan (lo filtrado o todos; lo elige el botón
+  // Export de la ficha, js/registros.js).
+  function exportarExcel(regs = App.state.registrosActuales) {
     if (!App.state.agricultorAbierto) return;
-    if (App.state.registrosActuales.length === 0) {
+    if (!Array.isArray(regs) || regs.length === 0) {
       App.toast("No hay registros que exportar.");
       return;
     }
 
     const codigo = App.fmtCodigo(App.state.agricultorAbierto.codigo);
-    const filas = App.state.registrosActuales.map((r) => ({
+    const filas = regs.map((r) => ({
       "Código": codigo,
       "Agricultor": App.state.agricultorAbierto.nombre,
       "Campaña": App.campanaNombre(r.campana_id) === "—" ? "" : App.campanaNombre(r.campana_id),

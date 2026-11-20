@@ -16,6 +16,7 @@
     { id: "filtroCampanaPlantas", textoVacio: "Todas las campañas" },
     { id: "filtroCampanaCajas",   textoVacio: "Todas las campañas" },
     { id: "filtroCampanaLiq",     textoVacio: "Todas las campañas" },
+    { id: "filtroCampanaReg",     textoVacio: "Todas las campañas" },
   ];
 
   async function cargarCampanas() {

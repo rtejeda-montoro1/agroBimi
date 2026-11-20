@@ -6,7 +6,8 @@
   function configurarEventosInterfaz() {
     App.$("btnAnadirAgricultor").addEventListener("click", () => App.abrirModalAgricultor());
     App.$("btnAnadirRegistro").addEventListener("click", () => App.abrirModalRegistro());
-    App.$("btnExport").addEventListener("click", App.exportarExcel);
+    // Con filtros puestos pregunta si exportar lo filtrado o todo (js/registros.js).
+    App.$("btnExport").addEventListener("click", (e) => App.pulsarExportRegistros(e));
 
     App.$("btnOrdenFecha").addEventListener("click", () => {
       // Al ordenar por fecha se desagrupan las facturas.

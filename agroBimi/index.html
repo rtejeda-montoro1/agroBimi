@@ -102,20 +102,47 @@
           <input type="text" id="filtroFacturaReg" placeholder="Ej. FAC 01..." />
         </div>
         <div class="field">
-          <label for="filtroFechaDesde">Entrada desde</label>
-          <input type="date" id="filtroFechaDesde" />
+          <label for="filtroCampanaReg">Campaña</label>
+          <select id="filtroCampanaReg"></select>
         </div>
         <div class="field">
-          <label for="filtroFechaHasta">Entrada hasta</label>
-          <input type="date" id="filtroFechaHasta" />
+          <label for="filtroCicloReg">Ciclo</label>
+          <select id="filtroCicloReg">
+            <option value="">Todos los ciclos</option>
+            <option value="1">Ciclo 1</option>
+            <option value="2">Ciclo 2</option>
+            <option value="3">Ciclo 3</option>
+          </select>
+        </div>
+        <div class="field-par">
+          <div class="field">
+            <label for="filtroFechaDesde">Entrada desde</label>
+            <input type="date" id="filtroFechaDesde" />
+          </div>
+          <div class="field">
+            <label for="filtroFechaHasta">Entrada hasta</label>
+            <input type="date" id="filtroFechaHasta" />
+          </div>
         </div>
         <button class="btn-ghost" id="btnLimpiarFiltrosReg">Limpiar filtros</button>
       </div>
 
       <div class="summary">
         <span class="count" id="countRegistros">0 registros</span>
+        <div class="paginacion" id="paginacionRegistros" hidden>
+          <button type="button" class="btn-ghost btn-sm" id="btnPaginaAnteriorRegistros">‹ Anterior</button>
+          <span class="paginacion-texto" id="paginaRegistros"></span>
+          <button type="button" class="btn-ghost btn-sm" id="btnPaginaSiguienteRegistros">Siguiente ›</button>
+        </div>
         <div class="summary-acciones">
-          <button class="btn-primary" id="btnExport">⬇ Export</button>
+          <!-- Con filtros puestos, Export pregunta qué exportar. -->
+          <div class="menu-export-wrap">
+            <button class="btn-primary" id="btnExport" aria-haspopup="menu">⬇ Export</button>
+            <div class="menu-export" id="menuExportReg" role="menu" hidden>
+              <button type="button" role="menuitem" id="btnExportRegFiltrados">Vista actual, con los filtros</button>
+              <button type="button" role="menuitem" id="btnExportRegTodo">Todos los registros</button>
+            </div>
+          </div>
           <button class="btn-primary" id="btnAnadirRegistro">+ Añadir</button>
         </div>
       </div>
@@ -140,6 +167,11 @@
           </thead>
           <tbody id="cuerpoRegistros"></tbody>
         </table>
+      </div>
+      <div class="paginacion paginacion-abajo" id="paginacionRegistrosAbajo" hidden>
+        <button type="button" class="btn-ghost btn-sm" id="btnPaginaAnteriorRegistrosAbajo">‹ Anterior</button>
+        <span class="paginacion-texto" id="paginaRegistrosAbajo"></span>
+        <button type="button" class="btn-ghost btn-sm" id="btnPaginaSiguienteRegistrosAbajo">Siguiente ›</button>
       </div>
       <div id="registrosVacio" class="empty" hidden>Este agricultor todavía no tiene registros.</div>
     </section>
