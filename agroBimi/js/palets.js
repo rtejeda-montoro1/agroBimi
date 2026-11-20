@@ -132,15 +132,16 @@
     return paginador().filtrar();
   }
 
+  // La cámara (resumen de arriba) y la página del listado se piden a la
+  // vez: el listado no usa los datos de la cámara. Antes iban una detrás
+  // de otra y la ventana tardaba lo que las dos juntas.
   async function cargarPalets() {
-    const cuerpo = App.$("cuerpoPalets");
-    cuerpo.innerHTML = App.spinnerFila(7, "Cargando palets...");
-    if (!(await cargarDatosPaletizado())) {
-      cuerpo.innerHTML = App.filaMensaje(7, "No se pudieron cargar los palets.", "error");
+    const [camaraOk] = await Promise.all([cargarDatosPaletizado(), paginador().cargar()]);
+    if (!camaraOk) {
+      App.$("cuerpoPalets").innerHTML = App.filaMensaje(7, "No se pudieron cargar los palets.", "error");
       return;
     }
     pintarResumenCamara();
-    await paginador().cargar();
   }
 
   // Tras cualquier cambio: refrescar lo que esté abierto (en la misma página).

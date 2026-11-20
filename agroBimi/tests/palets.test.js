@@ -238,3 +238,23 @@ test("palets search by pallet number looks in every pallet, ignoring the other f
   assert.ok(!q.some((c) => c[0] === "is" || c[0] === "lt" || c[0] === "gte" || c[0] === "or"));
   assert.ok(!q.some((c) => c[0] === "eq" && c[1] === "filtro_agri.agricultor_id"));
 });
+
+test("palets asks for the camera and the list page at the same time", async () => {
+  const { app, module } = createListadoHarness();
+  const enCurso = [];
+  app.db = { from: (table) => {
+    let responder;
+    const respuesta = new Promise((resolve) => { responder = resolve; });
+    enCurso.push({ table, responder });
+    return fakeQuery(respuesta);
+  } };
+
+  const carga = module.cargarPalets();
+  await new Promise((resolve) => setImmediate(resolve));
+  // Cámara (palets + paletizado_entradas) y la página del listado, sin
+  // esperar a que vuelva ninguna.
+  assert.equal(enCurso.length, 3);
+
+  enCurso.forEach(({ responder }) => responder({ data: [], error: null, count: 0 }));
+  await carga;
+});
