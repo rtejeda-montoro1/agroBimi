@@ -409,9 +409,13 @@ returns boolean
 language sql
 stable
 security definer
-set search_path = public
+-- search_path vacío y nombres completos: así ni una tabla temporal
+-- (pg_temp se busca antes que public) ni un objeto creado en public
+-- pueden suplantar a usuarios_bascula. De esta función depende la RLS
+-- de todas las tablas.
+set search_path = ''
 as $$
-  select exists (select 1 from usuarios_bascula where user_id = auth.uid());
+  select exists (select 1 from public.usuarios_bascula where user_id = auth.uid());
 $$;
 
 revoke all on function public.es_bascula() from public, anon;
@@ -480,6 +484,12 @@ begin
     -- RLS decide QUÉ filas ve cada rol, pero el rol necesita además
     -- permiso sobre la tabla. Acceso completo a los usuarios con sesión y
     -- nada en absoluto al rol anónimo (sin login).
+    -- Supabase da por defecto TODOS los privilegios a authenticated en las
+    -- tablas nuevas; se quitan TRUNCATE (vaciaría la tabla saltándose RLS
+    -- y los triggers), TRIGGER y REFERENCES, que la app no usa. El vaciado
+    -- de 2026-11-05_empezar_datos_reales.sql se ejecuta como postgres en el
+    -- editor SQL y no depende de ellos.
+    execute format('revoke truncate, trigger, references on table %I from authenticated', t);
     execute format('grant select, insert, update, delete on table %I to authenticated', t);
     execute format('revoke all on table %I from anon', t);
   end loop;
@@ -1375,6 +1385,8 @@ where coalesce(r.cajas_entradas, 0) > 0
   and (c.desde is null or r.fecha >= c.desde)
 group by r.id, c.cap;
 
+-- Solo lectura: se quitan los privilegios que Supabase da por defecto.
+revoke all on paletizado_entradas from authenticated;
 grant select on paletizado_entradas to authenticated;
 revoke all on paletizado_entradas from anon;
 
