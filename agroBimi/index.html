@@ -1223,8 +1223,8 @@
         numeración de los documentos.
       </p>
       <form id="formAjustes" data-guardar-con-cambios>
-        <div class="factura-bloque">
-          <h3 class="factura-titulo">Emisor de los recibos</h3>
+        <details class="bloque-plegable">
+          <summary>Emisor de los recibos</summary>
           <div class="grid-campos">
             <div class="field campo-ancho">
               <label for="aj_emisor_nombre">Nombre / Razón social</label>
@@ -1263,10 +1263,10 @@
               <input type="text" id="aj_emisor_registro" placeholder="ESP 00000000" />
             </div>
           </div>
-        </div>
+        </details>
 
-        <div class="factura-bloque">
-          <h3 class="factura-titulo">Precios e impuestos por defecto</h3>
+        <details class="bloque-plegable">
+          <summary>Precios e impuestos por defecto</summary>
           <div class="grid-campos">
             <div class="field">
               <label for="aj_precio_caja">Precio por caja de bimi (€)</label>
@@ -1285,10 +1285,10 @@
               <input type="number" id="aj_retencion_porcentaje" step="0.01" min="0" />
             </div>
           </div>
-        </div>
+        </details>
 
-        <div class="factura-bloque">
-          <h3 class="factura-titulo">Series de numeración</h3>
+        <details class="bloque-plegable">
+          <summary>Series de numeración</summary>
           <div class="grid-campos">
             <div class="field">
               <label for="aj_serie_liquidacion">Liquidaciones</label>
@@ -1307,10 +1307,10 @@
               <input type="text" id="aj_serie_albaran" placeholder="ALB" />
             </div>
           </div>
-        </div>
+        </details>
 
-        <div class="factura-bloque">
-          <h3 class="factura-titulo">Paletización</h3>
+        <details class="bloque-plegable">
+          <summary>Paletización</summary>
           <div class="grid-campos">
             <div class="field">
               <label for="aj_cajas_por_palet">Cajas por palet</label>
@@ -1333,10 +1333,10 @@
             Cambiar las cajas por palet o la fecha no reparte de nuevo lo que ya
             está paletizado: se aplica a las pesadas siguientes.
           </p>
-        </div>
+        </details>
 
-        <div class="factura-bloque">
-          <h3 class="factura-titulo">Carta de porte (CMR): datos fijos</h3>
+        <details class="bloque-plegable">
+          <summary>Carta de porte (CMR): datos fijos</summary>
           <div class="grid-campos">
             <div class="field campo-ancho">
               <label for="aj_cmr_remitente">Remitente (casillas 1 y 22)</label>
@@ -1355,7 +1355,7 @@
               <input type="number" id="aj_peso_bruto_caja_kg" min="0" step="0.01" placeholder="9.25" />
             </div>
           </div>
-        </div>
+        </details>
 
         <div class="modal-actions">
           <button type="button" class="btn-ghost" data-cerrar="modalAjustes">Cancelar</button>

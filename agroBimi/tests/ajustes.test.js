@@ -47,3 +47,29 @@ test("ajustes load failure keeps defaults and reports failure", async () => {
   assert.equal(app.state.parametros.precio_caja, "2.50");
   assert.match(app.lastToast, /offline/);
 });
+
+test("ajustes open the collapsed section of a field that fails validation", () => {
+  const { app, module, elements } = createAjustesHarness([]);
+  app.dom.formAjustes = createElement();
+  elements.set("btnAjustes", createElement());
+  module.configurarEventosAjustes();
+
+  const seccion = { open: false };
+  const campo = { closest: (sel) => (sel === "details" ? seccion : null) };
+  app.dom.formAjustes.dispatch("invalid", { target: campo });
+  assert.equal(seccion.open, true);
+
+  // Un campo fuera de cualquier sección no falla.
+  app.dom.formAjustes.dispatch("invalid", { target: { closest: () => null } });
+});
+
+test("ajustes sections are collapsible and all start closed", () => {
+  const fs = require("node:fs");
+  const path = require("node:path");
+  const html = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
+  const form = html.slice(html.indexOf('<form id="formAjustes"'), html.indexOf("</form>", html.indexOf('<form id="formAjustes"')));
+  const secciones = form.match(/<details class="bloque-plegable"[^>]*>/g) || [];
+  assert.equal(secciones.length, 5);
+  assert.equal(secciones.filter((s) => / open\b/.test(s)).length, 0);
+  assert.doesNotMatch(form, /factura-bloque/);
+});

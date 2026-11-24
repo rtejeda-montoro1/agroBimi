@@ -92,6 +92,15 @@
   function configurarEventosAjustes() {
     App.$("btnAjustes").addEventListener("click", abrirAjustes);
     App.dom.formAjustes.addEventListener("submit", guardarAjustes);
+    // Las secciones se pliegan: si un campo obligatorio está en una
+    // plegada, el navegador no puede enfocarlo ni mostrar su aviso. Se
+    // abre su sección antes ("invalid" no burbujea: va en captura).
+    App.dom.formAjustes.addEventListener("invalid", abrirSeccionDe, true);
+  }
+
+  function abrirSeccionDe(e) {
+    const seccion = e.target?.closest?.("details");
+    if (seccion) seccion.open = true;
   }
 
   Object.assign(App, {
