@@ -22,6 +22,10 @@ dentro de su propia carpeta.
 - agroBimi/logo_web.png: logo usado en la cabecera, el login y el favicon.
 - agroBimi/bascula.html + bascula.css: puesto de la bascula (tablet junto al
   peso para apuntar cajas). Pagina independiente de la app principal.
+- agroBimi/albaran.html: copia digital publica de una salida (CMR + albaran),
+  la que abre el QR. Sin login: solo `albaran_copia(token)`.
+- agroBimi/documentos.css: estilos del CMR y del albaran (impresion en
+  index.html; tambien en pantalla en albaran.html).
 
 ### Modulos JavaScript
 
@@ -40,6 +44,9 @@ dentro de su propia carpeta.
   salidas y buscar por campaña), con los filtros aplicados en el servidor.
 - agroBimi/js/palets.js: paletizacion (camara, palets y etiquetas).
 - agroBimi/js/salidas.js: salidas de palets y albaranes de salida.
+- agroBimi/js/documentos-salida.js: plantillas del CMR y del albaran a partir
+  de la copia congelada de la salida, y el QR (qrcode-generator por CDN).
+- agroBimi/js/albaran-publico.js: logica de albaran.html.
 - agroBimi/js/liquidaciones.js: liquidaciones por fechas y generacion de facturas.
 - agroBimi/js/facturas.js: documento de liquidacion / factura e impresion.
 - agroBimi/js/reportes.js: exportacion a Excel.
@@ -177,6 +184,16 @@ En la app la pantalla se llama "Stock en camara".
   fijos del CMR son parametros (`cmr_remitente`, `cmr_porteador`,
   `cmr_tipo_palet`, `peso_bruto_caja_kg`); lo variable va en
   `albaranes_salida`.
+- QR / copia digital (`schema.sql` seccion 23): cada albaran tiene un
+  `token` (uuid aleatorio) y, la primera vez que se imprime, guarda en
+  `copia` (jsonb) todo lo que sale en el papel (cabecera, palets, nombre y
+  NIF de los agricultores, emisor y ajustes del CMR). Las reimpresiones y
+  `albaran.html?t=<token sin guiones>` pintan desde esa copia con las mismas
+  plantillas (`js/documentos-salida.js`). El rol anon solo puede llamar a
+  `albaran_copia(token)`; token y copia no se pueden cambiar despues
+  (trigger `albaranes_copia_proteger`) y anular el albaran lo borra. El
+  enlace se construye con la URL desde la que se imprime. Los albaranes
+  anteriores guardan su copia al reimprimirlos.
 - La vista `paletizado_entradas` dice, por pesada, cuantas cajas estan en
   palets en formacion, sin palet, en palets completos o ya salidas.
 - Solo se paletizan las pesadas desde `paletizado_desde` (Ajustes). Los palets

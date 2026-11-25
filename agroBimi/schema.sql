@@ -190,6 +190,8 @@ create index if not exists retiradas_fecha_idx      on retiradas_plantas (fecha)
 --    de la carta de porte (CMR) que cambian en cada salida (el número de
 --    cada columna es su casilla del CMR); los fijos (remitente, porteador)
 --    están en Ajustes.
+--    token: código secreto del QR de la copia digital (sección 23); copia:
+--    el CMR y el albarán tal y como se imprimieron la primera vez.
 create table if not exists albaranes_salida (
   id                     bigint generated always as identity primary key,
   secuencia              integer     unique,
@@ -210,8 +212,17 @@ create table if not exists albaranes_salida (
   embalaje               text,            -- 8
   naturaleza             text,            -- 9
   peso_bruto_kg          numeric(12,2),   -- 11
-  temperatura            numeric(5,1)     -- 13
+  temperatura            numeric(5,1),    -- 13
+  token                  uuid        not null default gen_random_uuid(),
+  copia                  jsonb
 );
+
+-- Bases de datos de antes del QR (noviembre de 2026). Aquí y no al final
+-- porque albaran_copia (sección 23) ya usa estas columnas. Cada albarán que
+-- ya existía recibe su propio código. Se puede quitar cuando todas lo tengan.
+alter table albaranes_salida add column if not exists token uuid not null default gen_random_uuid();
+alter table albaranes_salida add column if not exists copia jsonb;
+create unique index if not exists albaranes_token_key on albaranes_salida (token);
 
 -- Orden y filtro por fecha del listado de salidas (js/salidas.js).
 create index if not exists albaranes_orden_idx on albaranes_salida (secuencia desc nulls last, id);
@@ -2097,6 +2108,48 @@ revoke all on function public.login_correcto() from public, anon;
 grant execute on function public.login_bloqueado(text) to anon, authenticated;
 grant execute on function public.login_fallido(text) to anon, authenticated;
 grant execute on function public.login_correcto() to authenticated;
+
+-- 23) COPIA DIGITAL DEL ALBARÁN (QR)
+--     El CMR y el albarán llevan un QR a albaran.html?t=<token>, por si
+--     paran al transportista. Esa página no tiene sesión (rol anon): solo
+--     puede pedir, con el código, la copia guardada de ESE albarán. El
+--     código es aleatorio (uuid): no se puede adivinar ni recorrer. Al
+--     anular el albarán se borra y el QR deja de mostrar nada.
+--     La copia se guarda la primera vez que se imprime (js/salidas.js) y
+--     ya no cambia: ni el código ni la copia se pueden modificar después.
+create or replace function public.albaranes_copia_proteger_trg()
+returns trigger
+language plpgsql
+set search_path = ''
+as $$
+begin
+  if new.token is distinct from old.token then
+    raise exception 'El código del QR del albarán % no se puede cambiar.', old.numero;
+  end if;
+  if old.copia is not null and new.copia is distinct from old.copia then
+    raise exception 'La copia digital del albarán % ya está guardada: no se puede cambiar.', old.numero;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists albaranes_copia_proteger on albaranes_salida;
+create trigger albaranes_copia_proteger
+  before update of token, copia on albaranes_salida
+  for each row execute function public.albaranes_copia_proteger_trg();
+
+create or replace function public.albaran_copia(p_token uuid)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select a.copia from public.albaranes_salida a where a.token = p_token;
+$$;
+
+revoke all on function public.albaran_copia(uuid) from public;
+grant execute on function public.albaran_copia(uuid) to anon, authenticated;
 
 -- ---------------------------------------------------------------------
 -- Columnas nuevas (noviembre de 2026): pago por kg. Se pueden quitar

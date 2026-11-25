@@ -210,6 +210,16 @@ y las 10 que sobran abren el palet 2.
 4. La fecha de salida se apunta sola como **Fecha (CMR)** en las pesadas que
    van en esos palets.
 
+**Código QR (copia digital):** el CMR (casilla 5, documentos anexos) y el
+albarán llevan un QR. Si paran al transportista, quien lo escanee con el móvil
+ve la carta de porte y el albarán tal y como se imprimieron, sin necesidad de
+usuario ni contraseña. La copia se guarda la primera vez que se imprime y ya
+no cambia: aunque luego se corrija el nombre de un agricultor o los Ajustes,
+el QR y las reimpresiones salen igual que el papel. Si se anula el albarán,
+el QR deja de mostrar nada. Imprime siempre desde la web publicada (no desde
+una copia en el ordenador): el QR apunta a la dirección desde la que se
+imprime.
+
 Los datos fijos del CMR (remitente, porteador y tipo de palet) están en
 «⚙ Ajustes → Carta de porte (CMR)».
 

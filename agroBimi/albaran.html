@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=840" />
+  <meta name="robots" content="noindex, nofollow" />
+  <meta name="referrer" content="no-referrer" />
+  <title>Albarán de salida · copia digital</title>
+  <link rel="icon" type="image/png" href="logo_web.png" />
+  <link rel="stylesheet" href="documentos.css" />
+  <style>
+    :root { color-scheme: light; }
+    body { margin: 0; background: #e5e7eb; color: #111; font-family: Arial, Helvetica, sans-serif; }
+    .barra {
+      position: sticky; top: 0; z-index: 1;
+      display: flex; justify-content: space-between; align-items: center; gap: 12px;
+      padding: 10px 16px; background: #1f2937; color: #fff; font-size: 15px;
+    }
+    .barra[hidden] { display: none; }
+    .barra button {
+      font: inherit; padding: 8px 14px; border: 0; border-radius: 6px;
+      background: #fff; color: #1f2937; cursor: pointer;
+    }
+    .estado { max-width: 560px; margin: 48px auto; padding: 24px; background: #fff; border-radius: 8px; font-size: 18px; text-align: center; }
+    .documento { padding: 16px 0; }
+    .documento > .cmr, .documento > .rec {
+      box-sizing: border-box; width: 210mm; margin: 0 auto 16px; padding: 8mm;
+      background: #fff; box-shadow: 0 1px 4px rgba(0, 0, 0, .25);
+    }
+    @media print {
+      @page { size: A4; margin: 14mm; }
+      body { background: #fff; }
+      .barra { display: none; }
+      .documento { padding: 0; }
+      .documento > .cmr, .documento > .rec { width: auto; margin: 0; padding: 0; box-shadow: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="barra" id="barra" hidden>
+    <span>Copia digital del albarán de salida y su carta de porte (CMR)</span>
+    <button type="button" id="btnImprimir">Imprimir / PDF</button>
+  </div>
+  <p class="estado" id="estado">Cargando el albarán…</p>
+  <div class="documento" id="documento"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js"
+          integrity="sha384-TcHRA3zBbn+Lexh5n+Oil4guNPOS3rjNDpGRAN46u/s/mB2IZ50ceC6TYDU2yvgK"
+          crossorigin="anonymous"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"
+          integrity="sha384-mZT2gIty7ZDdOGkxfP6joZcYdMW1Jvj9dRlfpTmaJAKKXTqzygtB22k7FLe+KZC1"
+          crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script src="config.js"></script>
+  <script>window.App = {};</script>
+  <script src="js/utils.js"></script>
+  <script src="js/documentos-salida.js"></script>
+  <script src="js/albaran-publico.js"></script>
+</body>
+</html>
