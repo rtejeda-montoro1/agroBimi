@@ -449,7 +449,9 @@ body.bascula:not(.authed) .bascula-main { display: none; }
     gap: 1mm 3mm;
     margin: 0 0 3mm;
   }
-  .ticket-datos dt { color: #444; }
+  /* Negro puro: la térmica no hace grises (los imita con puntos y se ven
+     desvaídos). Se distinguen del dato porque este va alineado a la derecha. */
+  .ticket-datos dt { color: #000; }
   .ticket-datos dd { margin: 0; text-align: right; overflow-wrap: anywhere; }
   /* Almacén receptor: letra más pequeña para que el nombre entero quepa en
      una línea, y una raya debajo que lo separa de los datos de la entrada. */
@@ -477,6 +479,6 @@ body.bascula:not(.authed) .bascula-main { display: none; }
     font-weight: 700;
   }
   .ticket-pendiente small { font-weight: 400; font-size: 8.5pt; }
-  .ticket-firma { text-align: center; font-size: 9pt; color: #444; }
+  .ticket-firma { text-align: center; font-size: 9pt; color: #000; }
   .ticket-firma-hueco { height: 22mm; border-bottom: .75pt solid #000; margin-bottom: 1mm; }
 }
