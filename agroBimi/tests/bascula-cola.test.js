@@ -217,6 +217,21 @@ test("bascula keeps the farmer and cycle selected after registering, with the bo
   assert.equal(ultimo.p_cajas, 5);
 });
 
+test("bascula keypad does not type until a farmer is selected", async () => {
+  const b = await cargarBascula({ rpc: conAna });
+  const tecla = (t) => b.$("teclado").dispatch("click", { target: { closest: () => ({ dataset: { tecla: t } }) } });
+  assert.equal(b.$("teclado").classList.contains("bloqueado"), true);
+  tecla("7");
+  assert.equal(b.$("cajasValor").textContent, "0");
+
+  b.$("buscar").value = "ana";
+  b.$("buscar").dispatch("input");
+  b.$("sugerencias").dispatch("click", { target: { closest: () => ({ dataset: { agri: "1" } }) } });
+  assert.equal(b.$("teclado").classList.contains("bloqueado"), false);
+  tecla("7");
+  assert.equal(b.$("cajasValor").textContent, "7");
+});
+
 test("bascula marks today's entries registered without palletizing", async () => {
   const b = await cargarBascula({
     rpc: (n) => (n === "bascula_hoy"

@@ -544,6 +544,9 @@
       b.setAttribute("aria-checked", activo ? "true" : "false");
     });
 
+    // El teclado no responde hasta que hay agricultor (ver pulsarTecla).
+    $("teclado").classList.toggle("bloqueado", !a);
+
     $("cajasValor").textContent = state.cajas || "0";
     $("vaciasValor").textContent = state.vacias || "0";
     document.querySelectorAll("#contadores [data-campo]").forEach((b) => {
@@ -1037,6 +1040,9 @@
   }
 
   function pulsarTecla(tecla) {
+    // Sin agricultor no se apunta nada: las cajas tecleadas antes podrían
+    // acabar en quien se elija después sin que nadie lo mire.
+    if (!state.elegido) return;
     const actual = state[state.campo];
     let nuevo = actual;
     if (tecla === "C") nuevo = "";

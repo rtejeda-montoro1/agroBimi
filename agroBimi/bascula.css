@@ -230,6 +230,9 @@ body.bascula:not(.authed) .bascula-main { display: none; }
 }
 .teclado button:active { background: var(--border); }
 .teclado .tecla-sec { color: var(--muted); }
+/* Sin agricultor elegido el teclado no escribe (js/bascula.js). */
+.teclado.bloqueado button { opacity: .35; cursor: not-allowed; }
+.teclado.bloqueado button:active { background: var(--bg); }
 
 .bascula-error { color: var(--danger); font-weight: 600; min-height: 1.4em; margin-bottom: 4px; }
 
