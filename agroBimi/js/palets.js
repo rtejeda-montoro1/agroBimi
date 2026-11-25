@@ -1,5 +1,5 @@
 // =====================================================================
-//  Paletización
+//  Stock en cámara (palets)
 //  ---------------------------------------------------------------------
 //  Todas las cajas que pasan por la báscula van a la cámara y, al pesar,
 //  la base de datos las reparte sola en palets de 60 (Ajustes → cajas por

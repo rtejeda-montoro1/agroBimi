@@ -782,7 +782,9 @@ end $$;
 
 -- 16) PALETIZACIÓN AUTOMÁTICA Y ALBARANES DE SALIDA
 --     Todas las cajas que pasan por la báscula van a la cámara y, al pesar,
---     se reparten solas en palets de 60 (cajas_por_palet). Las que aún no
+--     se reparten solas en palets de 60 (cajas_por_palet). Solo las de la
+--     báscula (origen = 'bascula'): lo apuntado a mano en la oficina no
+--     entra en la cámara ni en ningún palet. Las que aún no
 --     forman un palet completo están "en cámara". Los palets salen con un
 --     albarán de salida.
 
@@ -940,6 +942,7 @@ begin
 
   select * into r from registros where id = p_registro_id;
   if not found or r.fecha is null then return; end if;
+  if r.origen is distinct from 'bascula' then return; end if;
   if v_desde is not null and r.fecha < v_desde then return; end if;
 
   v_pendiente := coalesce(r.cajas_entradas, 0)
@@ -1198,9 +1201,9 @@ begin
     select coalesce(r.cajas_entradas, 0)
          - coalesce((select sum(num_cajas) from palet_lineas where registro_id = r.id), 0)
     into v_libre
-    from registros r where r.id = v_item.registro_id;
+    from registros r where r.id = v_item.registro_id and r.origen = 'bascula';
     if v_libre is null then
-      raise exception 'Entrada % no encontrada', v_item.registro_id;
+      raise exception 'Entrada % no encontrada (solo van en palets las de la báscula)', v_item.registro_id;
     end if;
 
     v_falta := v_item.n - v_libre;
@@ -1381,6 +1384,7 @@ cross join (select public.cajas_por_palet() as cap, public.paletizado_desde() as
 left join palet_lineas l on l.registro_id = r.id
 left join palets p on p.id = l.palet_id
 where coalesce(r.cajas_entradas, 0) > 0
+  and r.origen = 'bascula'
   and (c.desde is null or r.fecha >= c.desde)
 group by r.id, c.cap;
 
@@ -1415,6 +1419,7 @@ as $$
     'en_camara', (
       select coalesce((select sum(r.cajas_entradas) from registros r
                        where r.cajas_entradas > 0
+                         and r.origen = 'bascula'
                          and (c.desde is null or r.fecha >= c.desde)), 0)
            - coalesce((select sum(l.num_cajas)
                        from palet_lineas l
@@ -1422,6 +1427,7 @@ as $$
                        join registros r on r.id = l.registro_id
                        where (p.fecha_salida is not null or p.num_cajas >= c.cap)
                          and r.cajas_entradas > 0
+                         and r.origen = 'bascula'
                          and (c.desde is null or r.fecha >= c.desde)), 0)
       from (select public.cajas_por_palet() as cap, public.paletizado_desde() as desde offset 0) c),
     'palets', coalesce((

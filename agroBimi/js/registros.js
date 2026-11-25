@@ -312,8 +312,7 @@
     return etiqueta ? etiqueta.textContent.trim() : campo.id;
   }
 
-  // Un doble clic (o Enter + clic) no puede crear dos registros: cada uno
-  // metería sus cajas en la cámara y en los palets.
+  // Un doble clic (o Enter + clic) no puede crear dos registros.
   let guardandoRegistro = false;
 
   async function guardarRegistro(e) {
@@ -392,9 +391,8 @@
       return;
     }
 
-    // Sin fecha las cajas no entran en la cámara ni en ningún palet.
     if (!registro.fecha && App.num(registro.cajas_entradas) > 0) {
-      App.toast("Pon la fecha de entrada: sin ella las cajas no entran en la cámara.");
+      App.toast("Pon la fecha de entrada de las cajas.");
       return;
     }
 

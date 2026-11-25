@@ -36,7 +36,7 @@
   // Etiquetas de palet desde la báscula: desactivadas. Con
   // --kiosk-printing todo sale por la impresora predeterminada, que aquí
   // es la de tickets (80 mm), y la etiqueta (105×75 mm) no cabe. Las
-  // etiquetas se imprimen desde la oficina (Paletización). Para volver a
+  // etiquetas se imprimen desde la oficina (Stock en cámara). Para volver a
   // activarlas cuando la impresora de pegatinas esté en este equipo (con
   // QZ Tray o similar para elegir impresora), poner esto a true.
   const ETIQUETAS_EN_BASCULA = window.BASCULA_ETIQUETAS ?? false;

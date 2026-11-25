@@ -97,7 +97,7 @@
   // ------------------------------------------------------------------
   //  Nueva salida
   // ------------------------------------------------------------------
-  // idsMarcados: palets ya elegidos en Paletización. Si no viene ninguno
+  // idsMarcados: palets ya elegidos en Stock en cámara. Si no viene ninguno
   // se proponen todos los palets completos.
   async function abrirModalSalida(idsMarcados = []) {
     await App.asegurarAgricultoresTodos();

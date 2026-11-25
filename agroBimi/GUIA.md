@@ -157,13 +157,15 @@ factura).
 
 ---
 
-## 4. Paletización y salidas
+## 4. Stock en cámara y salidas
 
 **Para qué:** saber cuántas cajas hay en la cámara, formar los palets de 60
 cajas, imprimir su etiqueta y darles salida con un albarán.
 
 **Cómo funciona (no hay que hacer nada):** todas las cajas que pasan por la
-báscula van a la cámara y **se reparten solas en palets** al pesar. Ejemplo:
+báscula van a la cámara y **se reparten solas en palets** al pesar. Los
+registros que se apuntan a mano en la oficina **no** entran en la cámara ni
+en los palets: eso solo se hace desde la báscula. Ejemplo:
 el agricultor 1 trae 30 cajas y el 2 trae 40: el palet 1 se llena con 30 + 30
 y las 10 que sobran abren el palet 2.
 
@@ -175,7 +177,7 @@ y las 10 que sobran abren el palet 2.
   sus palets; si un palet completo baja de 60, vuelve a estar en progreso y
   la siguiente pesada lo rellena primero.
 
-**«🧱 Paletización»**
+**«📦 Stock en cámara»**
 
 - Arriba: cajas en cámara, palets completos sin salida y cajas listas para
   salir. «Cajas en cámara por agricultor» lo desglosa.
@@ -192,7 +194,7 @@ y las 10 que sobran abren el palet 2.
 - **+ Nuevo palet**: un palet hecho a mano con cajas que estén en cámara.
   No se crea hasta pulsar «Guardar palet»; si cancelas, no queda nada.
 
-**«🚚 Salidas»** (o marca palets en Paletización y «🚚 Dar salida»)
+**«🚚 Salidas»** (o marca palets en Stock en cámara y «🚚 Dar salida»)
 
 1. «+ Nueva salida»: fecha, **destinatario** (los anteriores se proponen al
    escribir y rellenan sus datos), lugar de entrega, matrículas (tractora y
@@ -252,7 +254,7 @@ en el diálogo de impresión elige la impresora y que se recuerde.
 
 **Etiquetas de palet:** no se imprimen en la báscula (su impresora es la de
 tickets y la etiqueta no cabe). En la vista **📦 Palets** se ve cómo va cada
-palet; la etiqueta se imprime desde la oficina, en **🧱 Paletización**.
+palet; la etiqueta se imprime desde la oficina, en **📦 Stock en cámara**.
 
 **Si se va la red:** se puede seguir apuntando (e imprimiendo) igual. Arriba
 sale un aviso naranja y las entradas aparecen en **Hoy** como
@@ -295,7 +297,7 @@ datos de los agricultores.
 | --- | --- |
 | 🌱 Plantas retiradas | Anotar y consultar las plantas de cada ciclo |
 | ⚖ Control de cajas | Descuadres de cajas vacías y lo que hay que cobrar |
-| 🧱 Paletización | Cajas en cámara, palets, etiquetas |
+| 📦 Stock en cámara | Cajas en cámara, palets, etiquetas |
 | 🚚 Salidas | Dar salida a palets y albaranes de salida |
 | 🧾 Liquidaciones | Liquidar por fechas y generar facturas |
 | ⚙ Ajustes | Emisor, precios, IVA y series de numeración |
