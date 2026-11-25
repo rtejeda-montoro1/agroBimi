@@ -456,12 +456,13 @@ body.bascula:not(.authed) .bascula-main { display: none; }
      desvaídos). Se distinguen del dato porque este va alineado a la derecha. */
   .ticket-datos dt { color: #000; }
   .ticket-datos dd { margin: 0; text-align: right; overflow-wrap: anywhere; }
-  /* Almacén receptor: letra más pequeña para que el nombre entero quepa en
-     una línea, y una raya debajo que lo separa de los datos de la entrada. */
-  /* 7pt: cabe en una línea aunque el nombre esté en mayúsculas. Si aun
-     así no cupiera, pasa a la línea de abajo (alineado a la derecha) en vez
-     de salirse del papel. */
-  .ticket-datos .ticket-receptor { font-size: 7pt; align-self: baseline; }
+  /* Almacén receptor: el título en una fila y el nombre en la siguiente, a
+     todo lo ancho, para que el nombre quepa sin bajar la letra. Con 7pt la
+     térmica casi no marcaba los trazos; 9pt es el mínimo que sale nítido.
+     Si el nombre no cabe en una línea, sigue en la de abajo (alineado a la
+     derecha) en vez de salirse del papel. Una raya debajo lo separa de los
+     datos de la entrada. */
+  .ticket-datos .ticket-receptor { grid-column: 1 / -1; font-size: 9pt; }
   .ticket-separador { grid-column: 1 / -1; border-top: .75pt solid #000; margin: .5mm 0; }
   .ticket-cajas {
     display: flex;
