@@ -1,13 +1,4 @@
 <!DOCTYPE html>
-<!--
-  Punto de entrada de la raíz.
-
-  Por ahora solo redirige al único módulo que existe: agroBimi.
-
-  A futuro, esta página será el login común + el selector de módulo:
-  el usuario entra una sola vez y elige si va a "Gestión de Bimi"
-  (agroBimi/) o a "Gestión de Pimientos" (agroPepper/).
--->
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
@@ -16,8 +7,6 @@
   <link rel="icon" type="image/png" href="agroBimi/logo_web.png" />
   <meta http-equiv="refresh" content="0; url=agroBimi/" />
   <script>
-    // replace() en lugar de href: así el botón "atrás" no vuelve aquí
-    // y se queda en un bucle de redirecciones.
     location.replace("agroBimi/");
   </script>
 </head>

@@ -9,7 +9,6 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <!-- Pantalla de inicio de sesión (visible hasta que entras) -->
   <div class="login-screen" id="loginScreen">
     <div class="login-box">
       <h1>🌱 Gestión de Bimi</h1>
@@ -43,9 +42,7 @@
   </header>
 
   <main class="container">
-    <!-- ============================================================= -->
-    <!--  VISTA 1: Lista / búsqueda de agricultores                    -->
-    <!-- ============================================================= -->
+    <!-- VISTA 1: Lista / búsqueda de agricultores -->
     <section id="vistaAgricultores">
       <div class="toolbar">
         <div class="field" style="flex:2 1 220px;">
@@ -57,8 +54,6 @@
         <button class="btn-primary" id="btnAnadirAgricultor">+ Añadir agricultor</button>
       </div>
 
-      <!-- Accesos a los informes y a la gestión que no dependen de un
-           agricultor concreto. -->
       <nav class="barra-modulos">
         <button class="btn-modulo" id="btnPlantas">🌱 Plantas retiradas</button>
         <button class="btn-modulo" id="btnControlCajas">⚖ Control de cajas</button>
@@ -75,9 +70,7 @@
       <div class="card-list" id="listaAgricultores"></div>
     </section>
 
-    <!-- ============================================================= -->
-    <!--  VISTA 2: Detalle de un agricultor y sus registros            -->
-    <!-- ============================================================= -->
+    <!-- VISTA 2: Detalle de un agricultor y sus registros -->
     <section id="vistaRegistros" hidden>
       <div class="detalle-header">
         <button class="btn-primary" id="btnVolver">← Volver</button>
@@ -89,8 +82,6 @@
         <button class="btn-modulo" id="btnLiquidarAgricultor">🧾 Liquidaciones</button>
       </div>
 
-      <!-- Rendimiento por ciclo: cajas de bimi / plantas retiradas. Cerrado
-           por defecto (ocupa mucho): se abre al pulsarlo. -->
       <details class="panel-resumen" id="panelResumenCiclos">
         <summary>📈 Rendimiento por ciclo</summary>
         <div class="ciclo-cards" id="resumenCiclos"></div>
@@ -135,7 +126,6 @@
           <button type="button" class="btn-ghost btn-sm" id="btnPaginaSiguienteRegistros">Siguiente ›</button>
         </div>
         <div class="summary-acciones">
-          <!-- Con filtros puestos, Export pregunta qué exportar. -->
           <div class="menu-export-wrap">
             <button class="btn-primary" id="btnExport" aria-haspopup="menu">⬇ Export</button>
             <div class="menu-export" id="menuExportReg" role="menu" hidden>
@@ -177,9 +167,7 @@
     </section>
   </main>
 
-  <!-- ============================================================= -->
-  <!--  Modal: Añadir agricultor                                     -->
-  <!-- ============================================================= -->
+  <!-- Modal: Añadir agricultor -->
   <div class="modal-backdrop" id="modalAgricultor">
     <div class="modal modal-ancho">
       <button type="button" class="modal-x" data-cerrar="modalAgricultor" aria-label="Cerrar" title="Cerrar">&times;</button>
@@ -197,8 +185,6 @@
           </div>
         </div>
 
-        <!-- Datos fiscales: opcionales, pero necesarios para poder emitir
-             facturas completas. -->
         <details class="bloque-plegable">
           <summary>Datos fiscales (para las facturas)</summary>
           <div class="grid-campos">
@@ -241,9 +227,7 @@
     </div>
   </div>
 
-  <!-- ============================================================= -->
-  <!--  Modal: Ver datos de un agricultor (solo lectura)             -->
-  <!-- ============================================================= -->
+  <!-- Modal: Ver datos de un agricultor (solo lectura) -->
   <div class="modal-backdrop" id="modalVerAgricultor">
     <div class="modal modal-ancho">
       <button type="button" class="modal-x" data-cerrar="modalVerAgricultor" aria-label="Cerrar" title="Cerrar">&times;</button>
@@ -263,9 +247,7 @@
     </div>
   </div>
 
-  <!-- ============================================================= -->
-  <!--  Modal: Añadir / Editar registro                              -->
-  <!-- ============================================================= -->
+  <!-- Modal: Añadir / Editar registro -->
   <div class="modal-backdrop" id="modalRegistro">
     <div class="modal modal-ancho">
       <button type="button" class="modal-x" data-cerrar="modalRegistro" aria-label="Cerrar" title="Cerrar">&times;</button>
@@ -283,7 +265,6 @@
           </div>
           <div class="field">
             <label for="ciclo">Ciclo</label>
-            <!-- Solo se admiten los ciclos 1, 2 y 3 -->
             <select id="ciclo">
               <option value="1">Ciclo 1</option>
               <option value="2">Ciclo 2</option>
@@ -335,9 +316,7 @@
     </div>
   </div>
 
-  <!-- ============================================================= -->
-  <!--  Modal: Plantas retiradas (listado)                           -->
-  <!-- ============================================================= -->
+  <!-- Modal: Plantas retiradas (listado) -->
   <div class="modal-backdrop" id="modalPlantas">
     <div class="modal modal-xl">
       <button type="button" class="modal-x" data-cerrar="modalPlantas" aria-label="Cerrar" title="Cerrar">&times;</button>
@@ -407,9 +386,7 @@
     </div>
   </div>
 
-  <!-- ============================================================= -->
-  <!--  Modal: Alta / edición de una retirada de plantas             -->
-  <!-- ============================================================= -->
+  <!-- Modal: Alta / edición de una retirada de plantas -->
   <div class="modal-backdrop modal-nivel2" id="modalPlanta">
     <div class="modal">
       <button type="button" class="modal-x" data-cerrar="modalPlanta" aria-label="Cerrar" title="Cerrar">&times;</button>
@@ -458,9 +435,7 @@
     </div>
   </div>
 
-  <!-- ============================================================= -->
-  <!--  Modal: Control de cajas vacías (descuadres)                  -->
-  <!-- ============================================================= -->
+  <!-- Modal: Control de cajas vacías (descuadres) -->
   <div class="modal-backdrop" id="modalCajas">
     <div class="modal modal-xl">
       <button type="button" class="modal-x" data-cerrar="modalCajas" aria-label="Cerrar" title="Cerrar">&times;</button>
@@ -537,9 +512,7 @@
     </div>
   </div>
 
-  <!-- ============================================================= -->
-  <!--  Modal: Liquidaciones (listado)                               -->
-  <!-- ============================================================= -->
+  <!-- Modal: Liquidaciones (listado) -->
   <div class="modal-backdrop" id="modalLiquidaciones">
     <div class="modal modal-xl">
       <button type="button" class="modal-x" data-cerrar="modalLiquidaciones" aria-label="Cerrar" title="Cerrar">&times;</button>
@@ -633,9 +606,7 @@
     </div>
   </div>
 
-  <!-- ============================================================= -->
-  <!--  Modal: Nueva / editar liquidación                            -->
-  <!-- ============================================================= -->
+  <!-- Modal: Nueva / editar liquidación -->
   <div class="modal-backdrop modal-nivel2" id="modalLiquidacion">
     <div class="modal modal-ancho">
       <button type="button" class="modal-x" data-cerrar="modalLiquidacion" aria-label="Cerrar" title="Cerrar">&times;</button>
@@ -745,11 +716,7 @@
     </div>
   </div>
 
-  <!-- ============================================================= -->
-  <!--  Modal: Facturar una liquidación                              -->
-  <!--  Recibo de compensación propio (nº automático) o factura que   -->
-  <!--  trae el agricultor (su nº y su fecha, escritos a mano).       -->
-  <!-- ============================================================= -->
+  <!-- Modal: Facturar una liquidación -->
   <div class="modal-backdrop modal-nivel2" id="modalFacturar">
     <div class="modal">
       <button type="button" class="modal-x" data-cerrar="modalFacturar" aria-label="Cerrar" title="Cerrar">&times;</button>
@@ -793,9 +760,7 @@
     </div>
   </div>
 
-  <!-- ============================================================= -->
-  <!--  Modal: Liquidación / factura (documento)                     -->
-  <!-- ============================================================= -->
+  <!-- Modal: Liquidación / factura (documento) -->
   <div class="modal-backdrop modal-nivel2" id="modalFactura">
     <div class="modal modal-ancho">
       <button type="button" class="modal-x" data-cerrar="modalFactura" aria-label="Cerrar" title="Cerrar">&times;</button>
@@ -857,9 +822,7 @@
     </div>
   </div>
 
-  <!-- ============================================================= -->
-  <!--  Modal: Paletización                                          -->
-  <!-- ============================================================= -->
+  <!-- Modal: Paletización -->
   <div class="modal-backdrop" id="modalPalets">
     <div class="modal modal-xl">
       <button type="button" class="modal-x" data-cerrar="modalPalets" aria-label="Cerrar" title="Cerrar">&times;</button>
@@ -959,8 +922,6 @@
         </table>
       </div>
 
-      <!-- La misma paginación debajo de la tabla: al bajar buscando un palet
-           no hay que volver arriba para pasar de página. -->
       <div class="paginacion paginacion-abajo" id="paginacionPaletsAbajo" hidden>
         <button type="button" class="btn-ghost btn-sm" id="btnPaginaAnteriorPaletsAbajo">‹ Anterior</button>
         <span class="paginacion-texto" id="paginaPaletsAbajo"></span>
@@ -973,9 +934,7 @@
     </div>
   </div>
 
-  <!-- ============================================================= -->
-  <!--  Modal: Editar un palet                                       -->
-  <!-- ============================================================= -->
+  <!-- Modal: Editar un palet -->
   <div class="modal-backdrop modal-nivel2" id="modalPalet">
     <div class="modal modal-ancho">
       <button type="button" class="modal-x" data-cerrar="modalPalet" aria-label="Cerrar" title="Cerrar">&times;</button>
@@ -1022,9 +981,7 @@
     </div>
   </div>
 
-  <!-- ============================================================= -->
-  <!--  Modal: Salidas (albaranes)                                   -->
-  <!-- ============================================================= -->
+  <!-- Modal: Salidas (albaranes) -->
   <div class="modal-backdrop" id="modalSalidas">
     <div class="modal modal-xl">
       <button type="button" class="modal-x" data-cerrar="modalSalidas" aria-label="Cerrar" title="Cerrar">&times;</button>
@@ -1095,9 +1052,7 @@
     </div>
   </div>
 
-  <!-- ============================================================= -->
-  <!--  Modal: Nueva salida                                          -->
-  <!-- ============================================================= -->
+  <!-- Modal: Nueva salida -->
   <div class="modal-backdrop modal-nivel2" id="modalSalida">
     <div class="modal modal-ancho">
       <button type="button" class="modal-x" data-cerrar="modalSalida" aria-label="Cerrar" title="Cerrar">&times;</button>
@@ -1207,9 +1162,7 @@
     </div>
   </div>
 
-  <!-- ============================================================= -->
-  <!--  Modal: Ajustes                                               -->
-  <!-- ============================================================= -->
+  <!-- Modal: Ajustes -->
   <div class="modal-backdrop" id="modalAjustes">
     <div class="modal modal-ancho">
       <button type="button" class="modal-x" data-cerrar="modalAjustes" aria-label="Cerrar" title="Cerrar">&times;</button>
@@ -1361,9 +1314,7 @@
     </div>
   </div>
 
-  <!-- ============================================================= -->
-  <!--  Modal: Añadir campaña                                        -->
-  <!-- ============================================================= -->
+  <!-- Modal: Añadir campaña -->
   <div class="modal-backdrop" id="modalCampana">
     <div class="modal">
       <button type="button" class="modal-x" data-cerrar="modalCampana" aria-label="Cerrar" title="Cerrar">&times;</button>
@@ -1385,9 +1336,7 @@
     </div>
   </div>
 
-  <!-- ============================================================= -->
-  <!--  Modal: Buscar campaña (datos de todos los agricultores)      -->
-  <!-- ============================================================= -->
+  <!-- Modal: Buscar campaña (datos de todos los agricultores) -->
   <div class="modal-backdrop" id="modalBuscarCampana">
     <div class="modal modal-ancho">
       <button type="button" class="modal-x" data-cerrar="modalBuscarCampana" aria-label="Cerrar" title="Cerrar">&times;</button>
@@ -1415,7 +1364,6 @@
           <button type="button" class="btn-ghost btn-sm" id="btnPaginaSiguienteCampana">Siguiente ›</button>
         </div>
         <div class="summary-acciones">
-          <!-- Con varias páginas, Export pregunta qué exportar. -->
           <div class="menu-export-wrap">
             <button type="button" class="btn-primary" id="btnExportCampana" disabled aria-haspopup="menu">⬇ Export</button>
             <div class="menu-export" id="menuExportCampana" role="menu" hidden>
@@ -1459,19 +1407,12 @@
     </div>
   </footer>
 
-  <!-- Popover con el detalle de cajas (entradas/salidas/descuento) -->
   <div class="cajas-popover" id="cajasPopover" role="dialog" aria-label="Detalle de cajas"></div>
 
   <div class="toast" id="toast"></div>
 
-  <!-- Contenedor de impresión: solo se ve al imprimir. Aquí se vuelcan las
-       facturas, y desde el diálogo del navegador se
-       pueden guardar como PDF. -->
   <div id="zonaImpresion" aria-hidden="true"></div>
 
-  <!-- Cliente de Supabase y librería para exportar a Excel (con estilos) -->
-  <!-- Versión fija: una 2.x nueva no cambia el comportamiento sin avisar.
-       Para actualizar, cambiar la versión y recalcular el integrity. -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js"
           integrity="sha384-TcHRA3zBbn+Lexh5n+Oil4guNPOS3rjNDpGRAN46u/s/mB2IZ50ceC6TYDU2yvgK"
           crossorigin="anonymous"></script>
