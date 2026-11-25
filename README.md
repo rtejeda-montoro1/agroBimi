@@ -294,13 +294,19 @@ la cuenta de la oficina o de la bascula a proposito
 antes, en el editor SQL de Supabase:
 `delete from login_bloqueos where email = 'el-email@...';`
 
-Etiquetas de palet en la bascula: DESACTIVADAS (`ETIQUETAS_EN_BASCULA` en
-`js/bascula.js`). El puesto imprime con Chrome `--kiosk-printing`, que lo
-manda todo a la impresora predeterminada (la de tickets, 80 mm), y la
-etiqueta de 105 x 75 mm no cabe: se imprimen desde la oficina. Con el
-interruptor a true (cuando la impresora de pegatinas este en ese equipo,
-con QZ Tray o similar para elegir impresora), las tarjetas de palets vuelven a
-tener "Imprimir etiqueta" y, cuando una pesada enviada desde la tablet
+Etiquetas de palet en la bascula: por QZ Tray (`js/qz-etiquetas.js`). El
+justificante sale con Chrome `--kiosk-printing` por la impresora
+predeterminada (la de tickets, RP-12N); la etiqueta va por QZ Tray a la
+impresora cuyo nombre contiene "BV400" (Toshiba TEC BV420T), al tamano de
+Ajustes. QZ solo imprime sin preguntar si la peticion va firmada: el
+certificado publico esta en `js/qz-etiquetas.js` y, como `override.crt`, en
+`C:\Program Files\QZ Tray\` de la tablet; la clave privada esta en el
+secreto `QZ_CLAVE_PRIVADA` de Supabase y firma la Edge Function `qz-firmar`
+(`supabase/functions/qz-firmar/index.ts`, Verify JWT activado, solo para
+`es_bascula()`). Copia local de la clave en `agroBimi/privado/qz/` (no se
+sube). Interruptor: `ETIQUETAS_EN_BASCULA` en `js/bascula.js` (a false, las
+etiquetas solo se imprimen desde la oficina). Las tarjetas de palets tienen
+"Imprimir etiqueta" y, cuando una pesada enviada desde la tablet
 completa un palet, la tablet abre sola la impresion de su etiqueta (detras
 del justificante, si se pidio). Para eso recuerda los palets completos que
 ya conoce (`bascula_palets_completos` en localStorage); al entrar solo los

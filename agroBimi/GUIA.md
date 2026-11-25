@@ -286,9 +286,12 @@ cada entrada. Arriba hay cuatro recuadros con el estado de la cámara: palets
 completos, cajas listas para salir, cajas en cámara y cajas **sin palet**
 (en rojo si hay alguna).
 
-**Etiquetas de palet:** no se imprimen en la báscula (su impresora es la de
-tickets y la etiqueta no cabe): se imprimen desde la oficina, en
-**📦 Stock en cámara**.
+**Etiquetas de palet:** cuando una pesada completa un palet, su etiqueta
+sale sola en la impresora de pegatinas (después del justificante, si se
+pidió). También se puede imprimir con **🏷 Imprimir etiqueta** en la tarjeta
+del palet. Para eso tiene que estar abierto **QZ Tray** (el icono junto al
+reloj): si no lo está, sale un aviso; ábrelo y vuelve a imprimirla con el
+botón. Desde la oficina se siguen pudiendo imprimir en **📦 Stock en cámara**.
 
 **Si se va la red:** se puede seguir apuntando (e imprimiendo) igual. Arriba
 sale un aviso naranja y las entradas aparecen en **Hoy** como

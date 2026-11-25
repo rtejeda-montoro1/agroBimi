@@ -36,13 +36,12 @@
   // Palets completos que la tablet ya conoce: los que no estén aquí se
   // acaban de completar y se imprime su etiqueta sola.
   const KEY_ETIQUETAS = "bascula_palets_completos";
-  // Etiquetas de palet desde la báscula: desactivadas. Con
-  // --kiosk-printing todo sale por la impresora predeterminada, que aquí
-  // es la de tickets (80 mm), y la etiqueta (105×75 mm) no cabe. Las
-  // etiquetas se imprimen desde la oficina (Stock en cámara). Para volver a
-  // activarlas cuando la impresora de pegatinas esté en este equipo (con
-  // QZ Tray o similar para elegir impresora), poner esto a true.
-  const ETIQUETAS_EN_BASCULA = window.BASCULA_ETIQUETAS ?? false;
+  // Etiquetas de palet desde la báscula. El justificante sale con
+  // --kiosk-printing por la predeterminada (la de tickets); las etiquetas
+  // van por QZ Tray a la impresora de pegatinas (js/qz-etiquetas.js).
+  // Para desactivarlas (p. ej. si la tablet se queda sin QZ Tray), poner
+  // esto a false: se siguen imprimiendo desde la oficina (Stock en cámara).
+  const ETIQUETAS_EN_BASCULA = window.BASCULA_ETIQUETAS ?? true;
   const MAX_CAJAS = 5000;
   // Si se apunta lo mismo al mismo agricultor en este margen, se pregunta
   // antes: casi siempre es un doble toque.
@@ -739,12 +738,23 @@
       .then((trabajo) => (trabajo ? imprimirAhora(trabajo) : undefined))
       .catch((error) => {
         console.error(`Error al imprimir ${descripcion}`, error);
-        toast(`No se pudo imprimir ${descripcion}. Vuelve a intentarlo.`);
+        toast(error?.aviso
+          ? `No se pudo imprimir ${descripcion}: ${error.aviso}`
+          : `No se pudo imprimir ${descripcion}. Vuelve a intentarlo.`);
       });
     return colaImpresion;
   }
 
-  function imprimirAhora({ html, titulo }) {
+  function imprimirAhora({ html, titulo, etiqueta }) {
+    // Las etiquetas no pasan por el navegador: van por QZ Tray a la
+    // impresora de pegatinas.
+    if (etiqueta) {
+      if (!window.QZEtiquetas) {
+        return Promise.reject(Object.assign(new Error("Falta js/qz-etiquetas.js"),
+          { aviso: "No se pudo cargar QZ Tray en la página. Recarga la báscula." }));
+      }
+      return window.QZEtiquetas.imprimir(etiqueta, db);
+    }
     return new Promise((resolve) => {
       $("zonaImpresion").innerHTML = html;
       // Al "Guardar como PDF" el navegador propone el título de la página
@@ -948,11 +958,10 @@
   }
 
   function etiquetaParaImprimir(p, datos) {
-    const ancho = datos?.etiqueta_ancho_mm || 105;
-    const alto = datos?.etiqueta_alto_mm || 75;
-    // Este @page va después de bascula.css: manda sobre el del justificante.
+    const ancho = Number(datos?.etiqueta_ancho_mm) || 105;
+    const alto = Number(datos?.etiqueta_alto_mm) || 75;
     return {
-      html: `<style>@page { size: ${ancho}mm ${alto}mm; margin: 4mm; }</style>${etiquetaHTML(p)}`,
+      etiqueta: { html: etiquetaHTML(p), ancho, alto },
       titulo: `Etiqueta ${p.codigo || "palet"}`,
     };
   }

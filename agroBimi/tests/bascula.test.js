@@ -2,7 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const { createElement, loadModule, flush } = require("./helpers");
 
-async function loadBasculaWithLabelError(labelError, rejectLabelQuery = false, rpcOverrides = {}, { etiquetas = true, rpcCalls = [] } = {}) {
+async function loadBasculaWithLabelError(labelError, rejectLabelQuery = false, rpcOverrides = {}, { etiquetas = true, rpcCalls = [], windowExtra = {} } = {}) {
   const elements = new Map();
   const getElement = (id) => {
     if (!elements.has(id)) elements.set(id, createElement());
@@ -18,6 +18,7 @@ async function loadBasculaWithLabelError(labelError, rejectLabelQuery = false, r
     },
     print() {},
     BASCULA_ETIQUETAS: etiquetas,
+    ...windowExtra,
   };
   const document = {
     title: "Báscula",
@@ -64,7 +65,7 @@ async function loadBasculaWithLabelError(labelError, rejectLabelQuery = false, r
   });
   await flush();
   await flush();
-  return { elements, logs, windowListeners };
+  return { elements, logs, windowListeners, db };
 }
 
 test("bascula reports a print error and continues with the next queued job", async () => {
@@ -276,4 +277,47 @@ test("bascula shows the pallets on the same screen without a separate view, and 
 
   const con = await tarjetasDePalets(false, { sin_palet: 14 });
   assert.match(con.resumen, /"palets-dato dato-sin-palet"[\s\S]*<b>14<\/b><span>sin palet/);
+});
+
+// Etiqueta por QZ Tray: la pide el botón del palet y no pasa por
+// window.print (que va a la impresora de tickets).
+async function etiquetaPorQZ(qzImprimir) {
+  const pedidas = [];
+  let prints = 0;
+  const palets = {
+    cajas_por_palet: 60, en_camara: 0, etiqueta_ancho_mm: "105", etiqueta_alto_mm: "75",
+    palets: [{ id: 9, codigo: "P-9", secuencia: 9, num_cajas: 60, fecha_completo: "2026-11-25",
+      lineas: [{ nombre: "Ana <b>", cajas: 60 }] }],
+  };
+  const { elements, db } = await loadBasculaWithLabelError(null, false, {
+    bascula_palets: async () => ({ data: palets, error: null }),
+  }, {
+    windowExtra: {
+      print() { prints++; },
+      QZEtiquetas: { imprimir: async (trabajo, cliente) => { pedidas.push({ trabajo, cliente }); return qzImprimir(); } },
+    },
+  });
+  await flush();
+  elements.get("listaPalets").dispatch("click", { target: { closest: () => ({ dataset: { etiqueta: "9" } }) } });
+  for (let i = 0; i < 6; i++) await flush();
+  return { pedidas, prints, toast: elements.get("toast")?.textContent || "", db };
+}
+
+test("bascula prints the pallet label through QZ Tray at the label size, not with window.print", async () => {
+  const { pedidas, prints, db } = await etiquetaPorQZ(async () => {});
+  assert.equal(pedidas.length, 1);
+  assert.equal(prints, 0);
+  assert.equal(pedidas[0].trabajo.ancho, 105);
+  assert.equal(pedidas[0].trabajo.alto, 75);
+  assert.match(pedidas[0].trabajo.html, /P-9/);
+  assert.match(pedidas[0].trabajo.html, /Ana &lt;b&gt;/);
+  // Firma con la sesión de la báscula.
+  assert.equal(pedidas[0].cliente, db);
+});
+
+test("bascula tells the operator why QZ Tray could not print the label", async () => {
+  const { toast } = await etiquetaPorQZ(async () => {
+    throw Object.assign(new Error("ws"), { aviso: "QZ Tray no está abierto en la tablet." });
+  });
+  assert.match(toast, /No se pudo imprimir la etiqueta del palet P-9: QZ Tray no está abierto/);
 });
