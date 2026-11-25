@@ -77,7 +77,8 @@
       if (!App.num(r.cajas_entradas) && !r.fecha) return;
       const g = dame(r.agricultor_id, r.campana_id, r.ciclo);
       g.cajas += App.num(r.cajas_entradas);
-      g.descuento += App.num(r.descuento_cajas);
+      // El descuento va en kg: se pasa a cajas para las cajas netas.
+      g.descuento += App.num(r.descuento_kg) / (App.paramNum("kg_por_caja") || 8);
       g.numRegistros += 1;
       g.primeraEntrada = minFecha(g.primeraEntrada, r.fecha);
       g.ultimaEntrada = maxFecha(g.ultimaEntrada, r.fecha);

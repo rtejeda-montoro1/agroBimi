@@ -24,9 +24,9 @@ repositorio (es público): se rellenan en Ajustes o con el fichero privado
 1. **Emisor de los recibos:** nombre, CIF, dirección y registro de
    establecimiento. Quien lo instala los deja rellenos; solo hay que
    tocarlos si cambian.
-2. **Precios por defecto:** precio por caja de bimi y precio de la caja vacía
-   perdida. Son los que propone cada liquidación (se pueden cambiar en cada
-   una).
+2. **Precios por defecto:** precio por kg de bimi, **kg por caja** (8) y
+   precio de la caja vacía perdida. Son los que propone cada liquidación (se
+   pueden cambiar en cada una).
 3. **IVA / compensación (%)** (12 %) y **retención IRPF (%)** (2 %). La
    retención se calcula sobre base + IVA, como en el recibo en papel.
 4. **Series de numeración:** las iniciales de cada documento (LIQ, F).
@@ -94,8 +94,8 @@ No hay que cobrarlas a mano: al hacer la liquidación se descuentan solas.
 Una liquidación coge los registros de **un** agricultor entre dos fechas que
 todavía no se le han pagado, y calcula:
 
-    + cajas de bimi entradas       × precio por caja
-    − descuento de cajas           × precio por caja
+    + kg de bimi (cajas × 8 kg)    × precio por kg
+    − descuento en kg              × precio por kg
     − cajas vacías no devueltas    × precio de caja perdida
     ± concepto libre
     = base  →  + IVA / compensación  →  total
@@ -106,7 +106,8 @@ todavía no se le han pagado, y calcula:
 2. Campaña, si quieres limitarla a una sola.
 3. Revisa los precios y el IVA: vienen de Ajustes, pero aquí valen solo para
    esta liquidación.
-4. Decide si descuentas las cajas no devueltas y las cajas con descuento.
+4. Decide si descuentas las cajas no devueltas y los kg de descuento (el
+   campo «Descuento (kg)» de cada registro).
    Las cajas vacías no devueltas vienen **sin marcar**: se suelen descontar
    en la liquidación de final de campaña.
 5. Si hay que añadir algo (anticipo, portes...), rellena el
@@ -205,7 +206,7 @@ y las 10 que sobran abren el palet 2.
 3. «Dar salida e imprimir CMR y albarán»: salen la **carta de porte (CMR)**,
    en tres ejemplares (remitente, destinatario y porteador), y el **albarán
    de salida** numerado (ALB-0001...) con cada palet, sus agricultores, las
-   cajas y la fecha de entrada.
+   cajas, los kg (cajas × kg por caja de Ajustes) y la fecha de entrada.
 4. La fecha de salida se apunta sola como **Fecha (CMR)** en las pesadas que
    van en esos palets.
 

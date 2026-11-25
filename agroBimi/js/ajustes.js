@@ -9,7 +9,7 @@
 
 (function initAjustesModule(App) {
   // Cada clave de "parametros" se edita en el input con el mismo id
-  // prefijado por "aj_" (ej. precio_caja -> #aj_precio_caja).
+  // prefijado por "aj_" (ej. precio_kg -> #aj_precio_kg).
   const PREFIJO = "aj_";
 
   async function cargarParametros() {

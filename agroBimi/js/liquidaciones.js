@@ -4,8 +4,8 @@
 //  Una liquidación agrupa los registros de UN agricultor dentro de un
 //  rango de fechas, les pone precio y calcula el total a pagarle:
 //
-//      + cajas de bimi entradas        × precio por caja
-//      − descuento de cajas            × precio por caja
+//      + kg de bimi (cajas × kg por caja) × precio por kg
+//      − descuento en kg               × precio por kg
 //      − cajas vacías no devueltas     × precio de caja perdida
 //      ± concepto libre
 //      = base  →  + IVA / compensación  →  − retención IRPF  →  total
@@ -176,7 +176,8 @@
       App.ponerCampana(App.$("liqCampana"), liquidacion.campana_id);
       App.$("liqDesde").value = liquidacion.fecha_desde ?? "";
       App.$("liqHasta").value = liquidacion.fecha_hasta ?? "";
-      App.$("liqPrecioCaja").value = liquidacion.precio_caja ?? "";
+      App.$("liqPrecioKg").value = liquidacion.precio_kg ?? "";
+      App.$("liqKgPorCaja").value = liquidacion.kg_por_caja ?? App.param("kg_por_caja");
       App.$("liqPrecioCajaPerdida").value = liquidacion.precio_caja_perdida ?? "";
       App.$("liqIva").value = liquidacion.iva_porcentaje ?? "";
       App.$("liqRetencion").value = liquidacion.retencion_porcentaje ?? "";
@@ -208,7 +209,8 @@
       App.$("liqHasta").value = prefijos.hasta || App.hoyISO();
       // Precios e IVA por defecto vienen de Ajustes; se pueden cambiar aquí
       // solo para esta liquidación.
-      App.$("liqPrecioCaja").value = App.param("precio_caja");
+      App.$("liqPrecioKg").value = App.param("precio_kg");
+      App.$("liqKgPorCaja").value = App.param("kg_por_caja");
       App.$("liqPrecioCajaPerdida").value = App.param("precio_caja_perdida");
       App.$("liqIva").value = App.param("iva_porcentaje");
       App.$("liqRetencion").value = App.param("retencion_porcentaje");
@@ -226,7 +228,8 @@
     if (!App.dom.modalLiquidacion.classList.contains("open") || App.$("liqId").value) return;
 
     let cambiado = false;
-    [["liqPrecioCaja", "precio_caja"],
+    [["liqPrecioKg", "precio_kg"],
+     ["liqKgPorCaja", "kg_por_caja"],
      ["liqPrecioCajaPerdida", "precio_caja_perdida"],
      ["liqIva", "iva_porcentaje"],
      ["liqRetencion", "retencion_porcentaje"]].forEach(([id, clave]) => {
@@ -294,13 +297,20 @@
       return null;
     }
 
+    const kgPorCaja = App.num(App.$("liqKgPorCaja").value);
+    if (!(kgPorCaja > 0)) {
+      App.toast("Indica los kg por caja.");
+      return null;
+    }
+
     return {
       id: App.$("liqId").value || null,
       agricultorId: parseInt(agricultorId, 10),
       campanaId: parseInt(campana, 10),
       desde,
       hasta,
-      precioCaja: App.num(App.$("liqPrecioCaja").value),
+      precioKg: App.num(App.$("liqPrecioKg").value),
+      kgPorCaja,
       precioCajaPerdida: App.num(App.$("liqPrecioCajaPerdida").value),
       iva: App.num(App.$("liqIva").value),
       retencion: App.num(App.$("liqRetencion").value),
@@ -318,7 +328,7 @@
   async function registrosDelPeriodo(datos) {
     const data = await App.consultar(App.traerTodo(() => {
       const q = App.db.from("registros")
-        .select("id,fecha,cajas_entradas,descuento_cajas,liquidacion_id,campana_id")
+        .select("id,fecha,cajas_entradas,descuento_kg,liquidacion_id,campana_id")
         .eq("agricultor_id", datos.agricultorId)
         .gte("fecha", datos.desde)
         .lte("fecha", datos.hasta)
@@ -336,25 +346,29 @@
   // App.saldoCajasAgricultor, o null si no se cobran las cajas vacías.
   function calcularLiquidacion(datos, registros, saldoCajas) {
     const cajas = registros.reduce((s, r) => s + App.num(r.cajas_entradas), 0);
-    const descuento = registros.reduce((s, r) => s + App.num(r.descuento_cajas), 0);
+    // Se paga por kg: cada caja cuenta como kgPorCaja kg. El servidor
+    // comprueba lo mismo al guardar (liquidacion_guardar).
+    const kg = App.redondear(cajas * datos.kgPorCaja);
+    const descuento = registros.reduce((s, r) => s + App.num(r.descuento_kg), 0);
     const lineas = [];
 
     lineas.push({
       tipo: "bimi",
-      concepto: `Cajas de bimi (${App.formatearFecha(datos.desde)} — ${App.formatearFecha(datos.hasta)})`,
-      cantidad: cajas,
-      precio: datos.precioCaja,
-      importe: App.redondear(cajas * datos.precioCaja),
+      concepto: `Kg de bimi: ${App.fmtNum(cajas)} cajas × ${App.fmtCantidad(datos.kgPorCaja)} kg `
+        + `(${App.formatearFecha(datos.desde)} — ${App.formatearFecha(datos.hasta)})`,
+      cantidad: kg,
+      precio: datos.precioKg,
+      importe: App.redondear(kg * datos.precioKg),
       orden: 1,
     });
 
     if (datos.incluirDescuento && descuento > 0) {
       lineas.push({
         tipo: "descuento",
-        concepto: "Descuento de cajas",
+        concepto: "Descuento (kg)",
         cantidad: descuento,
-        precio: datos.precioCaja,
-        importe: App.redondear(-descuento * datos.precioCaja),
+        precio: datos.precioKg,
+        importe: App.redondear(-descuento * datos.precioKg),
         orden: 2,
       });
     }
@@ -386,7 +400,7 @@
     const retencionImporte = App.redondear((base + ivaImporte) * datos.retencion / 100);
     const total = App.redondear(base + ivaImporte - retencionImporte);
 
-    return { lineas, base, ivaImporte, retencionImporte, total, cajas };
+    return { lineas, base, ivaImporte, retencionImporte, total, cajas, kg };
   }
 
   // Sube con cada cálculo y con cada cambio del formulario: un cálculo que
@@ -432,10 +446,10 @@
       ...calculo,
     };
 
-    pintarCalculo(registros.length, calculo.cajas);
+    pintarCalculo(registros.length, calculo.cajas, calculo.kg);
   }
 
-  function pintarCalculo(numRegistros, cajas) {
+  function pintarCalculo(numRegistros, cajas, kg) {
     const previa = App.state.liquidacionPrevia;
 
     App.$("cuerpoLiqLineas").innerHTML = previa.lineas.map((l) => `
@@ -448,7 +462,7 @@
 
     App.$("liqResumenRegistros").textContent = numRegistros === 0
       ? "Ningún registro sin liquidar en este periodo"
-      : `${numRegistros} registro/s · ${App.fmtNum(cajas)} cajas`;
+      : `${numRegistros} registro/s · ${App.fmtNum(cajas)} cajas · ${App.fmtCantidad(kg)} kg`;
 
     App.$("liqBase").textContent = App.fmtEuro(previa.base);
     App.$("liqIvaEtiqueta").textContent =
@@ -499,7 +513,10 @@
       fecha: App.hoyISO(),
       fecha_desde: datos.desde,
       fecha_hasta: datos.hasta,
-      precio_caja: datos.precioCaja,
+      // precio_caja es de las liquidaciones de antes de pagar por kg.
+      precio_caja: null,
+      precio_kg: datos.precioKg,
+      kg_por_caja: datos.kgPorCaja,
       precio_caja_perdida: datos.precioCajaPerdida,
       iva_porcentaje: datos.iva,
       base: previa.base,
@@ -787,8 +804,13 @@
         "Campaña": l.campana_id ? App.campanaNombre(l.campana_id) : "",
         "Desde": l.fecha_desde || "",
         "Hasta": l.fecha_hasta || "",
-        "Nº Cajas": App.num(linea("bimi")?.cantidad),
-        "Precio caja": App.num(l.precio_caja),
+        // Las de antes de pagar por kg (sin kg_por_caja) llevan cajas en la línea.
+        "Nº Cajas": l.kg_por_caja
+          ? App.redondear(App.num(linea("bimi")?.cantidad) / App.num(l.kg_por_caja))
+          : App.num(linea("bimi")?.cantidad),
+        "Kg": l.kg_por_caja ? App.num(linea("bimi")?.cantidad) : "",
+        "Precio kg": l.precio_kg == null ? "" : App.num(l.precio_kg),
+        "Precio caja": l.precio_caja == null ? "" : App.num(l.precio_caja),
         "Cajas perdidas": App.num(linea("cajas_perdidas")?.cantidad),
         "Base": App.num(l.base),
         "IVA %": App.num(l.iva_porcentaje),
@@ -837,15 +859,22 @@
     paginador().conectar();
 
     // Cambiar cualquier dato del cálculo invalida el resultado anterior:
-    // hay que volver a pulsar «Calcular».
-    ["liqAgricultor", "liqCampana", "liqDesde", "liqHasta", "liqPrecioCaja",
+    // hay que volver a pulsar «Calcular». Se invalida al escribir («input»)
+    // y no solo con «change»: «change» salta al perder el foco, justo al
+    // pulsar «Calcular», y al vaciar la tabla el botón se movía bajo el
+    // ratón y el clic se perdía (había que pulsar dos veces).
+    const invalidarCalculo = () => {
+      calculoActual++;
+      if (!App.state.liquidacionPrevia) return;
+      App.state.liquidacionPrevia = null;
+      limpiarCalculo();
+    };
+    ["liqAgricultor", "liqCampana", "liqDesde", "liqHasta", "liqPrecioKg", "liqKgPorCaja",
      "liqPrecioCajaPerdida", "liqIva", "liqRetencion", "liqIncluirCajas", "liqIncluirDescuento",
-     "liqOtroConcepto", "liqOtraCantidad", "liqOtroPrecio"].forEach((id) =>
-      App.$(id).addEventListener("change", () => {
-        calculoActual++;
-        App.state.liquidacionPrevia = null;
-        limpiarCalculo();
-      }));
+     "liqOtroConcepto", "liqOtraCantidad", "liqOtroPrecio"].forEach((id) => {
+      App.$(id).addEventListener("input", invalidarCalculo);
+      App.$(id).addEventListener("change", invalidarCalculo);
+    });
   }
 
   Object.assign(App, {

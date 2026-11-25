@@ -2,7 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const { createElement, loadModule, fakeQuery } = require("./helpers");
 
-function createAjustesHarness(responses, defaults = { precio_caja: "0", emisor_nombre: "" }) {
+function createAjustesHarness(responses, defaults = { precio_kg: "0", emisor_nombre: "" }) {
   const calls = [];
   const elements = new Map();
   const app = {
@@ -29,11 +29,11 @@ function createAjustesHarness(responses, defaults = { precio_caja: "0", emisor_n
 
 test("ajustes merge saved values with defaults and use defaults for blanks", async () => {
   const { app, module } = createAjustesHarness([{
-    data: [{ clave: "precio_caja", valor: "1.25" }, { clave: "emisor_nombre", valor: "" }],
+    data: [{ clave: "precio_kg", valor: "1.25" }, { clave: "emisor_nombre", valor: "" }],
     error: null,
-  }], { precio_caja: "0", emisor_nombre: "", iva_porcentaje: "12" });
+  }], { precio_kg: "0", emisor_nombre: "", iva_porcentaje: "12" });
   assert.equal(await module.cargarParametros(), true);
-  assert.equal(module.param("precio_caja"), "1.25");
+  assert.equal(module.param("precio_kg"), "1.25");
   assert.equal(module.param("emisor_nombre"), "");
   assert.equal(module.param("iva_porcentaje"), "12");
 });
@@ -42,9 +42,9 @@ test("ajustes load failure keeps defaults and reports failure", async () => {
   const { app, module } = createAjustesHarness([{
     data: null,
     error: { message: "offline" },
-  }], { precio_caja: "2.50" });
+  }], { precio_kg: "2.50" });
   assert.equal(await module.cargarParametros(), false);
-  assert.equal(app.state.parametros.precio_caja, "2.50");
+  assert.equal(app.state.parametros.precio_kg, "2.50");
   assert.match(app.lastToast, /offline/);
 });
 

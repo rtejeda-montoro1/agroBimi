@@ -4,7 +4,7 @@ const { createElement, fakeQuery, loadModule } = require("./helpers");
 
 function createLiquidacionesHarness() {
   const ids = [
-    "liqId", "liqPrecioCaja", "liqPrecioCajaPerdida", "liqIva", "liqRetencion",
+    "liqId", "liqPrecioKg", "liqKgPorCaja", "liqPrecioCajaPerdida", "liqIva", "liqRetencion",
     "cuerpoLiqLineas", "liqResumenRegistros", "liqBase", "liqIvaEtiqueta",
     "liqIvaImporte", "liqRetencionEtiqueta", "liqRetencionImporte", "liqTotal",
     "btnGuardarLiquidacion",
@@ -13,10 +13,10 @@ function createLiquidacionesHarness() {
   const app = {
     state: { liquidacionPrevia: { total: 10 } },
     dom: { modalLiquidacion: createElement() },
-    PARAMETROS_DEFECTO: { precio_caja: "1", precio_caja_perdida: "2", iva_porcentaje: "12", retencion_porcentaje: "2" },
+    PARAMETROS_DEFECTO: { precio_kg: "1", kg_por_caja: "8", precio_caja_perdida: "2", iva_porcentaje: "12", retencion_porcentaje: "2" },
     $: (id) => elements.get(id) || null,
     num: (value) => Number(value) || 0,
-    param: (key) => ({ precio_caja: "1.5", precio_caja_perdida: "3", iva_porcentaje: "10", retencion_porcentaje: "2" })[key],
+    param: (key) => ({ precio_kg: "1.5", kg_por_caja: "8", precio_caja_perdida: "3", iva_porcentaje: "10", retencion_porcentaje: "2" })[key],
     filaMensaje: (columns, text) => `${columns}:${text}`,
   };
   const module = loadModule("liquidaciones.js", app).window.App;
@@ -26,19 +26,19 @@ function createLiquidacionesHarness() {
 test("liquidaciones refreshes only adjustment-derived values on an open new draft", () => {
   const { app, elements, module } = createLiquidacionesHarness();
   app.dom.modalLiquidacion.classList.add("open");
-  elements.get("liqPrecioCaja").value = "1";
+  elements.get("liqPrecioKg").value = "1";
   elements.get("liqPrecioCajaPerdida").value = "2";
   elements.get("liqIva").value = "12";
   elements.get("liqRetencion").value = "4";
 
   module.aplicarAjustesALiquidacion({
-    precio_caja: "1",
+    precio_kg: "1",
     precio_caja_perdida: "2",
     iva_porcentaje: "12",
     retencion_porcentaje: "2",
   });
 
-  assert.equal(elements.get("liqPrecioCaja").value, "1.5");
+  assert.equal(elements.get("liqPrecioKg").value, "1.5");
   assert.equal(elements.get("liqPrecioCajaPerdida").value, "3");
   assert.equal(elements.get("liqIva").value, "10");
   assert.equal(elements.get("liqRetencion").value, "4");
@@ -49,16 +49,16 @@ test("liquidaciones refreshes only adjustment-derived values on an open new draf
 
 test("liquidaciones do not overwrite a saved draft or a closed modal", () => {
   const { app, elements, module } = createLiquidacionesHarness();
-  elements.get("liqPrecioCaja").value = "1";
+  elements.get("liqPrecioKg").value = "1";
   app.dom.modalLiquidacion.classList.add("open");
   elements.get("liqId").value = "22";
   module.aplicarAjustesALiquidacion({});
-  assert.equal(elements.get("liqPrecioCaja").value, "1");
+  assert.equal(elements.get("liqPrecioKg").value, "1");
 
   elements.get("liqId").value = "";
   app.dom.modalLiquidacion.classList.remove("open");
   module.aplicarAjustesALiquidacion({});
-  assert.equal(elements.get("liqPrecioCaja").value, "1");
+  assert.equal(elements.get("liqPrecioKg").value, "1");
 });
 
 test("liquidaciones list one page filtered on the server and total every matching one", async () => {
@@ -140,6 +140,14 @@ test("liquidaciones list one page filtered on the server and total every matchin
     target: { closest: (selector) => (selector === "[data-ver-liq]" ? boton : null) },
   });
   assert.equal(vista, pagina[41]);
+
+  // Cambiar un dato del cálculo lo invalida ya al escribir, no al salir
+  // del campo (si no, el primer clic en «Calcular» se perdía).
+  app.state.liquidacionPrevia = { total: 1 };
+  getElement("btnGuardarLiquidacion").disabled = false;
+  getElement("liqPrecioKg").dispatch("input");
+  assert.equal(app.state.liquidacionPrevia, null);
+  assert.equal(getElement("btnGuardarLiquidacion").disabled, true);
 });
 
 // El cálculo con las utilidades de verdad (redondeo, números y fechas).
@@ -151,7 +159,7 @@ function crearCalculo() {
 
 const datosLiq = (extra = {}) => ({
   desde: "2026-11-01", hasta: "2026-11-15",
-  precioCaja: 0.3575, precioCajaPerdida: 1.2, iva: 10, retencion: 2,
+  precioKg: 0.3575, kgPorCaja: 1, precioCajaPerdida: 1.2, iva: 10, retencion: 2,
   incluirDescuento: true, otroConcepto: null, otraCantidad: 0, otroPrecio: 0,
   ...extra,
 });
@@ -161,9 +169,9 @@ test("liquidaciones calculate lines, VAT, withholding and total with euro roundi
   const r = calcular(
     datosLiq({ otroConcepto: "Transporte", otraCantidad: 1, otroPrecio: 15.5 }),
     [
-      { cajas_entradas: 100, descuento_cajas: 2 },
-      { cajas_entradas: 250, descuento_cajas: 3 },
-      { cajas_entradas: 37, descuento_cajas: null },
+      { cajas_entradas: 100, descuento_kg: 2 },
+      { cajas_entradas: 250, descuento_kg: 3 },
+      { cajas_entradas: 37, descuento_kg: null },
     ],
     { pendiente: 4 },
   );
@@ -187,14 +195,31 @@ test("liquidaciones calculate lines, VAT, withholding and total with euro roundi
 test("liquidaciones round half cents up, as on paper, not down by floating point", () => {
   const calcular = crearCalculo();
   // 3 × 0,335 = 1,005 en papel, 1,00499999… en coma flotante.
-  const r = calcular(datosLiq({ precioCaja: 0.335, iva: 0, retencion: 0 }), [{ cajas_entradas: 3 }], null);
+  const r = calcular(datosLiq({ precioKg: 0.335, iva: 0, retencion: 0 }), [{ cajas_entradas: 3 }], null);
   assert.equal(r.lineas[0].importe, 1.01);
   assert.equal(r.total, 1.01);
 });
 
+test("liquidaciones pay by kg: boxes × kg per box × price per kg, discount in kg", () => {
+  const calcular = crearCalculo();
+  const r = calcular(
+    datosLiq({ precioKg: 0.5, kgPorCaja: 8, iva: 0, retencion: 0 }),
+    [{ cajas_entradas: 100, descuento_kg: 10 }, { cajas_entradas: 20, descuento_kg: 6 }],
+    null,
+  );
+  assert.deepEqual([...r.lineas].map((l) => [l.tipo, l.cantidad, l.precio, l.importe]), [
+    ["bimi", 960, 0.5, 480],        // 120 cajas × 8 kg = 960 kg × 0,50
+    ["descuento", 16, 0.5, -8],     // 16 kg × 0,50
+  ]);
+  assert.match(r.lineas[0].concepto, /120 cajas × 8 kg/);
+  assert.equal(r.cajas, 120);
+  assert.equal(r.kg, 960);
+  assert.equal(r.total, 472);
+});
+
 test("liquidaciones only add discount and empty-box lines when there is something to charge", () => {
   const calcular = crearCalculo();
-  const registros = [{ cajas_entradas: 10, descuento_cajas: 4 }];
+  const registros = [{ cajas_entradas: 10, descuento_kg: 4 }];
   const tipos = (r) => [...r.lineas].map((l) => l.tipo);
   assert.deepEqual(tipos(calcular(datosLiq({ incluirDescuento: false }), registros, null)), ["bimi"]);
   assert.deepEqual(tipos(calcular(datosLiq(), registros, { pendiente: 0 })), ["bimi", "descuento"]);

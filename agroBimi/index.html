@@ -284,8 +284,8 @@
             <input type="number" id="cajas_salidas" min="0" step="1" placeholder="0" />
           </div>
           <div class="field">
-            <label for="descuento_cajas">Descuento Cajas</label>
-            <input type="number" id="descuento_cajas" min="0" step="1" placeholder="0" />
+            <label for="descuento_kg">Descuento (kg)</label>
+            <input type="number" id="descuento_kg" min="0" step="1" placeholder="0" />
           </div>
           <div class="field">
             <label for="num_factura">Nº Factura</label>
@@ -631,8 +631,12 @@
             <select id="liqCampana"></select>
           </div>
           <div class="field">
-            <label for="liqPrecioCaja">Precio por caja (€)</label>
-            <input type="number" id="liqPrecioCaja" step="0.0001" min="0" placeholder="0" />
+            <label for="liqPrecioKg">Precio por kg (€)</label>
+            <input type="number" id="liqPrecioKg" step="0.0001" min="0" placeholder="0" />
+          </div>
+          <div class="field">
+            <label for="liqKgPorCaja">Kg por caja</label>
+            <input type="number" id="liqKgPorCaja" step="0.01" min="0" placeholder="8" />
           </div>
           <div class="field">
             <label for="liqPrecioCajaPerdida">Precio caja perdida (€)</label>
@@ -655,7 +659,7 @@
           </label>
           <label class="check-inline">
             <input type="checkbox" id="liqIncluirDescuento" checked />
-            Descontar las cajas con descuento
+            Descontar los kg de descuento
           </label>
         </div>
 
@@ -1218,8 +1222,12 @@
           <summary>Precios e impuestos por defecto</summary>
           <div class="grid-campos">
             <div class="field">
-              <label for="aj_precio_caja">Precio por caja de bimi (€)</label>
-              <input type="number" id="aj_precio_caja" step="0.0001" min="0" />
+              <label for="aj_precio_kg">Precio por kg de bimi (€)</label>
+              <input type="number" id="aj_precio_kg" step="0.0001" min="0" />
+            </div>
+            <div class="field">
+              <label for="aj_kg_por_caja">Kg de bimi por caja</label>
+              <input type="number" id="aj_kg_por_caja" step="0.01" min="0" placeholder="8" />
             </div>
             <div class="field">
               <label for="aj_precio_caja_perdida">Precio caja vacía perdida (€)</label>

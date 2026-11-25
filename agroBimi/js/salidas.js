@@ -297,10 +297,13 @@
     const alb = data[0];
     alb.palets = [...(alb.palets || [])].sort((a, b) => App.num(a.secuencia) - App.num(b.secuencia));
     alb.totalCajas = alb.palets.reduce((s, p) => s + App.num(p.num_cajas), 0);
+    alb.totalKg = kgDeCajas(alb.totalCajas);
     return alb;
   }
 
   const esc = (v) => App.escapar(v == null ? "" : String(v));
+  // Kg de bimi (netos): cajas × kg por caja de Ajustes.
+  const kgDeCajas = (cajas) => App.redondear(App.num(cajas) * (App.paramNum("kg_por_caja") || 8));
   const matriculas = (alb) => [alb.matricula, alb.matricula_remolque].filter(Boolean).join(" / ");
 
   // Peso como en el CMR en papel: «2.775 kg».
@@ -326,6 +329,7 @@
             <td>${esc(a.nombre)}</td>
             <td>${l.registros?.fecha ? App.formatearFecha(l.registros.fecha) : "—"}</td>
             <td class="der">${App.fmtNum(l.num_cajas)}</td>
+            <td class="der">${App.fmtCantidad(kgDeCajas(l.num_cajas))}</td>
           </tr>`;
       }).join("");
     }).join("");
@@ -343,6 +347,7 @@
           <td>${esc(a.nombre)}</td>
           <td>${esc(a.nif)}</td>
           <td class="der">${App.fmtNum(cajas)}</td>
+          <td class="der">${App.fmtCantidad(kgDeCajas(cajas))}</td>
         </tr>`).join("");
 
     const lineaEmisor = [e.direccion, e.codigo_postal ? `CP: ${e.codigo_postal}` : ""].filter(Boolean).join(" - ");
@@ -375,23 +380,23 @@
             <div class="alb-etiqueta">Transporte</div>
             <div>Matrícula: <b>${esc(matriculas(alb)) || "—"}</b></div>
             <div>Transportista: <b>${esc(alb.transportista) || "—"}</b></div>
-            <div>Palets: <b>${App.fmtNum(palets.length)}</b> · Cajas: <b>${App.fmtNum(alb.totalCajas)}</b></div>
+            <div>Palets: <b>${App.fmtNum(palets.length)}</b> · Cajas: <b>${App.fmtNum(alb.totalCajas)}</b> · Kg: <b>${App.fmtCantidad(alb.totalKg)}</b></div>
           </div>
         </div>
 
         <table class="rec-tabla alb-detalle">
           <thead>
-            <tr><th>PALET</th><th>PROVEEDOR</th><th>FECHA ENTRADA</th><th class="der">CAJAS</th></tr>
+            <tr><th>PALET</th><th>PROVEEDOR</th><th>FECHA ENTRADA</th><th class="der">CAJAS</th><th class="der">KG</th></tr>
           </thead>
           <tbody>${detalle}</tbody>
           <tfoot>
-            <tr><th colspan="3" class="der">TOTAL</th><th class="der">${App.fmtNum(alb.totalCajas)}</th></tr>
+            <tr><th colspan="3" class="der">TOTAL</th><th class="der">${App.fmtNum(alb.totalCajas)}</th><th class="der">${App.fmtCantidad(alb.totalKg)}</th></tr>
           </tfoot>
         </table>
 
         <h3 class="alb-subtitulo">Resumen por proveedor</h3>
         <table class="rec-tabla alb-resumen">
-          <thead><tr><th>PROVEEDOR</th><th>NIF</th><th class="der">CAJAS</th></tr></thead>
+          <thead><tr><th>PROVEEDOR</th><th>NIF</th><th class="der">CAJAS</th><th class="der">KG</th></tr></thead>
           <tbody>${resumen}</tbody>
         </table>
 

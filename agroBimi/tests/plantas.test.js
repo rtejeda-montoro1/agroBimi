@@ -50,6 +50,7 @@ test("plantas groups harvest performance by farmer, season, and normalized cycle
     num: (value) => Number(value) || 0,
     campanaNombre: (id) => String(id),
     agricultorPorId: (id) => ({ nombre: String(id) }),
+    paramNum: (key) => ({ kg_por_caja: 8 })[key],
   };
   const module = loadModule("plantas.js", app).window.App;
   const groups = module.agruparRendimiento(
@@ -58,7 +59,7 @@ test("plantas groups harvest performance by farmer, season, and normalized cycle
       { agricultor_id: 5, campana_id: 2, ciclo: "1", num_plantas: 50, fecha: "2026-01-01" },
     ],
     [
-      { agricultor_id: 5, campana_id: 2, ciclo: "1", cajas_entradas: 30, descuento_cajas: 3, fecha: "2026-01-05" },
+      { agricultor_id: 5, campana_id: 2, ciclo: "1", cajas_entradas: 30, descuento_kg: 24, fecha: "2026-01-05" },
       { agricultor_id: 8, campana_id: 2, ciclo: "2", cajas_entradas: 4, fecha: "2026-01-06" },
       { agricultor_id: 9, campana_id: 2, ciclo: "3", cajas_entradas: 0, fecha: null },
     ]

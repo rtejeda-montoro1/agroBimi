@@ -83,7 +83,7 @@ create table if not exists liquidaciones (
   fecha_desde          date        not null, -- periodo liquidado
   fecha_hasta          date        not null,
   estado               text        not null default 'borrador',
-  precio_caja          numeric(12,4),
+  precio_caja          numeric(12,4),  -- solo las de antes de pagar por kg
   precio_caja_perdida  numeric(12,4),
   iva_porcentaje       numeric(5,2),
   base                 numeric(12,2),
@@ -97,6 +97,8 @@ create table if not exists liquidaciones (
   retencion_porcentaje numeric(5,2),
   retencion            numeric(12,2),
   factura_agricultor   boolean     not null default false,
+  precio_kg            numeric(12,4),
+  kg_por_caja          numeric(8,2),   -- kg = cajas × kg_por_caja
   constraint liquidaciones_estado_check
     check (estado in ('borrador', 'cerrada', 'facturada')),
   constraint liquidaciones_campana_obligatoria
@@ -132,7 +134,7 @@ create table if not exists registros (
   cajas_entradas         integer,                    -- Nº Cajas Entradas
   fecha_cmr              date,                       -- Fecha (CMR)
   cajas_salidas          integer,                    -- Nº Cajas Salidas
-  descuento_cajas        integer,                    -- Descuento Cajas
+  descuento_kg           integer,                    -- Descuento (kg)
   num_factura            text,                       -- Nº Factura
   cajas_vacias_retiradas integer,                    -- Cajas Vacías retiradas
   comentarios            text,                       -- Comentarios
@@ -302,7 +304,8 @@ insert into parametros (clave, valor) values
   ('emisor_registro',     ''),
   ('emisor_telefono',     ''),
   ('emisor_email',        ''),
-  ('precio_caja',         '0'),
+  ('precio_kg',           '0'),
+  ('kg_por_caja',         '8'),
   ('precio_caja_perdida', '0'),
   ('iva_porcentaje',      '12'),
   ('retencion_porcentaje','2'),
@@ -1493,6 +1496,8 @@ begin
       fecha_desde          = (p_datos->>'fecha_desde')::date,
       fecha_hasta          = (p_datos->>'fecha_hasta')::date,
       precio_caja          = (p_datos->>'precio_caja')::numeric,
+      precio_kg            = (p_datos->>'precio_kg')::numeric,
+      kg_por_caja          = (p_datos->>'kg_por_caja')::numeric,
       precio_caja_perdida  = (p_datos->>'precio_caja_perdida')::numeric,
       iva_porcentaje       = (p_datos->>'iva_porcentaje')::numeric,
       base                 = (p_datos->>'base')::numeric,
@@ -1513,13 +1518,14 @@ begin
 
     insert into liquidaciones (
       secuencia, numero, estado, agricultor_id, campana_id, fecha, fecha_desde, fecha_hasta,
-      precio_caja, precio_caja_perdida, iva_porcentaje, base, iva,
+      precio_caja, precio_kg, kg_por_caja, precio_caja_perdida, iva_porcentaje, base, iva,
       retencion_porcentaje, retencion, total, observaciones)
     values (
       v_sec, public.numero_documento(v_serie, v_sec, 4), 'borrador',
       (p_datos->>'agricultor_id')::bigint, (p_datos->>'campana_id')::bigint,
       (p_datos->>'fecha')::date, (p_datos->>'fecha_desde')::date, (p_datos->>'fecha_hasta')::date,
-      (p_datos->>'precio_caja')::numeric, (p_datos->>'precio_caja_perdida')::numeric,
+      (p_datos->>'precio_caja')::numeric, (p_datos->>'precio_kg')::numeric,
+      (p_datos->>'kg_por_caja')::numeric, (p_datos->>'precio_caja_perdida')::numeric,
       (p_datos->>'iva_porcentaje')::numeric, (p_datos->>'base')::numeric, (p_datos->>'iva')::numeric,
       (p_datos->>'retencion_porcentaje')::numeric, (p_datos->>'retencion')::numeric,
       (p_datos->>'total')::numeric, p_datos->>'observaciones')
@@ -1552,7 +1558,7 @@ begin
                             or r.fecha not between (p_datos->>'fecha_desde')::date
                                                and (p_datos->>'fecha_hasta')::date),
          coalesce(sum(coalesce(r.cajas_entradas, 0)), 0),
-         coalesce(sum(coalesce(r.descuento_cajas, 0)), 0)
+         coalesce(sum(coalesce(r.descuento_kg, 0)), 0)
   into v_fuera, v_cajas, v_descuento
   from registros r where r.liquidacion_id = v_id;
 
@@ -1575,10 +1581,11 @@ begin
   into v_lin_cajas, v_lin_descuento, v_n, v_lin_base
   from liquidacion_lineas where liquidacion_id = v_id;
 
-  if v_lin_cajas <> v_cajas
+  -- La línea de bimi va en kg: cajas × kg por caja (redondeado como en js).
+  if v_lin_cajas <> round(v_cajas * coalesce((p_datos->>'kg_por_caja')::numeric, 1), 2)
      or (v_n > 0 and v_lin_descuento <> v_descuento)
      or (v_n = 0 and v_descuento > 0 and coalesce((p_datos->>'incluir_descuento')::boolean, false)) then
-    raise exception 'Las cajas de los registros han cambiado desde el cálculo (ahora % cajas y % de descuento). Vuelve a pulsar «Calcular».',
+    raise exception 'Las cajas de los registros han cambiado desde el cálculo (ahora % cajas y % kg de descuento). Vuelve a pulsar «Calcular».',
       v_cajas, v_descuento;
   end if;
 
@@ -1660,12 +1667,14 @@ begin
   if old.estado = 'cerrada' and new.estado = 'facturada' then
     -- Facturar: solo se rellenan los datos de la factura.
     if (new.agricultor_id, new.campana_id, new.fecha, new.fecha_desde, new.fecha_hasta,
-        new.precio_caja, new.precio_caja_perdida, new.iva_porcentaje, new.base, new.iva,
+        new.precio_caja, new.precio_kg, new.kg_por_caja,
+        new.precio_caja_perdida, new.iva_porcentaje, new.base, new.iva,
         new.retencion_porcentaje, new.retencion, new.total, new.observaciones,
         new.numero, new.secuencia)
        is distinct from
        (old.agricultor_id, old.campana_id, old.fecha, old.fecha_desde, old.fecha_hasta,
-        old.precio_caja, old.precio_caja_perdida, old.iva_porcentaje, old.base, old.iva,
+        old.precio_caja, old.precio_kg, old.kg_por_caja,
+        old.precio_caja_perdida, old.iva_porcentaje, old.base, old.iva,
         old.retencion_porcentaje, old.retencion, old.total, old.observaciones,
         old.numero, old.secuencia) then
       raise exception 'La liquidación % está cerrada: al facturarla no se pueden cambiar sus importes ni sus datos.',
@@ -1823,10 +1832,10 @@ begin
       to_char(old.fecha, 'DD/MM/YYYY'), v_liq.numero, v_liq.estado;
   end if;
 
-  if (new.agricultor_id, new.campana_id, new.fecha, new.cajas_entradas, new.descuento_cajas,
+  if (new.agricultor_id, new.campana_id, new.fecha, new.cajas_entradas, new.descuento_kg,
       new.cajas_vacias_retiradas, new.cajas_vacias_devueltas, new.liquidacion_id)
      is distinct from
-     (old.agricultor_id, old.campana_id, old.fecha, old.cajas_entradas, old.descuento_cajas,
+     (old.agricultor_id, old.campana_id, old.fecha, old.cajas_entradas, old.descuento_kg,
       old.cajas_vacias_retiradas, old.cajas_vacias_devueltas, old.liquidacion_id) then
     raise exception 'El registro del % está en la liquidación % (%): no se pueden cambiar su fecha, campaña ni cajas. Solo comentarios, ciclo y datos de salida.',
       to_char(old.fecha, 'DD/MM/YYYY'), v_liq.numero, v_liq.estado;
@@ -2088,3 +2097,12 @@ revoke all on function public.login_correcto() from public, anon;
 grant execute on function public.login_bloqueado(text) to anon, authenticated;
 grant execute on function public.login_fallido(text) to anon, authenticated;
 grant execute on function public.login_correcto() to authenticated;
+
+-- ---------------------------------------------------------------------
+-- Columnas nuevas (noviembre de 2026): pago por kg. Se pueden quitar
+-- cuando todas las bases de datos las tengan. El paso de
+-- registros.descuento_cajas a descuento_kg va en
+-- migraciones/2026-11-25_descuento_kg.sql (cambia datos).
+-- ---------------------------------------------------------------------
+alter table liquidaciones add column if not exists precio_kg   numeric(12,4);
+alter table liquidaciones add column if not exists kg_por_caja numeric(8,2);

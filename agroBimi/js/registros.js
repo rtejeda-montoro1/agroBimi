@@ -473,7 +473,7 @@
   const CAMPOS_CAJAS = [
     { col: "cajas_entradas", attr: "entradas", key: "entradas", label: "Nº Cajas Entradas" },
     { col: "cajas_salidas", attr: "salidas", key: "salidas", label: "Nº Cajas Salidas" },
-    { col: "descuento_cajas", attr: "descuento", key: "descuento", label: "Descuento Cajas" },
+    { col: "descuento_kg", attr: "descuento", key: "descuento", label: "Descuento (kg)" },
     { col: "cajas_vacias_retiradas", attr: "vacias", key: "vacias", label: "Cajas Vacías retiradas" },
     { col: "cajas_vacias_devueltas", attr: "vacias-devueltas", key: "vaciasDevueltas", label: "Cajas Vacías devueltas" },
   ];

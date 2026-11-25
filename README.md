@@ -152,8 +152,10 @@ las reparte sola en palets** de `cajas_por_palet` (60) al apuntar la pesada
 (trigger `registros_paletizar`, `schema.sql` seccion 16; requiere
 migracion en una base de datos existente). Rellena el palet abierto mas
 antiguo de la campana y lo que sobra abre el siguiente. Al estar en la base de
-datos vale igual para la bascula (tambien al sincronizar sin red) y para la
-oficina.
+datos vale igual al pesar y al sincronizar sin red. Solo se paletizan los
+registros de la bascula (`origen = 'bascula'`): lo apuntado a mano en la
+oficina no entra en la camara ni en los palets (tampoco desde Editar palet).
+En la app la pantalla se llama "Stock en camara".
 
 - Cada linea de palet esta ligada a su pesada (`palet_lineas.registro_id`):
   de ahi salen el agricultor y la fecha de entrada.
@@ -192,11 +194,19 @@ quita de una base de datos existente si estan vacias.
 Una liquidacion agrupa los registros de UN agricultor en un rango de fechas
 que todavia no se le han pagado, y calcula:
 
-    + cajas de bimi entradas       x precio por caja
-    - descuento de cajas           x precio por caja
+    + kg de bimi (cajas x kg por caja) x precio por kg
+    - descuento en kg                  x precio por kg
     - cajas vacias no devueltas    x precio de caja perdida
     +- concepto libre
     = base -> + IVA / compensacion -> total
+
+Se paga por kg: `kg_por_caja` (Ajustes, 8 por defecto) pasa las cajas a kg y
+cada liquidacion guarda el suyo y su `precio_kg`. El descuento de cada
+registro va en kg (`registros.descuento_kg`). `liquidacion_guardar`
+comprueba que la linea de bimi sea cajas x `kg_por_caja`. Las liquidaciones
+de antes llevan `precio_caja` y sus lineas en cajas; no se tocan. Requiere
+migracion (`2026-11-25_descuento_kg.sql`, antes de `schema.sql`). El albaran
+de salida tambien muestra los kg (cajas x `kg_por_caja`).
 
 Un registro solo puede entrar en UNA liquidacion (columna
 `registros.liquidacion_id`): asi no se paga dos veces lo mismo. En la tabla
