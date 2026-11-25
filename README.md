@@ -164,6 +164,13 @@ registros de la bascula (`origen = 'bascula'`): lo apuntado a mano en la
 oficina no entra en la camara ni en los palets (tampoco desde Editar palet).
 En la app la pantalla se llama "Stock en camara".
 
+- "Registrar sin paletizacion" (boton rojo de la bascula):
+  `bascula_registrar(..., p_paletizar => false)` marca en su transaccion
+  `agrobimi.sin_paletizar` y el trigger no reparte esas cajas; quedan como
+  `sin_palet` en `paletizado_entradas` y `bascula_pesadas.paletizar = false`.
+  Las siguientes pesadas del mismo registro solo paletizan lo suyo. "Stock
+  en camara" avisa (en rojo) de las cajas que no estan en ningun palet y
+  `bascula_palets()` devuelve su total (`sin_palet`).
 - Cada linea de palet esta ligada a su pesada (`palet_lineas.registro_id`):
   de ahi salen el agricultor y la fecha de entrada.
 - Estados: *en formacion* (menos de 60, sus cajas estan "en camara"),
@@ -249,8 +256,13 @@ del navegador: no hace falta ninguna libreria externa.
 ### Puesto de la bascula
 
 La bascula no exporta los pesos, asi que junto a ella se pone una tablet u
-ordenador con `agroBimi/bascula.html`. Ahi se elige el agricultor, el ciclo
-el numero de cajas y las cajas vacias que se lleva (0 por defecto). Las
+ordenador con `agroBimi/bascula.html`. Ahi se busca el agricultor (lupa,
+por codigo o nombre), el ciclo,
+el numero de cajas y las cajas vacias que se lleva (0 por defecto). A la
+derecha, en la misma pantalla, se ven los palets (solo lectura,
+`bascula_palets()`). La pantalla esta pensada para una Surface 3 en
+horizontal: tres columnas a toda la altura y cada una con su propio scroll.
+Las
 pesadas del mismo dia de un agricultor (misma campana y ciclo) se suman en
 un unico registro con fecha de hoy, `cajas_entradas`,
 `cajas_vacias_retiradas` y `origen = 'bascula'`; si ese registro ya esta
@@ -287,7 +299,7 @@ Etiquetas de palet en la bascula: DESACTIVADAS (`ETIQUETAS_EN_BASCULA` en
 manda todo a la impresora predeterminada (la de tickets, 80 mm), y la
 etiqueta de 105 x 75 mm no cabe: se imprimen desde la oficina. Con el
 interruptor a true (cuando la impresora de pegatinas este en ese equipo,
-con QZ Tray o similar para elegir impresora), la vista de palets vuelve a
+con QZ Tray o similar para elegir impresora), las tarjetas de palets vuelven a
 tener "Imprimir etiqueta" y, cuando una pesada enviada desde la tablet
 completa un palet, la tablet abre sola la impresion de su etiqueta (detras
 del justificante, si se pidio). Para eso recuerda los palets completos que

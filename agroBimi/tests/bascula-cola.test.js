@@ -127,7 +127,84 @@ test("bascula keeps the farmers on screen when only today's entries fail to load
       return null;
     },
   });
-  const grid = b.$("gridAgricultores").innerHTML;
-  assert.match(grid, /Ana/);
-  assert.doesNotMatch(grid, /No se pudieron cargar/);
+  const lista = b.$("sugerencias").innerHTML;
+  assert.match(lista, /Ana/);
+  assert.doesNotMatch(lista, /No se pudieron cargar/);
+});
+
+// Busca, elige al agricultor 1 y teclea 12 cajas.
+function prepararEntrada(b) {
+  b.$("buscar").value = "ana";
+  b.$("buscar").dispatch("input");
+  b.$("sugerencias").dispatch("click", { target: { closest: () => ({ dataset: { agri: "1" } }) } });
+  b.$("teclado").dispatch("click", { target: { closest: () => ({ dataset: { tecla: "1" } }) } });
+  b.$("teclado").dispatch("click", { target: { closest: () => ({ dataset: { tecla: "2" } }) } });
+}
+
+const conAna = (n) =>
+  (n === "bascula_agricultores" ? { data: [{ id: 1, nombre: "Ana", codigo: 101 }], error: null } : null);
+
+test("bascula search with the magnifier filters farmers, picks one and shows it instead of the search", async () => {
+  const b = await cargarBascula({
+    rpc: (n) => (n === "bascula_agricultores"
+      ? { data: [{ id: 1, nombre: "Ana", codigo: 101 }, { id: 2, nombre: "Pablo", codigo: 7 }], error: null }
+      : null),
+  });
+  b.$("buscar").value = "7";
+  b.$("buscar").dispatch("input");
+  assert.equal(b.$("sugerencias").hidden, false);
+  assert.match(b.$("sugerencias").innerHTML, /Pablo/);
+  assert.doesNotMatch(b.$("sugerencias").innerHTML, /Ana/);
+
+  b.$("sugerencias").dispatch("click", { target: { closest: () => ({ dataset: { agri: "2" } }) } });
+  assert.equal(b.$("sugerencias").hidden, true);
+  assert.equal(b.$("agriBuscador").hidden, true);
+  assert.equal(b.$("agriElegido").hidden, false);
+  assert.match(b.$("agriElegido").innerHTML, /Pablo/);
+
+  // «Cambiar» vuelve a enseñar el buscador.
+  b.$("agriElegido").dispatch("click", { target: { closest: (sel) => (sel === "[data-cambiar]" ? {} : null) } });
+  assert.equal(b.$("agriBuscador").hidden, false);
+  assert.equal(b.$("agriElegido").hidden, true);
+});
+
+test("bascula registers without palletizing: the server is told not to put the boxes in pallets", async () => {
+  const b = await cargarBascula({ rpc: conAna });
+  prepararEntrada(b);
+  assert.equal(b.$("btnRegistrarSinPalet").disabled, false);
+  b.$("btnRegistrarSinPalet").dispatch("click");
+  for (let i = 0; i < 6; i++) await flush();
+
+  const envio = b.llamadas.filter((l) => l.nombre === "bascula_registrar").at(-1);
+  assert.equal(envio.args.p_cajas, 12);
+  assert.equal(envio.args.p_paletizar, false);
+  assert.match(b.$("toast").textContent, /sin paletizar/);
+});
+
+test("bascula plain register palletizes, also for entries queued before this change", async () => {
+  const b = await cargarBascula({
+    guardado: { bascula_pendientes: [pendiente({ uuid: "u-vieja", pesada_en: new Date().toISOString() })] },
+    rpc: conAna,
+  });
+  prepararEntrada(b);
+  b.$("btnRegistrar").dispatch("click");
+  for (let i = 0; i < 6; i++) await flush();
+
+  const envios = b.llamadas.filter((l) => l.nombre === "bascula_registrar");
+  assert.equal(envios.find((l) => l.args.p_client_uuid === "u-vieja").args.p_paletizar, true);
+  assert.equal(envios.find((l) => l.args.p_client_uuid === "uuid-nuevo").args.p_paletizar, true);
+});
+
+test("bascula marks today's entries registered without palletizing", async () => {
+  const b = await cargarBascula({
+    rpc: (n) => (n === "bascula_hoy"
+      ? { data: [
+        { id: 1, client_uuid: "a", creado: new Date().toISOString(), nombre: "Ana", ciclo: "1", cajas: 5, paletizar: false },
+        { id: 2, client_uuid: "b", creado: new Date().toISOString(), nombre: "Luis", ciclo: "1", cajas: 7, paletizar: true },
+      ], error: null }
+      : null),
+  });
+  const html = b.$("hoyLista").innerHTML;
+  assert.equal((html.match(/hoy-sin-palet/g) || []).length, 1);
+  assert.match(html, /Ana[\s\S]*sin palet[\s\S]*Luis/);
 });

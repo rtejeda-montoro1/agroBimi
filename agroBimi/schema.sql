@@ -362,6 +362,8 @@ create table if not exists usuarios_bascula (
 -- agricultor (misma campaña y ciclo) se SUMAN en un único registro; aquí
 -- queda cada pesada, ligada a ese registro, para no duplicar reenvíos sin
 -- red, listarlas en la tablet y poder anular una sola.
+-- paletizar = false: «Registrar sin paletización». Sus cajas entran en la
+-- cámara pero no se reparten en palets (sección 16).
 create table if not exists bascula_pesadas (
   id            bigint generated always as identity primary key,
   client_uuid   uuid        not null unique,
@@ -372,8 +374,13 @@ create table if not exists bascula_pesadas (
   cajas         integer     not null default 0,
   vacias        integer     not null default 0,
   pesada_en     timestamptz not null,
+  paletizar     boolean     not null default true,
   created_at    timestamptz not null default now()
 );
+-- Bases de datos de antes de «Registrar sin paletización» (noviembre de
+-- 2026). Aquí y no al final porque bascula_hoy (sección 14) ya la usa. Se
+-- puede quitar cuando todas la tengan.
+alter table bascula_pesadas add column if not exists paletizar boolean not null default true;
 create index if not exists bascula_pesadas_registro_idx on bascula_pesadas (registro_id);
 create index if not exists bascula_pesadas_pesada_idx   on bascula_pesadas (pesada_en);
 -- Al borrar un agricultor o una campaña se buscan sus pesadas.
@@ -553,6 +560,13 @@ $$;
 -- crea. Se puede llamar varias veces con el mismo p_client_uuid
 -- (reintentos sin red): solo la primera suma, las demás devuelven el id
 -- del registro. Devuelve el id del registro del día.
+-- p_paletizar = false («Registrar sin paletización»): sus cajas se suman
+-- igual pero no se reparten en palets; se quedan en la cámara sin palet y
+-- la oficina las ve en «Stock en cámara».
+-- La versión anterior, sin p_paletizar, se quita: con las dos, la llamada
+-- sin ese parámetro sería ambigua. (Esta línea se puede quitar cuando
+-- todas las bases de datos tengan la nueva.)
+drop function if exists public.bascula_registrar(uuid, bigint, bigint, text, integer, timestamptz, integer);
 create or replace function public.bascula_registrar(
   p_client_uuid   uuid,
   p_agricultor_id bigint,
@@ -560,7 +574,8 @@ create or replace function public.bascula_registrar(
   p_ciclo         text,
   p_cajas         integer,
   p_pesada_en     timestamptz,
-  p_vacias        integer default 0
+  p_vacias        integer default 0,
+  p_paletizar     boolean default true
 )
 returns bigint
 language plpgsql
@@ -635,6 +650,12 @@ begin
   perform pg_advisory_xact_lock(hashtext(format('bascula_dia:%s:%s:%s:%s',
     p_agricultor_id, v_campana_id, v_fecha, p_ciclo)));
 
+  -- Le dice al trigger registros_paletizar si reparte estas cajas en
+  -- palets. Solo dura esta transacción y se vuelve a quitar abajo. Antes
+  -- del select: perform cambia FOUND.
+  perform set_config('agrobimi.sin_paletizar',
+    case when coalesce(p_paletizar, true) then 'off' else 'on' end, true);
+
   select id into v_registro from registros
   where agricultor_id = p_agricultor_id
     and campana_id = v_campana_id
@@ -660,11 +681,12 @@ begin
             'bascula', p_pesada_en)
     returning id into v_registro;
   end if;
+  perform set_config('agrobimi.sin_paletizar', 'off', true);
 
   insert into bascula_pesadas (client_uuid, registro_id, agricultor_id, campana_id, ciclo,
-                               cajas, vacias, pesada_en)
+                               cajas, vacias, pesada_en, paletizar)
   values (p_client_uuid, v_registro, p_agricultor_id, v_campana_id, p_ciclo,
-          p_cajas, p_vacias, p_pesada_en);
+          p_cajas, p_vacias, p_pesada_en, coalesce(p_paletizar, true));
 
   return v_registro;
 end;
@@ -672,17 +694,20 @@ $$;
 
 -- Pesadas de hoy en la báscula (las más recientes primero). Una línea por
 -- pesada, aunque en la oficina se vea un único registro del día.
+-- La versión anterior no devolvía «paletizar»: cambiar las columnas que
+-- devuelve obliga a borrarla antes.
+drop function if exists public.bascula_hoy();
 create or replace function public.bascula_hoy()
 returns table (id bigint, client_uuid uuid, creado timestamptz, agricultor_id bigint,
                nombre text, codigo integer, campana text, ciclo text, cajas integer,
-               vacias integer, liquidado boolean)
+               vacias integer, liquidado boolean, paletizar boolean)
 language sql
 stable
 security definer
 set search_path = public
 as $$
   select bp.id, bp.client_uuid, bp.pesada_en, a.id, a.nombre, a.codigo, c.nombre,
-         bp.ciclo, bp.cajas, bp.vacias, r.liquidacion_id is not null
+         bp.ciclo, bp.cajas, bp.vacias, r.liquidacion_id is not null, bp.paletizar
   from bascula_pesadas bp
   join registros r on r.id = bp.registro_id
   join agricultores a on a.id = bp.agricultor_id
@@ -778,7 +803,7 @@ declare f text;
 begin
   foreach f in array array[
     'bascula_agricultores(bigint)', 'bascula_campanas()',
-    'bascula_registrar(uuid, bigint, bigint, text, integer, timestamptz, integer)',
+    'bascula_registrar(uuid, bigint, bigint, text, integer, timestamptz, integer, boolean)',
     'bascula_hoy()', 'bascula_anular(bigint, boolean)', 'bascula_emisor()'
   ]::text[]
   loop
@@ -801,6 +826,9 @@ end $$;
 --     entra en la cámara ni en ningún palet. Las que aún no
 --     forman un palet completo están "en cámara". Los palets salen con un
 --     albarán de salida.
+--     Excepción: «Registrar sin paletización» en la báscula. Esas cajas
+--     entran en la cámara pero no en ningún palet (sin_palet en
+--     paletizado_entradas); la oficina las mete a mano en uno.
 
 -- ---------------------------------------------------------------------
 -- Ajustes y numeración
@@ -1058,6 +1086,10 @@ grant execute on function public.palets_completos_afectados(bigint, integer) to 
 --     ya salieron, no se deja corregir. palets_completos_afectados() sigue
 --     este mismo orden: si se cambia aquí, cámbialo también allí;
 --   - otro agricultor: sus líneas de palet pasan al nuevo agricultor.
+-- Las pesadas de «Registrar sin paletización» (bascula_registrar marca
+-- agrobimi.sin_paletizar en su transacción) no se reparten: sus cajas se
+-- quedan en la cámara sin palet. Las siguientes pesadas del mismo registro
+-- solo paletizan lo suyo (p_max), así que esas no entran después solas.
 create or replace function public.registros_paletizar_trg()
 returns trigger
 language plpgsql
@@ -1069,9 +1101,12 @@ declare
   v_quita  integer;
   v_cap    integer := public.cajas_por_palet();
   v_tocados bigint[] := '{}';
+  v_sin_paletizar boolean := coalesce(current_setting('agrobimi.sin_paletizar', true), '') = 'on';
 begin
   if tg_op = 'INSERT' then
-    perform public.paletizar_registro(new.id);
+    if not v_sin_paletizar then
+      perform public.paletizar_registro(new.id);
+    end if;
     return null;
   end if;
 
@@ -1104,7 +1139,9 @@ begin
   end if;
   perform public.palets_quitar_vacios(v_tocados);
 
-  if coalesce(new.cajas_entradas, 0) > coalesce(old.cajas_entradas, 0) then
+  if v_sin_paletizar then
+    null;
+  elsif coalesce(new.cajas_entradas, 0) > coalesce(old.cajas_entradas, 0) then
     perform public.paletizar_registro(new.id, new.cajas_entradas - coalesce(old.cajas_entradas, 0));
   elsif old.fecha is null and new.fecha is not null then
     -- Sin fecha no se paletiza: al ponérsela, entran ahora sus cajas.
@@ -1413,7 +1450,8 @@ revoke all on paletizado_entradas from anon;
 --     imprimir sus etiquetas. Solo lectura y solo palets sin salida
 --     (en formación y completos), con las cajas de cada agricultor
 --     sumadas como en la etiqueta. Devuelve además las cajas por palet,
---     el tamaño de la etiqueta (Ajustes) y las cajas en cámara.
+--     el tamaño de la etiqueta (Ajustes), las cajas en cámara y las que
+--     no están en ningún palet.
 create or replace function public.bascula_palets()
 returns jsonb
 language sql
@@ -1444,6 +1482,20 @@ as $$
                          and r.origen = 'bascula'
                          and (c.desde is null or r.fecha >= c.desde)), 0)
       from (select public.cajas_por_palet() as cap, public.paletizado_desde() as desde offset 0) c),
+    -- Lo mismo que sum(sin_palet) de paletizado_entradas: cajas en la
+    -- cámara que no están en ningún palet («Registrar sin paletización»).
+    'sin_palet', (
+      select coalesce((select sum(r.cajas_entradas) from registros r
+                       where r.cajas_entradas > 0
+                         and r.origen = 'bascula'
+                         and (c.desde is null or r.fecha >= c.desde)), 0)
+           - coalesce((select sum(l.num_cajas)
+                       from palet_lineas l
+                       join registros r on r.id = l.registro_id
+                       where r.cajas_entradas > 0
+                         and r.origen = 'bascula'
+                         and (c.desde is null or r.fecha >= c.desde)), 0)
+      from (select public.paletizado_desde() as desde offset 0) c),
     'palets', coalesce((
       select jsonb_agg(jsonb_build_object(
                'id', p.id,

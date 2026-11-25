@@ -45,7 +45,6 @@
         <select id="selCampana"></select>
       </label>
       <span class="estado-red" id="estadoRed" title="Conexión y entradas pendientes de envío">● En línea</span>
-      <button class="btn-ghost-claro" id="btnVista" title="Cambiar entre la báscula y los palets">📦 Palets</button>
       <button class="btn-ghost-claro" id="btnSalir" title="Cerrar la sesión de la báscula">Salir</button>
     </div>
   </header>
@@ -53,21 +52,20 @@
   <div class="bascula-aviso" id="avisoRed" hidden></div>
 
   <main class="bascula-main">
-    <!-- 1) Elegir agricultor -->
-    <section class="bascula-panel" id="panelAgricultores">
-      <div class="bascula-paso">1 · Agricultor</div>
-      <input type="search" id="buscar" class="bascula-buscar"
-             placeholder="Buscar por código o nombre…" autocomplete="off" />
-      <div class="agri-grid" id="gridAgricultores"></div>
-    </section>
-
-    <!-- 2) Ciclo y cajas -->
+    <!-- 1) Agricultor, ciclo y cajas -->
     <section class="bascula-panel" id="panelEntrada">
-      <div class="bascula-paso">2 · Ciclo y cajas</div>
+      <div class="bascula-paso">Agricultor, ciclo y cajas</div>
 
-      <div class="agri-elegido" id="agriElegido">
-        <span class="agri-elegido-vacio">Elige un agricultor</span>
+      <!-- Sin agricultor elegido (o al pulsar «Cambiar»): buscador. -->
+      <div class="agri-buscador" id="agriBuscador">
+        <span class="agri-lupa" aria-hidden="true">🔍</span>
+        <input type="search" id="buscar" class="bascula-buscar"
+               placeholder="Buscar agricultor por código o nombre…" autocomplete="off"
+               aria-label="Buscar agricultor por código o nombre" aria-controls="sugerencias" />
+        <ul class="agri-sugerencias" id="sugerencias" role="listbox" hidden></ul>
       </div>
+
+      <div class="agri-elegido" id="agriElegido" hidden></div>
 
       <div class="ciclos" id="ciclos" role="radiogroup" aria-label="Ciclo">
         <button type="button" class="ciclo-btn" data-ciclo="1" role="radio">Ciclo 1</button>
@@ -104,11 +102,13 @@
       <div class="bascula-error" id="errorEntrada" role="alert"></div>
       <div class="botones-registrar">
         <button type="button" class="btn-registrar" id="btnRegistrar" disabled>✓ Registrar</button>
+        <button type="button" class="btn-registrar btn-registrar-sin-palet" id="btnRegistrarSinPalet" disabled
+                title="Las cajas entran en la cámara pero no se meten en ningún palet">✕ Registrar sin paletización</button>
         <button type="button" class="btn-registrar btn-registrar-imp" id="btnRegistrarImprimir" disabled>🖨 Registrar e imprimir</button>
       </div>
     </section>
 
-    <!-- 3) Lo apuntado hoy -->
+    <!-- 2) Lo apuntado hoy -->
     <section class="bascula-panel bascula-hoy">
       <div class="bascula-paso">
         Hoy
@@ -116,19 +116,23 @@
       </div>
       <ul class="hoy-lista" id="hoyLista"></ul>
     </section>
-  </main>
 
-  <main class="bascula-palets" id="vistaPalets" hidden>
-    <div class="palets-barra">
-      <div class="palets-filtro" id="paletsFiltro" role="tablist" aria-label="Qué palets ver">
-        <button type="button" class="palets-filtro-btn activo" data-filtro="progreso" role="tab">En progreso</button>
-        <button type="button" class="palets-filtro-btn" data-filtro="hoy" role="tab">Completos hoy</button>
+    <!-- 3) Palets (solo lectura), a la derecha -->
+    <section class="bascula-panel bascula-palets" id="vistaPalets">
+      <div class="bascula-paso">
+        Palets
+        <span class="palets-actualizado" id="paletsActualizado"></span>
       </div>
-      <div class="palets-resumen" id="paletsResumen"></div>
-      <span class="palets-actualizado" id="paletsActualizado"></span>
-      <button type="button" class="btn-ghost" id="btnRecargarPalets">⟳ Actualizar</button>
-    </div>
-    <div id="listaPalets"></div>
+      <div class="palets-barra">
+        <div class="palets-filtro" id="paletsFiltro" role="tablist" aria-label="Qué palets ver">
+          <button type="button" class="palets-filtro-btn activo" data-filtro="progreso" role="tab">En progreso</button>
+          <button type="button" class="palets-filtro-btn" data-filtro="hoy" role="tab">Completos hoy</button>
+          <button type="button" class="btn-ghost" id="btnRecargarPalets" title="Actualizar los palets" aria-label="Actualizar los palets">⟳</button>
+        </div>
+        <div class="palets-resumen" id="paletsResumen"></div>
+      </div>
+      <div class="palets-lista" id="listaPalets"></div>
+    </section>
   </main>
 
   <div class="toast" id="toast"></div>

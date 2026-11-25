@@ -189,7 +189,7 @@ test("bascula reports a rejected farmer refresh and preserves its last data", as
 
   assert.match(elements.get("toast").textContent, /No se pudieron actualizar los agricultores/);
   assert.match(elements.get("toast").textContent, /puede estar desactualizada/);
-  assert.match(elements.get("gridAgricultores").innerHTML, /Anterior/);
+  assert.match(elements.get("sugerencias").innerHTML, /Anterior/);
   assert.equal(logs.length, 1);
   assert.match(logs[0][0], /actualizar los agricultores/);
 });
@@ -229,7 +229,7 @@ test("bascula shows farmers ordered by code, with uncoded farmers last", async (
     }),
   });
 
-  const html = elements.get("gridAgricultores").innerHTML;
+  const html = elements.get("sugerencias").innerHTML;
   const orden = [...html.matchAll(/data-agri="(\d+)"/g)].map((m) => m[1]);
   assert.deepEqual(orden, ["3", "4", "1", "2"]);
 });
@@ -239,31 +239,41 @@ test("bascula does not look up or print pallet labels while they are disabled", 
   const { elements, logs } = await loadBasculaWithLabelError(
     { message: "offline", code: "NETWORK" }, false, {}, { etiquetas: false, rpcCalls });
 
-  assert.equal(rpcCalls.includes("bascula_palets"), false);
+  // Solo la carga para pintar los palets de abajo, no la de las etiquetas.
+  assert.equal(rpcCalls.filter((n) => n === "bascula_palets").length, 1);
   assert.doesNotMatch(elements.get("toast")?.textContent || "", /palets completos/);
   assert.equal(logs.length, 0);
 });
 
-async function tarjetasDePalets(etiquetas) {
+async function tarjetasDePalets(etiquetas, extra = {}) {
   const palets = {
     cajas_por_palet: 60,
     en_camara: 0,
     palets: [{ id: 9, codigo: "P-9", secuencia: 9, num_cajas: 20, lineas: [] }],
+    ...extra,
   };
   const { elements } = await loadBasculaWithLabelError(null, false, {
     bascula_palets: async () => ({ data: palets, error: null }),
   }, { etiquetas });
-  elements.get("btnVista").dispatch("click");
   await flush();
-  return elements.get("listaPalets").innerHTML;
+  return { html: elements.get("listaPalets").innerHTML, resumen: elements.get("paletsResumen").innerHTML };
 }
 
 test("bascula hides the pallet label button while labels are disabled", async () => {
-  const html = await tarjetasDePalets(false);
+  const { html } = await tarjetasDePalets(false);
   assert.match(html, /P-9/);
   assert.doesNotMatch(html, /Imprimir etiqueta/);
 });
 
 test("bascula shows the pallet label button when labels are enabled", async () => {
-  assert.match(await tarjetasDePalets(true), /data-etiqueta="9"/);
+  assert.match((await tarjetasDePalets(true)).html, /data-etiqueta="9"/);
+});
+
+test("bascula shows the pallets on the same screen without a separate view, and boxes outside any pallet", async () => {
+  const sin = await tarjetasDePalets(false, { sin_palet: 0 });
+  assert.match(sin.html, /P-9/);
+  assert.doesNotMatch(sin.resumen, /"palets-dato dato-sin-palet"/);
+
+  const con = await tarjetasDePalets(false, { sin_palet: 14 });
+  assert.match(con.resumen, /"palets-dato dato-sin-palet"[\s\S]*<b>14<\/b><span>sin palet/);
 });

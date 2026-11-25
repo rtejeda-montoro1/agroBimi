@@ -7,10 +7,7 @@
 
 body.bascula { min-height: 100vh; }
 body.bascula:not(.authed) .bascula-cab,
-body.bascula:not(.authed) .bascula-main,
-body.bascula:not(.authed) .bascula-palets,
-.bascula-main[hidden],
-.bascula-palets[hidden] { display: none; }
+body.bascula:not(.authed) .bascula-main { display: none; }
 
 /* ---- Cabecera ---- */
 .bascula-cab {
@@ -54,20 +51,39 @@ body.bascula:not(.authed) .bascula-palets,
   border: 1px solid rgba(255, 255, 255, .4);
 }
 
-/* ---- Distribución: en horizontal tres columnas, en vertical apiladas ---- */
+/* ---- Distribución ----
+   Pensada para una Surface 3 en horizontal (unos 1280 × 850): tres
+   columnas a toda la altura de la pantalla (entrada | hoy | palets) y,
+   si algo no cabe, se desplaza solo esa columna, no la página. En
+   pantallas estrechas o bajas, todo apilado. */
 .bascula-main {
   display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, .9fr);
-  gap: 14px;
-  padding: 14px 16px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  padding: 12px 14px;
   align-items: start;
 }
-@media (max-width: 1100px) {
-  .bascula-main { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
-  .bascula-hoy { grid-column: 1 / -1; }
-}
-@media (max-width: 720px) {
-  .bascula-main { grid-template-columns: minmax(0, 1fr); }
+@media screen and (min-width: 1000px) and (min-height: 600px) {
+  body.bascula.authed {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    height: 100dvh;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .bascula-cab, .bascula-aviso { flex: 0 0 auto; }
+  .bascula-main {
+    flex: 1 1 auto;
+    min-height: 0;
+    grid-template-columns: minmax(340px, 1fr) minmax(0, .8fr) minmax(0, 1.2fr);
+    grid-template-rows: minmax(0, 1fr);
+    align-items: stretch;
+  }
+  .bascula-main > .bascula-panel { min-height: 0; overflow-y: auto; }
+  /* Hoy y palets: la cabecera fija y la lista se desplaza. */
+  .bascula-hoy, .bascula-palets { display: flex; flex-direction: column; overflow: hidden; }
+  .hoy-lista, .palets-lista { flex: 1 1 auto; min-height: 0; max-height: none; overflow-y: auto; }
 }
 
 .bascula-panel {
@@ -90,48 +106,70 @@ body.bascula:not(.authed) .bascula-palets,
   gap: 8px;
 }
 
-/* ---- 1 · Agricultores ---- */
+/* ---- Agricultor: buscador con lupa y lista desplegable ---- */
+.agri-buscador { position: relative; margin-bottom: 12px; }
+.agri-buscador[hidden] { display: none; }
+.agri-lupa {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 1.2rem;
+  pointer-events: none;
+}
 .bascula-buscar {
   width: 100%;
   font: inherit;
   font-size: 1.15rem;
-  padding: 14px;
+  min-height: 56px;
+  padding: 14px 14px 14px 46px;
+  border: 2px solid var(--primary);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--text);
+}
+.agri-sugerencias {
+  position: absolute;
+  z-index: 20;
+  left: 0;
+  right: 0;
+  top: calc(100% + 4px);
+  list-style: none;
+  margin: 0;
+  padding: 4px;
+  max-height: min(60vh, 420px);
+  overflow-y: auto;
+  background: var(--card);
   border: 1px solid var(--border);
   border-radius: 10px;
-  background: var(--bg);
-  color: var(--text);
-  margin-bottom: 12px;
+  box-shadow: var(--shadow);
 }
-.agri-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  gap: 8px;
-  max-height: calc(100vh - 230px);
-  overflow-y: auto;
-  padding: 2px;
-}
-.agri-tile {
+.agri-sugerencias[hidden] { display: none; }
+.agri-sugerencias .empty,
+.agri-sugerencias .error { padding: 12px; }
+.agri-opcion {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-  min-height: 72px;
+  align-items: baseline;
+  gap: 10px;
+  width: 100%;
+  min-height: 52px;
   padding: 10px 12px;
   text-align: left;
-  background: var(--bg);
+  background: transparent;
   color: var(--text);
-  border: 2px solid var(--border);
-  border-radius: 10px;
+  border-radius: 8px;
+  touch-action: manipulation;
 }
-.agri-tile-cod { font-size: .8rem; font-weight: 700; color: var(--primary); }
-.agri-tile-nombre { font-weight: 600; line-height: 1.2; overflow-wrap: anywhere; }
-.agri-tile.activo { border-color: var(--primary); background: rgba(37, 99, 235, .12); }
+.agri-opcion:hover,
+.agri-opcion:focus-visible { background: rgba(37, 99, 235, .1); }
+.agri-opcion-cod { font-size: .9rem; font-weight: 800; color: var(--primary); min-width: 3ch; }
+.agri-opcion-nombre { font-weight: 600; font-size: 1.05rem; overflow-wrap: anywhere; }
 
-/* ---- 2 · Ciclo y cajas ---- */
+/* ---- Agricultor elegido, ciclo y cajas ---- */
 .agri-elegido {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
+  align-items: center;
   gap: 4px 10px;
   min-height: 56px;
   padding: 10px 12px;
@@ -139,14 +177,15 @@ body.bascula:not(.authed) .bascula-palets,
   background: var(--bg);
   margin-bottom: 12px;
 }
+.agri-elegido[hidden] { display: none; }
 .agri-elegido-cod { font-weight: 800; color: var(--primary); font-size: 1.1rem; }
 .agri-elegido-nombre { font-weight: 700; font-size: 1.3rem; flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
 .agri-elegido-hoy { color: var(--muted); font-size: .85rem; }
-.agri-elegido-vacio { color: var(--muted); font-size: 1.1rem; }
+.agri-elegido .btn-ghost { padding: 10px 14px; }
 
-.ciclos { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
+.ciclos { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 10px; }
 .ciclo-btn {
-  padding: 16px 6px;
+  padding: 12px 6px;
   font-size: 1.1rem;
   font-weight: 700;
   background: var(--bg);
@@ -172,16 +211,16 @@ body.bascula:not(.authed) .bascula-palets,
   touch-action: manipulation;
 }
 .cajas-display small { align-self: flex-start; color: var(--muted); font-size: .85rem; font-weight: 600; }
-.cajas-display span { font-size: 2.6rem; font-weight: 800; line-height: 1.1; }
-.cajas-display[data-campo="vacias"] span { font-size: 2rem; }
+.cajas-display span { font-size: 2.3rem; font-weight: 800; line-height: 1.1; }
+.cajas-display[data-campo="vacias"] span { font-size: 1.8rem; }
 .cajas-display.vacio span { color: var(--muted); }
 .cajas-display.activo { border-color: var(--primary); box-shadow: 0 0 0 2px rgba(37, 99, 235, .25); }
 .cajas-display.activo small { color: var(--primary); }
 
-.teclado { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
+.teclado { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 8px; }
 .teclado button {
-  padding: 16px 0;
-  font-size: 1.6rem;
+  padding: 11px 0;
+  font-size: 1.5rem;
   font-weight: 700;
   background: var(--bg);
   color: var(--text);
@@ -192,12 +231,14 @@ body.bascula:not(.authed) .bascula-palets,
 .teclado button:active { background: var(--border); }
 .teclado .tecla-sec { color: var(--muted); }
 
-.bascula-error { color: var(--danger); font-weight: 600; min-height: 1.4em; margin-bottom: 6px; }
+.bascula-error { color: var(--danger); font-weight: 600; min-height: 1.4em; margin-bottom: 4px; }
 
-.botones-registrar { display: grid; grid-template-columns: 1fr; gap: 8px; }
+/* «Registrar» a lo ancho; debajo, los otros dos uno al lado del otro. */
+.botones-registrar { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.botones-registrar #btnRegistrar { grid-column: 1 / -1; }
 .btn-registrar {
   width: 100%;
-  padding: 20px;
+  padding: 16px;
   font-size: 1.35rem;
   font-weight: 800;
   background: var(--success);
@@ -206,9 +247,11 @@ body.bascula:not(.authed) .bascula-palets,
   touch-action: manipulation;
 }
 .btn-registrar:disabled { background: var(--border); color: var(--muted); }
-.btn-registrar-imp { padding: 14px; font-size: 1.05rem; background: var(--primary); }
+.btn-registrar-sin-palet, .btn-registrar-imp { padding: 12px 8px; font-size: 1rem; line-height: 1.2; }
+.btn-registrar-sin-palet { background: var(--danger); }
+.btn-registrar-imp { background: var(--primary); }
 
-/* ---- 3 · Hoy ---- */
+/* ---- Hoy ---- */
 .hoy-total { text-transform: none; letter-spacing: 0; color: var(--text); }
 .hoy-lista {
   list-style: none;
@@ -233,6 +276,7 @@ body.bascula:not(.authed) .bascula-palets,
 .hoy-ciclo { color: var(--muted); font-size: .8rem; }
 .hoy-cajas { font-weight: 800; font-variant-numeric: tabular-nums; min-width: 3ch; text-align: right; }
 .hoy-vacias { display: block; font-size: .72rem; font-weight: 600; color: var(--muted); white-space: nowrap; }
+.hoy-sin-palet { display: block; font-size: .72rem; font-weight: 700; color: var(--danger); white-space: nowrap; }
 
 /* Entradas guardadas en la tablet y aún sin enviar / rechazadas. */
 .hoy-nota { grid-column: 1 / -1; font-size: .8rem; color: var(--muted); }
@@ -244,69 +288,50 @@ body.bascula:not(.authed) .bascula-palets,
 .hoy-antiguas { padding: 8px 0; color: #b45309; font-weight: 600; }
 .hoy-pendiente, .hoy-rechazada { padding-left: 6px; padding-right: 6px; border-radius: 6px; }
 
-/* ---- Vista de palets ----
-   Una tarjeta por palet: los que se están llenando o, con el botón, los
-   completados hoy. */
-.bascula-palets { padding: 14px 16px; }
-.palets-barra {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
-  margin-bottom: 14px;
-}
-/* Resumen: tres recuadros en su propia fila, debajo de los botones. */
+/* ---- Palets ----
+   Columna de la derecha. Arriba los filtros y cuatro recuadros pequeños
+   (2 × 2) con el estado de la cámara; debajo, una tarjeta por palet: los
+   que se están llenando o, con el botón, los completados hoy. */
+.palets-barra { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; flex: 0 0 auto; }
 .palets-resumen {
-  order: 10;
-  flex: 1 1 100%;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
 }
 .palets-dato {
   --acento: var(--primary);
   display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 14px;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 10px;
   background: var(--card);
   border: 1px solid var(--border);
-  border-left: 6px solid var(--acento);
-  border-radius: 12px;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, .08);
+  border-left: 5px solid var(--acento);
+  border-radius: 10px;
+  min-width: 0;
 }
 .palets-dato.dato-completos { --acento: var(--success); }
 .palets-dato.dato-paletizadas { --acento: var(--primary); }
 .palets-dato.dato-sueltas { --acento: #d97706; }
-.palets-dato-icono {
-  flex: 0 0 auto;
-  display: grid;
-  place-items: center;
-  width: 42px;
-  height: 42px;
-  border-radius: 50%;
-  font-size: 1.25rem;
-  color: var(--acento);
-  background: color-mix(in srgb, var(--acento) 15%, transparent);
-}
+.palets-dato.dato-sin-palet { --acento: var(--danger); background: rgba(220, 38, 38, .08); }
+.palets-dato.dato-sin-palet-cero { --acento: var(--muted); }
 .palets-dato b {
-  display: block;
-  font-size: 1.7rem;
+  font-size: 1.35rem;
   font-weight: 800;
-  line-height: 1.1;
+  line-height: 1.15;
   color: var(--acento);
   font-variant-numeric: tabular-nums;
 }
-.palets-dato div span { display: block; font-size: .88rem; color: var(--muted); line-height: 1.25; }
-.palets-actualizado { margin-left: auto; font-size: .85rem; color: var(--muted); }
-.palets-actualizado.sin-red { color: #b45309; font-weight: 600; }
-.palets-barra .btn-ghost { padding: 12px 18px; font-size: 1rem; }
-/* En progreso / Completos hoy: dos botones como los del ciclo. */
-.palets-filtro { display: flex; gap: 8px; }
+.palets-dato span { font-size: .8rem; color: var(--muted); line-height: 1.2; }
+.bascula-paso .palets-actualizado { text-transform: none; letter-spacing: 0; font-weight: 600; }
+.palets-actualizado.sin-red { color: #b45309; }
+/* En progreso / Completos hoy: dos botones como los del ciclo, y ⟳. */
+.palets-filtro { display: flex; gap: 6px; }
+.palets-filtro .btn-ghost { flex: 0 0 auto; padding: 8px 14px; font-size: 1.15rem; }
 .palets-filtro-btn {
-  padding: 12px 18px;
-  font-size: 1rem;
+  flex: 1 1 0;
+  padding: 10px 8px;
+  font-size: .95rem;
   font-weight: 700;
   background: var(--bg);
   color: var(--text);
@@ -316,18 +341,17 @@ body.bascula:not(.authed) .bascula-palets,
 .palets-filtro-btn.activo { background: var(--primary); border-color: var(--primary); color: #fff; }
 .palets-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 8px;
 }
 .palet-card {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
   background: var(--card);
   border: 2px solid var(--border);
-  border-radius: 14px;
-  padding: 14px;
-  box-shadow: var(--shadow);
+  border-radius: 12px;
+  padding: 10px;
 }
 .palet-card.completo { border-color: rgba(22, 163, 74, .55); }
 /* El que aún se llena tiene que verse a simple vista: borde discontinuo
@@ -335,25 +359,25 @@ body.bascula:not(.authed) .bascula-palets,
 .palet-card.incompleto { border-style: dashed; border-color: rgba(217, 119, 6, .7); }
 .palet-card-estado {
   margin: -2px 0 2px;
-  padding: 6px 10px;
+  padding: 4px 8px;
   border-radius: 8px;
   background: rgba(217, 119, 6, .14);
   color: #b45309;
-  font-size: .95rem;
+  font-size: .8rem;
   font-weight: 800;
   letter-spacing: .03em;
   text-transform: uppercase;
   text-align: center;
 }
 .palet-card-cab { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
-.palet-card-num { font-size: 1.35rem; font-weight: 800; }
+.palet-card-num { font-size: 1.15rem; font-weight: 800; }
 .palet-card-cod { font-size: .8rem; color: var(--muted); }
 .palet-barra-cajas { height: 10px; border-radius: 5px; background: var(--bg); overflow: hidden; }
 .palet-barra-cajas span { display: block; height: 100%; background: #d97706; }
 .palet-card.completo .palet-barra-cajas span { background: var(--success); }
 .palet-card-total { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: .9rem; }
 .palet-card-total b { font-size: 1.1rem; font-variant-numeric: tabular-nums; }
-.palet-card-agris { list-style: none; margin: 0; padding: 0; font-size: .92rem; flex: 1 1 auto; }
+.palet-card-agris { list-style: none; margin: 0; padding: 0; font-size: .85rem; flex: 1 1 auto; }
 .palet-card-agris li { display: flex; justify-content: space-between; gap: 8px; padding: 3px 0; border-bottom: 1px solid var(--border); }
 .palet-card-agris li:last-child { border-bottom: none; }
 .palet-card-agris b { font-variant-numeric: tabular-nums; }

@@ -245,6 +245,7 @@
     App.$("paletsCompletos").textContent = App.fmtNum(completos.length);
     App.$("paletsCajasListas").textContent =
       App.fmtNum(completos.reduce((s, p) => s + App.num(p.num_cajas), 0));
+    pintarAvisoSinPalet(entradas);
 
     // Cámara por agricultor: lo que no está en un palet completo ni salido.
     const porAgri = {};
@@ -267,6 +268,24 @@
           <td class="col-num">${App.fmtNum(f.sueltas)}</td>
           <td class="col-num"><b>${App.fmtNum(f.total)}</b></td>
         </tr>`).join("");
+  }
+
+  // Cajas en la cámara que no están en ningún palet: las de «Registrar sin
+  // paletización» en la báscula (o las que se han quitado a mano de un
+  // palet). No salen hasta que alguien las meta en uno con «Nuevo palet»
+  // o «Editar».
+  function pintarAvisoSinPalet(entradas) {
+    const sueltas = entradas.filter((x) => App.num(x.sin_palet) > 0);
+    const cajas = sueltas.reduce((s, x) => s + App.num(x.sin_palet), 0);
+    const agricultores = new Set(sueltas.map((x) => x.agricultor_id)).size;
+    const aviso = App.$("paletsAvisoSinPalet");
+    aviso.hidden = cajas === 0;
+    aviso.innerHTML = cajas === 0 ? "" :
+      `⚠ Hay <b>${App.fmtNum(cajas)} ${cajas === 1 ? "caja" : "cajas"}</b> en cámara que no
+       ${cajas === 1 ? "pertenece" : "pertenecen"} a ningún palet
+       (${agricultores === 1 ? "1 agricultor" : `${App.fmtNum(agricultores)} agricultores`}; columna
+       «Sin palet» de «Cajas en cámara por agricultor»). Para que puedan salir, mételas en un palet
+       con «Nuevo palet» o «Editar».`;
   }
 
   function pintarPalets() {

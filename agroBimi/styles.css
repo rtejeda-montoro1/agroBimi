@@ -827,6 +827,11 @@ button:disabled {
   margin: 0 0 14px;
   font-size: .85rem;
 }
+.aviso-campana.aviso-sin-palet {
+  background: rgba(220, 38, 38, .1);
+  border-color: rgba(220, 38, 38, .45);
+  font-size: .95rem;
+}
 
 /* =================================================================== */
 /*  Documentos imprimibles (factura)                                   */

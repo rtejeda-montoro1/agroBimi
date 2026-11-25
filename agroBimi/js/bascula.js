@@ -1,11 +1,14 @@
 // =====================================================================
 //  Puesto de la báscula (bascula.html)
-//  Página independiente de la app principal: solo apunta las cajas que
-//  entra cada agricultor y las vacías que se lleva.
+//  Página independiente de la app principal: apunta las cajas que entra
+//  cada agricultor y las vacías que se lleva, y enseña debajo los palets
+//  (solo lectura).
 //  Toda la escritura pasa por las funciones bascula_* de schema.sql
 //  (sección 14), que validan los datos.
 //  Cada entrada es una pesada; en el servidor, las del mismo día de un
 //  agricultor (misma campaña y ciclo) se suman en un único registro.
+//  «Registrar sin paletización»: las cajas entran en la cámara pero no se
+//  reparten en palets (la oficina las ve en «Stock en cámara»).
 //
 //  Sin red:
 //  Cada entrada se guarda PRIMERO en la tablet (cola de "pendientes" en
@@ -58,6 +61,7 @@
     hoy: [],           // entradas de hoy ya guardadas en el servidor
     pendientes: [],    // entradas guardadas en la tablet sin enviar todavía
     elegido: null,     // agricultor seleccionado
+    buscando: false,   // con agricultor elegido, se ha pulsado «Cambiar»
     ciclo: "1",        // nunca vacío: por defecto el ciclo 1
     cajas: "",       // cajas entradas (texto del teclado)
     vacias: "",        // cajas vacías que se lleva ("" = 0)
@@ -67,7 +71,6 @@
     sinRed: !navigator.onLine,
     falloRedEn: 0,     // cuándo falló la red por última vez (Date.now())
     datosDeCache: false,
-    vista: "bascula",  // "bascula" o "palets"
     palets: null,      // lo último que devolvió bascula_palets()
     paletsJSON: "",    // el mismo dato en texto, para no repintar si no cambia
     paletsHora: null,  // cuándo se recibieron
@@ -323,7 +326,7 @@
     }
     state.datosDeCache = false;
     guardarCache();
-    pintarAgricultores();
+    pintarSugerencias();
     pintarEntrada();
   }
 
@@ -366,15 +369,16 @@
       // Sin nada con lo que trabajar: se reintenta al volver la red y
       // cada minuto, para no tener que recargar la página a mano.
       state.cargaFallida = true;
-      $("gridAgricultores").innerHTML =
-        `<div class="error">No se pudieron cargar los datos.<br>${escapar(error?.message)}<br>` +
-        "¿Hay conexión? ¿Se ha ejecutado el último schema.sql en Supabase?</div>";
+      $("sugerencias").innerHTML =
+        `<li class="error">No se pudieron cargar los datos.<br>${escapar(error?.message)}<br>` +
+        "¿Hay conexión? ¿Se ha ejecutado el último schema.sql en Supabase?</li>";
+      $("sugerencias").hidden = false;
       return;
     }
     // Sin red pero con datos guardados en la tablet: se puede seguir.
     state.sinRed = true;
     pintarCampanas();
-    pintarAgricultores();
+    pintarSugerencias();
     pintarHoy();
     pintarEntrada();
   }
@@ -423,6 +427,7 @@
           p_cajas: p.cajas,
           p_vacias: p.vacias || 0,
           p_pesada_en: p.pesada_en,
+          p_paletizar: p.paletizar !== false,
         });
 
         if (error && !esRechazo(error)) {
@@ -448,6 +453,8 @@
     if (enviadas) {
       if (state.datosDeCache) cargarTodo();
       else cargarHoy().catch((error) => notificarErrorActualizacion("las entradas de hoy", error));
+      // Las pesadas enviadas han llenado palets: que se vea abajo.
+      cargarPalets();
       etiquetasDePaletsCompletados().catch(notificarErrorEtiquetas);
       // Lo que se apuntó mientras se enviaba sale ya, sin esperar al
       // siguiente reintento (fuera de este envío, que aún tiene el turno).
@@ -470,18 +477,26 @@
     return state.agricultores.filter((a) => normalizar(a.nombre).includes(q));
   }
 
-  function pintarAgricultores() {
+  // Lista desplegable del buscador. Se pinta siempre; se ve mientras se
+  // busca (abrirSugerencias / cerrarSugerencias).
+  function pintarSugerencias() {
     const lista = agricultoresFiltrados();
-    const grid = $("gridAgricultores");
-    if (!lista.length) {
-      grid.innerHTML = '<div class="empty">Ningún agricultor coincide con la búsqueda.</div>';
-      return;
-    }
-    grid.innerHTML = lista.map((a) => `
-      <button type="button" class="agri-tile${state.elegido?.id === a.id ? " activo" : ""}" data-agri="${a.id}">
-        <span class="agri-tile-cod">${fmtCodigo(a.codigo)}</span>
-        <span class="agri-tile-nombre">${escapar(a.nombre)}</span>
-      </button>`).join("");
+    $("sugerencias").innerHTML = lista.length
+      ? lista.map((a) => `
+      <li><button type="button" class="agri-opcion" role="option" data-agri="${a.id}">
+        <span class="agri-opcion-cod">${fmtCodigo(a.codigo)}</span>
+        <span class="agri-opcion-nombre">${escapar(a.nombre)}</span>
+      </button></li>`).join("")
+      : '<li class="empty">Ningún agricultor coincide con la búsqueda.</li>';
+  }
+
+  function abrirSugerencias() {
+    pintarSugerencias();
+    $("sugerencias").hidden = false;
+  }
+
+  function cerrarSugerencias() {
+    $("sugerencias").hidden = true;
   }
 
   // Entradas de hoy: las enviadas y las que siguen en la tablet. Durante un
@@ -511,11 +526,17 @@
 
   function pintarEntrada() {
     const a = state.elegido;
+    // Sin agricultor (o al pulsar «Cambiar») se ve el buscador; con él, su
+    // nombre y lo que lleva hoy.
+    const buscar = !a || state.buscando;
+    $("agriBuscador").hidden = !buscar;
+    $("agriElegido").hidden = buscar;
     $("agriElegido").innerHTML = a
       ? `<span class="agri-elegido-cod">${fmtCodigo(a.codigo)}</span>
          <span class="agri-elegido-nombre">${escapar(a.nombre)}</span>
-         <span class="agri-elegido-hoy">Hoy: ${cajasHoyDe(a.id)} cajas</span>`
-      : '<span class="agri-elegido-vacio">Elige un agricultor</span>';
+         <span class="agri-elegido-hoy">Hoy: ${cajasHoyDe(a.id)} cajas</span>
+         <button type="button" class="btn-ghost" data-cambiar="1" title="Elegir otro agricultor">🔍 Cambiar</button>`
+      : "";
 
     document.querySelectorAll(".ciclo-btn").forEach((b) => {
       const activo = b.dataset.ciclo === state.ciclo;
@@ -536,6 +557,7 @@
     const n = (parseInt(state.cajas, 10) || 0) + (parseInt(state.vacias, 10) || 0);
     const listo = Boolean(a && state.ciclo && campanaId() && n >= 1);
     $("btnRegistrar").disabled = !listo;
+    $("btnRegistrarSinPalet").disabled = !listo;
     $("btnRegistrarImprimir").disabled = !listo;
   }
 
@@ -549,7 +571,8 @@
       <span class="hoy-agri"><b>${fmtCodigo(h.codigo)}</b> ${escapar(h.nombre)}</span>
       <span class="hoy-ciclo">C${escapar(h.ciclo ?? "—")}</span>
       <span class="hoy-cajas">${h.cajas || 0}${h.vacias
-        ? `<small class="hoy-vacias" title="Vacías que se lleva">−${h.vacias} vacías</small>` : ""}</span>
+        ? `<small class="hoy-vacias" title="Vacías que se lleva">−${h.vacias} vacías</small>` : ""}${h.paletizar === false
+        ? '<small class="hoy-sin-palet" title="Registrada sin paletización: sus cajas no van a ningún palet">sin palet</small>' : ""}</span>
       <button type="button" class="btn-edit btn-sm" data-imprimir="${escapar(h.uuid || h.client_uuid || h.id)}"
         title="Imprimir justificante" aria-label="Imprimir justificante">🖨</button>`;
 
@@ -752,7 +775,7 @@
   }
 
   // ------------------------------------------------------------------
-  //  Palets (vista aparte, solo lectura)
+  //  Palets (debajo, solo lectura)
   //  Los palets sin salida, para ver cómo van y pegar su etiqueta. Se
   //  corrigen desde la oficina (js/palets.js). La etiqueta es la misma
   //  que allí: sus estilos .etq están en styles.css.
@@ -775,12 +798,12 @@
   function pintarActualizado() {
     const sinRed = state.paletsFallo || !navigator.onLine;
     $("paletsActualizado").textContent = state.paletsHora
-      ? `Actualizado a las ${hora(state.paletsHora)}${sinRed ? " · sin conexión" : ""}`
+      ? `Act. ${hora(state.paletsHora)}${sinRed ? " · sin conexión" : ""}`
       : sinRed ? "Sin conexión" : "";
     $("paletsActualizado").classList.toggle("sin-red", sinRed);
   }
 
-  // manual = lo ha pedido alguien (botón o entrar en la vista). El refresco
+  // manual = lo ha pedido alguien (botón o al entrar). El refresco
   // automático no avisa de fallos ni lo intenta sin red: no llenaría la
   // pantalla de avisos cada minuto.
   async function cargarPalets(manual = false) {
@@ -831,7 +854,7 @@
         <li><span>${escapar(l.nombre)}</span><b>${l.cajas}</b></li>`).join("");
     return `
       <article class="palet-card${completo ? " completo" : " incompleto"}">
-        ${completo ? "" : '<div class="palet-card-estado">⏳ En progreso · Incompleto</div>'}
+        ${completo ? "" : '<div class="palet-card-estado">⏳ En progreso</div>'}
         <div class="palet-card-cab">
           <span class="palet-card-num">Palet nº ${escapar(p.secuencia ?? "—")}</span>
           <span class="palet-card-cod">${escapar(p.codigo || "")}</span>
@@ -860,16 +883,22 @@
     const completos = palets.filter(paletCompleto);
     const cajasCompletos = completos.reduce((s, p) => s + (p.num_cajas || 0), 0);
 
-    const dato = (clase, icono, numero, texto) => `
-      <div class="palets-dato ${clase}">
-        <span class="palets-dato-icono" aria-hidden="true">${icono}</span>
-        <div><b>${numero}</b><span>${texto}</span></div>
+    // Cuatro recuadros cortos (2 × 2): la columna es estrecha. La
+    // explicación larga va en el title.
+    const dato = (clase, numero, texto, titulo) => `
+      <div class="palets-dato ${clase}" title="${escapar(titulo)}">
+        <b>${numero}</b><span>${texto}</span>
       </div>`;
+    const sinPalet = state.palets?.sin_palet || 0;
     $("paletsResumen").innerHTML =
-      dato("dato-completos", "✔", completos.length,
-        completos.length === 1 ? "palet completo" : "palets completos") +
-      dato("dato-paletizadas", "▦", cajasCompletos, "cajas en cámara paletizadas pendientes de salir") +
-      dato("dato-sueltas", "⏳", state.palets?.en_camara ?? 0, "cajas en cámara sin palet completo");
+      dato("dato-completos", completos.length, completos.length === 1 ? "palet completo" : "palets completos",
+        "Palets completos que esperan salida") +
+      dato("dato-paletizadas", cajasCompletos, "cajas listas",
+        "Cajas en cámara en palets completos, pendientes de salir") +
+      dato("dato-sueltas", state.palets?.en_camara ?? 0, "en cámara",
+        "Cajas en cámara que no están en un palet completo") +
+      dato(sinPalet > 0 ? "dato-sin-palet" : "dato-sin-palet-cero", sinPalet, "sin palet",
+        "Cajas en cámara que no están en ningún palet (registradas sin paletización)");
 
     const verHoy = state.paletsFiltro === "hoy";
     document.querySelectorAll("#paletsFiltro [data-filtro]").forEach((b) => {
@@ -968,20 +997,6 @@
     toast("No se pudieron comprobar los palets completos. Revisa la conexión.");
   }
 
-  function cambiarVista(vista) {
-    state.vista = vista;
-    const palets = vista === "palets";
-    document.querySelector(".bascula-main").hidden = palets;
-    $("vistaPalets").hidden = !palets;
-    $("btnVista").textContent = palets ? "⚖ Báscula" : "📦 Palets";
-    // Al entrar se empieza siempre por los que están en progreso.
-    if (palets) {
-      state.paletsFiltro = "progreso";
-      if (state.palets) pintarPalets();
-      cargarPalets(true);
-    }
-  }
-
   // ------------------------------------------------------------------
   //  Acciones
   // ------------------------------------------------------------------
@@ -996,11 +1011,29 @@
       state.ciclo = ["1", "2", "3"].includes(a.ultimo_ciclo) ? a.ultimo_ciclo : "1";
     }
     state.elegido = a;
+    state.buscando = false;
     state.campo = "cajas";
+    $("buscar").value = "";
+    cerrarSugerencias();
     $("errorEntrada").textContent = "";
-    pintarAgricultores();
     pintarEntrada();
-    $("panelEntrada").scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+
+  // «Cambiar»: vuelve el buscador sin perder lo tecleado; con Escape (o
+  // eligiendo el mismo) se queda el que estaba.
+  function cambiarAgricultor() {
+    state.buscando = true;
+    pintarEntrada();
+    abrirSugerencias();
+    $("buscar").focus?.();
+  }
+
+  function cancelarCambio() {
+    if (!state.elegido) return;
+    state.buscando = false;
+    $("buscar").value = "";
+    cerrarSugerencias();
+    pintarEntrada();
   }
 
   function pulsarTecla(tecla) {
@@ -1024,7 +1057,10 @@
       ahora - new Date(h.creado).getTime() < MARGEN_DUPLICADO_MS);
   }
 
-  function registrar({ imprimir = false } = {}) {
+  // paletizar = false: «Registrar sin paletización». Las cajas cuentan
+  // igual para el agricultor, pero en el servidor no se meten en ningún
+  // palet.
+  function registrar({ imprimir = false, paletizar = true } = {}) {
     const a = state.elegido;
     const cajas = parseInt(state.cajas, 10) || 0;
     const vacias = parseInt(state.vacias, 10) || 0;
@@ -1047,6 +1083,7 @@
       pesada_en: new Date().toISOString(),
       error: null,
     };
+    if (!paletizar) entrada.paletizar = false;
 
     // Primero a la tablet; el envío viene después y puede fallar sin
     // que se pierda nada.
@@ -1057,15 +1094,17 @@
     // también lo que lleva hoy en total.
     const totalHoy = cajasHoyDe(a.id);
     toast(`✓ ${a.nombre} · Ciclo ${state.ciclo} · ${resumenCajas({ cajas, vacias })}` +
-      (totalHoy !== cajas ? ` · hoy ${totalHoy} cajas` : ""));
+      (totalHoy !== cajas ? ` · hoy ${totalHoy} cajas` : "") +
+      (paletizar ? "" : " · sin paletizar"));
     // Listo para el siguiente agricultor.
     state.elegido = null;
+    state.buscando = false;
     state.ciclo = "1";
     state.cajas = "";
     state.vacias = "";
     state.campo = "cajas";
     $("buscar").value = "";
-    pintarAgricultores();
+    pintarSugerencias();
     pintarEntrada();
     pintarHoy();
     pintarEstadoRed();
@@ -1139,6 +1178,7 @@
       toast(data ? "Entrada anulada" : "No se puede anular: corrígela desde la oficina");
     }
     cargarHoy().catch((error) => notificarErrorActualizacion("las entradas de hoy", error));
+    if (data) cargarPalets();
   }
 
   function descartarPendiente(uuid) {
@@ -1224,8 +1264,8 @@
       state.paletsHora = null;
       state.paletsFallo = false;
       state.paletsReq++;
+      state.paletsFiltro = "progreso";
       state.cargaFallida = false;
-      cambiarVista("bascula");
       return;
     }
     if (!state.cargado) {
@@ -1235,6 +1275,7 @@
       cargarTodo()
         .then(() => etiquetasDePaletsCompletados({ soloAnotar: true }).catch(notificarErrorEtiquetas))
         .then(enviarPendientes);
+      cargarPalets(true);
     }
     temporizadores.push(
       setInterval(() => {
@@ -1245,7 +1286,7 @@
         notificarErrorActualizacion("los agricultores", error)), REFRESCO_AGRICULTORES_MS),
       setInterval(enviarPendientes, REINTENTO_ENVIO_MS),
       setInterval(pintarFecha, REFRESCO_HOY_MS),
-      setInterval(() => { if (state.vista === "palets") cargarPalets(); }, REFRESCO_HOY_MS),
+      setInterval(() => cargarPalets(), REFRESCO_HOY_MS),
     );
   }
 
@@ -1285,8 +1326,18 @@
       cargarAgricultores().catch((error) => notificarErrorActualizacion("los agricultores", error));
     });
 
-    $("buscar").addEventListener("input", pintarAgricultores);
+    $("buscar").addEventListener("input", abrirSugerencias);
+    $("buscar").addEventListener("focus", abrirSugerencias);
+    // Al salir del buscador se cierra la lista; con un poco de margen para
+    // que el toque en un agricultor de la lista llegue antes.
+    $("buscar").addEventListener("blur", () => setTimeout(cerrarSugerencias, 200));
     $("buscar").addEventListener("keydown", (e) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        if (state.elegido) cancelarCambio();
+        else { $("buscar").value = ""; abrirSugerencias(); }
+        return;
+      }
       if (e.key !== "Enter") return;
       e.preventDefault();
       const lista = agricultoresFiltrados();
@@ -1296,9 +1347,13 @@
       }
     });
 
-    $("gridAgricultores").addEventListener("click", (e) => {
-      const tile = e.target.closest("[data-agri]");
-      if (tile) elegirAgricultor(parseInt(tile.dataset.agri, 10));
+    $("sugerencias").addEventListener("click", (e) => {
+      const opcion = e.target.closest("[data-agri]");
+      if (opcion) elegirAgricultor(parseInt(opcion.dataset.agri, 10));
+    });
+
+    $("agriElegido").addEventListener("click", (e) => {
+      if (e.target.closest("[data-cambiar]")) cambiarAgricultor();
     });
 
     $("ciclos").addEventListener("click", (e) => {
@@ -1324,8 +1379,6 @@
     // de contador y Enter para registrar.
     document.addEventListener("keydown", (e) => {
       if (!document.body.classList.contains("authed")) return;
-      // En la vista de palets el teclado no apunta nada.
-      if (state.vista !== "bascula") return;
       if (e.target.matches("input, select, textarea")) return;
       if (/^\d$/.test(e.key)) pulsarTecla(e.key);
       else if (e.key === "Backspace") pulsarTecla("⌫");
@@ -1341,6 +1394,7 @@
     });
 
     $("btnRegistrar").addEventListener("click", () => registrar());
+    $("btnRegistrarSinPalet").addEventListener("click", () => registrar({ paletizar: false }));
     $("btnRegistrarImprimir").addEventListener("click", () => registrar({ imprimir: true }));
 
     $("hoyLista").addEventListener("click", (e) => {
@@ -1360,8 +1414,6 @@
       }
     });
 
-    $("btnVista").addEventListener("click", () =>
-      cambiarVista(state.vista === "palets" ? "bascula" : "palets"));
     $("btnRecargarPalets").addEventListener("click", () => cargarPalets(true));
     $("paletsFiltro").addEventListener("click", (e) => {
       const b = e.target.closest("[data-filtro]");
@@ -1382,11 +1434,11 @@
         enviarPendientes();
         cargarHoy().catch((error) => notificarErrorActualizacion("las entradas de hoy", error));
       }
-      if (state.vista === "palets") cargarPalets();
+      cargarPalets();
     });
     window.addEventListener("offline", () => {
       marcarSinRed();
-      if (state.vista === "palets") pintarActualizado();
+      pintarActualizado();
     });
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState !== "visible") return;

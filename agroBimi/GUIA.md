@@ -164,7 +164,8 @@ factura).
 cajas, imprimir su etiqueta y darles salida con un albarán.
 
 **Cómo funciona (no hay que hacer nada):** todas las cajas que pasan por la
-báscula van a la cámara y **se reparten solas en palets** al pesar. Los
+báscula van a la cámara y **se reparten solas en palets** al pesar, salvo
+las que se apuntan con «Registrar sin paletización» (ver abajo). Los
 registros que se apuntan a mano en la oficina **no** entran en la cámara ni
 en los palets: eso solo se hace desde la báscula. Ejemplo:
 el agricultor 1 trae 30 cajas y el 2 trae 40: el palet 1 se llena con 30 + 30
@@ -182,6 +183,11 @@ y las 10 que sobran abren el palet 2.
 
 - Arriba: cajas en cámara, palets completos sin salida y cajas listas para
   salir. «Cajas en cámara por agricultor» lo desglosa.
+- **Aviso rojo de cajas sin palet:** si hay cajas en la cámara que no están
+  en ningún palet (las de «Registrar sin paletización» en la báscula, o las
+  que se han quitado de un palet al editarlo), sale arriba cuántas son y de
+  cuántos agricultores. Se ven en la columna «Sin palet» del desglose. No
+  pueden salir hasta meterlas en un palet con «+ Nuevo palet» o «Editar».
 - **🏷 Etiqueta** en cada palet (o marca varios y «🏷 Imprimir etiquetas»):
   sale en la impresora de pegatinas, una etiqueta por palet, con cada
   agricultor y sus cajas y la fecha de llenado. Arriba a la izquierda va
@@ -242,16 +248,25 @@ añadirla a la pantalla de inicio de la tablet.
 **Apuntar una entrada:**
 
 1. Arriba, comprueba la **campaña** (se queda recordada en la tablet).
-2. Toca el **agricultor**, o escribe su código o nombre en el buscador
-   (con el código y «Intro» se elige directamente).
+2. En el buscador con la lupa 🔍 escribe el **código o el nombre** del
+   agricultor y tócalo en la lista (con el código y «Intro» se elige
+   directamente). Para elegir otro, pulsa «🔍 Cambiar».
 3. Toca el **ciclo**. Se propone el último que se le apuntó.
 4. Teclea las **cajas entradas**. Si se lleva cajas vacías, toca el
    recuadro **«Vacías que se lleva»** y teclea cuántas (si no, se queda en 0).
    El teclado escribe en el recuadro marcado en azul. Se puede apuntar solo
    vacías, sin cajas entradas.
-5. Pulsa «✓ Registrar», o «🖨 Registrar e imprimir» si el agricultor
-   tiene que firmar el justificante. Sale un aviso verde y la pantalla
-   queda lista para el siguiente.
+5. Pulsa uno de los tres botones:
+   - **«✓ Registrar»** (verde): lo normal. Las cajas se meten solas en los
+     palets.
+   - **«✕ Registrar sin paletización»** (rojo): las cajas entran en la
+     cámara pero **no se meten en ningún palet**. En la oficina salen en el
+     aviso rojo de «📦 Stock en cámara» para meterlas a mano en un palet. En
+     la lista **Hoy** salen marcadas «sin palet».
+   - **«🖨 Registrar e imprimir»**: como «Registrar», y además imprime el
+     justificante para que firme el agricultor.
+
+   Sale un aviso verde y la pantalla queda lista para el siguiente.
 
 **Justificante:** salen **dos copias**, cada una en su página (en la
 impresora de tickets, dos tickets seguidos, sin cortar nada): la 1 es la
@@ -263,9 +278,15 @@ PDF, el archivo ya se llama con el agricultor, la fecha y la hora (por
 ejemplo «Justificante José Pérez 2026-10-08 10.32.pdf»). La primera vez,
 en el diálogo de impresión elige la impresora y que se recuerde.
 
+**Palets:** a la derecha, en la misma pantalla, se ve cómo va cada palet (en
+progreso o completos hoy) y se actualiza solo cada minuto y después de
+cada entrada. Arriba hay cuatro recuadros con el estado de la cámara: palets
+completos, cajas listas para salir, cajas en cámara y cajas **sin palet**
+(en rojo si hay alguna).
+
 **Etiquetas de palet:** no se imprimen en la báscula (su impresora es la de
-tickets y la etiqueta no cabe). En la vista **📦 Palets** se ve cómo va cada
-palet; la etiqueta se imprime desde la oficina, en **📦 Stock en cámara**.
+tickets y la etiqueta no cabe): se imprimen desde la oficina, en
+**📦 Stock en cámara**.
 
 **Si se va la red:** se puede seguir apuntando (e imprimiendo) igual. Arriba
 sale un aviso naranja y las entradas aparecen en **Hoy** como

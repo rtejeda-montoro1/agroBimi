@@ -115,7 +115,7 @@ test("palets reject fractional quantities instead of truncating them", async () 
   assert.match(harness.toast, /número entero/);
 });
 
-function createListadoHarness({ total = 0, pagina = [] } = {}) {
+function createListadoHarness({ total = 0, pagina = [], entradas = [] } = {}) {
   const elements = new Map();
   const getElement = (id) => {
     if (!elements.has(id)) elements.set(id, createElement());
@@ -132,7 +132,7 @@ function createListadoHarness({ total = 0, pagina = [] } = {}) {
       calls.push(call);
       const response = table === "palets"
         ? { data: pagina, error: null, count: total }
-        : { data: [], error: null };
+        : { data: entradas, error: null };
       return fakeQuery(response, (method, args) => call.push([method, ...args]));
     } },
     traerTodo: (createQuery) => createQuery(),
@@ -290,6 +290,27 @@ test("palets filter the camera locally by state, farmer and dates, like the serv
   await module.filtrarPalets();
   assert.deepEqual(ids(), [1]);
   assert.deepEqual(pedidas, []);
+});
+
+test("palets warn about boxes in the camera that are not in any pallet", async () => {
+  const vacio = createListadoHarness({
+    entradas: [{ registro_id: 1, agricultor_id: 7, en_formacion: 20, sin_palet: 0 }],
+  });
+  await vacio.module.cargarPalets();
+  assert.equal(vacio.elements.get("paletsAvisoSinPalet").hidden, true);
+
+  const { elements, module } = createListadoHarness({
+    entradas: [
+      { registro_id: 1, agricultor_id: 7, en_formacion: 20, sin_palet: 5 },
+      { registro_id: 2, agricultor_id: 7, en_formacion: 0, sin_palet: 3 },
+      { registro_id: 3, agricultor_id: 8, en_formacion: 0, sin_palet: 4 },
+    ],
+  });
+  await module.cargarPalets();
+  const aviso = elements.get("paletsAvisoSinPalet");
+  assert.equal(aviso.hidden, false);
+  assert.match(aviso.innerHTML, /12 cajas<\/b> en cámara que no\s+pertenecen a ningún palet/);
+  assert.match(aviso.innerHTML, /2 agricultores/);
 });
 
 test("palets asks for the camera and the list page at the same time", async () => {
