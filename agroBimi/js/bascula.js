@@ -1003,11 +1003,11 @@
   function elegirAgricultor(id) {
     const a = state.agricultores.find((x) => x.id === id);
     if (!a) return;
-    // Si ya había otro agricultor elegido es que se está corrigiendo la
-    // selección: se mantiene el ciclo marcado (igual que las cajas tecleadas).
-    // Si se empieza de cero, proponemos el último ciclo que se le apuntó en
+    // Si ya había otro agricultor elegido y hay cajas tecleadas, es que se
+    // está corrigiendo la selección: se mantiene el ciclo marcado (igual que
+    // las cajas). Si no, proponemos el último ciclo que se le apuntó en
     // esta campaña; si no tiene ninguno, el ciclo 1.
-    if (!state.elegido) {
+    if (!state.elegido || (!state.cajas && !state.vacias)) {
       state.ciclo = ["1", "2", "3"].includes(a.ultimo_ciclo) ? a.ultimo_ciclo : "1";
     }
     state.elegido = a;
@@ -1096,15 +1096,15 @@
     toast(`✓ ${a.nombre} · Ciclo ${state.ciclo} · ${resumenCajas({ cajas, vacias })}` +
       (totalHoy !== cajas ? ` · hoy ${totalHoy} cajas` : "") +
       (paletizar ? "" : " · sin paletizar"));
-    // Listo para el siguiente agricultor.
-    state.elegido = null;
+    // El agricultor y el ciclo se quedan elegidos: si vuelve con más cajas
+    // (o se pesa en varias veces) no hay que buscarlo otra vez. Solo se
+    // ponen a 0 las cajas y las vacías. Para otro, «🔍 Cambiar».
     state.buscando = false;
-    state.ciclo = "1";
     state.cajas = "";
     state.vacias = "";
     state.campo = "cajas";
     $("buscar").value = "";
-    pintarSugerencias();
+    cerrarSugerencias();
     pintarEntrada();
     pintarHoy();
     pintarEstadoRed();

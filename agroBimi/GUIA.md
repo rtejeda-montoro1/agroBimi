@@ -266,7 +266,9 @@ añadirla a la pantalla de inicio de la tablet.
    - **«🖨 Registrar e imprimir»**: como «Registrar», y además imprime el
      justificante para que firme el agricultor.
 
-   Sale un aviso verde y la pantalla queda lista para el siguiente.
+   Sale un aviso verde. **El agricultor y el ciclo se quedan elegidos** y
+   las cajas vuelven a 0: si trae más cajas, basta con teclearlas y volver
+   a registrar. Para el siguiente agricultor, pulsa «🔍 Cambiar».
 
 **Justificante:** salen **dos copias**, cada una en su página (en la
 impresora de tickets, dos tickets seguidos, sin cortar nada): la 1 es la

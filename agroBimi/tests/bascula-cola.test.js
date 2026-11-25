@@ -195,6 +195,28 @@ test("bascula plain register palletizes, also for entries queued before this cha
   assert.equal(envios.find((l) => l.args.p_client_uuid === "uuid-nuevo").args.p_paletizar, true);
 });
 
+test("bascula keeps the farmer and cycle selected after registering, with the boxes back to 0", async () => {
+  const b = await cargarBascula({ rpc: conAna });
+  prepararEntrada(b);
+  b.$("ciclos").dispatch("click", { target: { closest: () => ({ dataset: { ciclo: "2" } }) } });
+  b.$("btnRegistrar").dispatch("click");
+  for (let i = 0; i < 6; i++) await flush();
+
+  assert.equal(b.$("agriBuscador").hidden, true);
+  assert.equal(b.$("agriElegido").hidden, false);
+  assert.match(b.$("agriElegido").innerHTML, /Ana/);
+  assert.equal(b.$("cajasValor").textContent, "0");
+  // Listo para otra entrada del mismo agricultor y ciclo.
+  b.$("teclado").dispatch("click", { target: { closest: () => ({ dataset: { tecla: "5" } }) } });
+  assert.equal(b.$("btnRegistrar").disabled, false);
+  b.$("btnRegistrar").dispatch("click");
+  for (let i = 0; i < 6; i++) await flush();
+  const ultimo = b.llamadas.filter((l) => l.nombre === "bascula_registrar").at(-1).args;
+  assert.equal(ultimo.p_agricultor_id, 1);
+  assert.equal(ultimo.p_ciclo, "2");
+  assert.equal(ultimo.p_cajas, 5);
+});
+
 test("bascula marks today's entries registered without palletizing", async () => {
   const b = await cargarBascula({
     rpc: (n) => (n === "bascula_hoy"
