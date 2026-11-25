@@ -23,7 +23,6 @@ test("facturas render an ordered, escaped compensation receipt preview", () => {
       provincia: "Provincia",
       nif: "NIF",
       telefono: "123",
-      iban: "ES00",
     }),
     datosEmisor: () => ({ nombre: "Almacén", nif: "X", direccion: "Av. 1", codigo_postal: "00000", poblacion: "Ciudad" }),
     fmtCodigo: (value) => String(value).padStart(3, "0"),

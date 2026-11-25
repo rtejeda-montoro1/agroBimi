@@ -26,9 +26,6 @@ test("utils normalize documents, validate identifiers, and round money", () => {
   assert.equal(app.normalizarNif("12.345.678-z"), "12345678Z");
   assert.equal(app.nifValido("12.345.678-z"), true);
   assert.equal(app.nifValido("12345678A"), false);
-  assert.equal(app.normalizarIban("es91 2100-0418 4502 0005 1332"), "ES91 2100 0418 4502 0005 1332");
-  assert.equal(app.ibanValido("ES91 2100 0418 4502 0005 1332"), true);
-  assert.equal(app.ibanValido("ES00 2100 0418 4502 0005 1332"), false);
   assert.equal(app.redondear(-0.375), -0.38);
   assert.equal(app.fmtCantidad(2.5), "2,50");
 });

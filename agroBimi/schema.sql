@@ -32,7 +32,7 @@
 -- 1) AGRICULTORES
 --    Lo único obligatorio es el nombre. El "codigo" es un número único de
 --    3 dígitos que asigna la app al crear el agricultor; no se edita.
---    Los datos fiscales (nif ... iban) son opcionales: hacen falta para
+--    Los datos fiscales (nif ... email) son opcionales: hacen falta para
 --    emitir recibos completos.
 create table if not exists agricultores (
   id            bigint generated always as identity primary key,
@@ -45,8 +45,7 @@ create table if not exists agricultores (
   poblacion     text,
   provincia     text,
   telefono      text,
-  email         text,
-  iban          text
+  email         text
 );
 
 create index if not exists agricultores_nombre_idx on agricultores (nombre);
@@ -332,7 +331,7 @@ create table if not exists contadores (
 --     leer ni escribir las tablas directamente: solo puede usar las
 --     funciones bascula_* de la sección 14 (listar agricultores, apuntar
 --     cajas y anular lo que apuntó hoy). Así, si alguien coge la tablet,
---     no ve facturas, IBAN ni importes.
+--     no ve facturas, datos fiscales ni importes.
 --
 --     Para dar de alta el usuario de la báscula:
 --       1. Supabase -> Authentication -> Add user (email + contraseña).

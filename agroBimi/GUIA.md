@@ -32,7 +32,7 @@ repositorio (es público): se rellenan en Ajustes o con el fichero privado
 4. **Series de numeración:** las iniciales de cada documento (LIQ, F).
    Cámbialas antes de crear el primero; luego es mejor no tocarlas.
 
-Y en cada agricultor, «Editar» → **Datos fiscales**: NIF, dirección e IBAN.
+Y en cada agricultor, «Editar» → **Datos fiscales**: NIF y dirección.
 Sin ellos la factura sale incompleta.
 
 ---

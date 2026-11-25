@@ -80,7 +80,7 @@ test("agricultores list and dropdowns are ordered by farmer code", async () => {
   assert.deepEqual(JSON.parse(JSON.stringify(calls.filter(([name]) => name === "order"))), [orderBy.codigo, orderBy.id]);
 });
 
-const CAMPOS_AGRICULTOR = ["nif", "direccion", "codigo_postal", "poblacion", "provincia", "telefono", "email", "iban"];
+const CAMPOS_AGRICULTOR = ["nif", "direccion", "codigo_postal", "poblacion", "provincia", "telefono", "email"];
 
 function createFichaHarness(agricultores) {
   const elements = new Map();
@@ -133,7 +133,7 @@ function datasetDe(atributo, id) {
 const AGRICULTOR = {
   id: 3, codigo: 12, nombre: "<Pepe & Hijos>",
   nif: "12345678Z", direccion: "C/ Mayor 1", codigo_postal: "18001",
-  poblacion: "Granada", provincia: "Granada", telefono: null, email: "", iban: "ES91 2100 0418 4502 0005 1332",
+  poblacion: "Granada", provincia: "Granada", telefono: null, email: "",
 };
 
 test("agricultores list offers a 'Ver datos' button next to Editar", () => {
@@ -155,7 +155,6 @@ test("agricultores 'Ver datos' shows general and fiscal data read-only and escap
   assert.match(generales, /&lt;Pepe &amp; Hijos&gt;/);
   const fiscales = elements.get("verAgricultorFiscales").innerHTML;
   assert.match(fiscales, /NIF \/ CIF<\/span><b>12345678Z</);
-  assert.match(fiscales, /IBAN<\/span><b>ES91 2100 0418 4502 0005 1332</);
   assert.match(fiscales, /Teléfono<\/span><b>—</, "empty values show a dash");
   assert.match(fiscales, /Email<\/span><b>—</);
 });

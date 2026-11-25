@@ -171,7 +171,6 @@
     poblacion: "Población",
     provincia: "Provincia",
     email: "Email",
-    iban: "IBAN",
   };
 
   let agricultorVisto = null;
@@ -229,19 +228,14 @@
     }
   }
 
-  // NIF e IBAN: se guardan normalizados ("12345678Z", "ES91 2100 ...") y,
-  // si no pasan el control, se pregunta antes de guardar (puede ser un
-  // documento extranjero). Devuelve false si el usuario prefiere revisarlo.
+  // NIF: se guarda normalizado ("12345678Z") y, si no pasa el control, se
+  // pregunta antes de guardar (puede ser un documento extranjero). Devuelve false si el usuario prefiere revisarlo.
   function revisarDatosFiscales(datos) {
     if (datos.nif) datos.nif = App.normalizarNif(datos.nif);
-    if (datos.iban) datos.iban = App.normalizarIban(datos.iban);
 
     const avisos = [];
     if (datos.nif && !App.nifValido(datos.nif)) {
       avisos.push(`• El NIF/CIF «${datos.nif}» no parece válido (la letra o el dígito de control no cuadra).`);
-    }
-    if (datos.iban && !App.ibanValido(datos.iban)) {
-      avisos.push(`• El IBAN «${datos.iban}» no parece válido (falla el dígito de control o su longitud).`);
     }
     if (!avisos.length) return true;
     return confirm(`${avisos.join("\n")}\n\nSale así en los recibos. ¿Guardar igualmente?`);

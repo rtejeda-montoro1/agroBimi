@@ -55,14 +55,13 @@
         "Email": emisor.email,
       },
       // En dos columnas: Nombre, Dirección y Teléfono a la izquierda, como
-      // en el emisor; Código, NIF e IBAN a la derecha.
+      // en el emisor; Código y NIF a la derecha.
       proveedor: {
         "Nombre": agricultor.nombre,
         "Código": App.fmtCodigo(agricultor.codigo),
         "Dirección": direccionCompleta(agricultor),
         "NIF": agricultor.nif,
         "Teléfono": agricultor.telefono,
-        "IBAN": agricultor.iban,
       },
       registro: {
         "Nº Liquidación": liquidacion.numero,

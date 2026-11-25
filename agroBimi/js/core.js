@@ -92,7 +92,7 @@
   // Campos de datos fiscales del agricultor (modal de agricultor y facturas).
   const CAMPOS_AGRICULTOR = [
     "nif", "direccion", "codigo_postal", "poblacion",
-    "provincia", "telefono", "email", "iban",
+    "provincia", "telefono", "email",
   ];
 
   // Claves de la tabla "parametros" con su valor por defecto.

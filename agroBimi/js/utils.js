@@ -231,7 +231,7 @@
     return encontrado ? encontrado[0] : "";
   }
 
-  // ---- NIF / NIE / CIF e IBAN -----------------------------------------
+  // ---- NIF / NIE / CIF ------------------------------------------------
   // Un error al teclearlos acaba impreso en el recibo. Se comprueba la
   // letra o el dígito de control; no se comprueba que exista de verdad.
 
@@ -273,27 +273,6 @@
       return m[3] === letra || m[3] === String(control);
     }
     return false;
-  }
-
-  // "es12 3456 7890..." → "ES12 3456 7890 ..." (en grupos de 4, como se
-  // imprime en el recibo).
-  function normalizarIban(v) {
-    const n = String(v ?? "").toUpperCase().replace(/[^0-9A-Z]/g, "");
-    return n.replace(/(.{4})/g, "$1 ").trim();
-  }
-
-  // Control internacional (mod 97). Los españoles tienen 24 caracteres.
-  function ibanValido(v) {
-    const n = String(v ?? "").toUpperCase().replace(/[^0-9A-Z]/g, "");
-    if (!/^[A-Z]{2}\d{2}[0-9A-Z]{10,30}$/.test(n)) return false;
-    if (n.startsWith("ES") && n.length !== 24) return false;
-    const reordenado = n.slice(4) + n.slice(0, 4);
-    let resto = 0;
-    for (const c of reordenado) {
-      const valorC = /\d/.test(c) ? c : String(c.charCodeAt(0) - 55);
-      for (const d of valorC) resto = (resto * 10 + Number(d)) % 97;
-    }
-    return resto === 1;
   }
 
   // Vale para texto y para atributos ("..." y '...'): por eso escapa
@@ -433,8 +412,6 @@
     traerTodo,
     normalizarNif,
     nifValido,
-    normalizarIban,
-    ibanValido,
     limitarFechasAHoy,
     esFechaFutura,
     num,
