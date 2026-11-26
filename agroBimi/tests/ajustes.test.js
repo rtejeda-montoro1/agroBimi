@@ -73,3 +73,30 @@ test("ajustes sections are collapsible and all start closed", () => {
   assert.equal(secciones.filter((s) => / open\b/.test(s)).length, 0);
   assert.doesNotMatch(form, /factura-bloque/);
 });
+
+test("ajustes do not open or save over the real values when they could not be loaded", async () => {
+  const { app, module, elements, calls } = createAjustesHarness([
+    { data: null, error: { message: "offline" } },   // al entrar
+    { data: null, error: { message: "offline" } },   // al abrir Ajustes
+    { data: [{ clave: "precio_kg", valor: "1.25" }], error: null },
+  ]);
+  elements.set("aj_precio_kg", createElement());
+  assert.equal(await module.cargarParametros(), false);
+
+  await module.abrirAjustes();
+  assert.equal(app.dom.modalAjustes.classList.contains("open"), false);
+  assert.match(app.lastToast, /No se han podido cargar los ajustes/);
+
+  app.dom.formAjustes = createElement();
+  elements.set("btnAjustes", createElement());
+  module.configurarEventosAjustes();
+  app.dom.formAjustes.dispatch("submit", { preventDefault() {} });
+  await new Promise((r) => setImmediate(r));
+  assert.match(app.lastToast, /no se guarda nada/);
+  assert.equal(calls.some((c) => c[0] === "upsert"), false);
+
+  // Al volver a intentarlo con red, se abre con los valores reales.
+  await module.abrirAjustes();
+  assert.equal(app.dom.modalAjustes.classList.contains("open"), true);
+  assert.equal(elements.get("aj_precio_kg").value, "1.25");
+});

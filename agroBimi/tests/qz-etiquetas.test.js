@@ -113,3 +113,16 @@ test("QZ failures give the operator a reason and never print elsewhere", async (
   await assert.rejects(cargar(undefined).imprimir({ html: "x" }, db()),
     (e) => /No se pudo cargar QZ Tray/.test(e.aviso));
 });
+
+test("QZ that never answers fails after a time limit instead of blocking the print queue", async () => {
+  const f = qzFalso();
+  let desconectado = 0;
+  f.qz.print = () => new Promise(() => {});           // p. ej. esperando «Allow»
+  f.qz.websocket.disconnect = async () => { desconectado++; };
+  const window = { qz: f.qz };
+  loadModule("qz-etiquetas.js", {}, { window, setTimeout, clearTimeout });
+
+  await assert.rejects(window.QZEtiquetas.imprimir({ html: "x" }, db(), { limite: 20 }),
+    (e) => /QZ Tray no responde/.test(e.aviso));
+  assert.equal(desconectado, 1, "cierra la conexión para empezar de cero");
+});

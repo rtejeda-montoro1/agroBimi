@@ -307,8 +307,27 @@
   // reimpresiones y el QR salen siempre de esa misma copia. Si no se puede
   // guardar, se imprime igual (el QR mostraría «no disponible» hasta que
   // se vuelva a imprimir).
+  //
+  // Como la copia ya no se puede cambiar, antes de hacerla se comprueba que
+  // están los datos reales: sin los ajustes (emisor, remitente, porteador)
+  // o sin algún agricultor, se congelaría un CMR en blanco. En ese caso no
+  // se imprime (el papel saldría igual de vacío) y se avisa.
   async function copiaDeSalida(alb) {
     if (alb.copia) return alb.copia;
+
+    if (!(await App.asegurarParametros())) return null;
+
+    const faltan = () => (alb.palets || [])
+      .flatMap((p) => p.palet_lineas || [])
+      .some((l) => !App.agricultorPorId(l.agricultor_id));
+    if (faltan()) {
+      await App.asegurarAgricultoresTodos(true);
+      if (faltan()) {
+        App.toast("No se han podido cargar los datos de los agricultores de esta salida. Comprueba la conexión y vuelve a imprimir.");
+        return null;
+      }
+    }
+
     const copia = App.construirCopia(alb, {
       emisor: App.datosEmisor(),
       agricultorPorId: App.agricultorPorId,
@@ -326,6 +345,7 @@
     const alb = await cargarSalida(id);
     if (!alb) return;
     const copia = await copiaDeSalida(alb);
+    if (!copia) return;
     // "Porte de salida ALB-0001 2026-10-20" (o "Albarán de salida ..." si
     // solo va el albarán).
     const nombre = `${cmr ? "Porte de salida" : "Albarán de salida"} ${alb.numero || ""} ${alb.fecha || ""}`;

@@ -102,7 +102,7 @@ test("documentos: without the QR library or a code the documents print without Q
 });
 
 // --- Oficina: la copia se guarda la primera vez que se imprime ----------
-function crearSalidas(fila) {
+function crearSalidas(fila, { ajustes = true, agricultores = true } = {}) {
   const app = { state: {} };
   const window = { App: app, location: { href: "https://ejemplo.github.io/agroBimi/agroBimi/" } };
   loadModule("utils.js", app, { window, document: { createElement: () => ({}) } });
@@ -114,7 +114,9 @@ function crearSalidas(fila) {
       (metodo, args) => llamadas.push([tabla, metodo, ...args])) },
     consultar: async (q) => (await q).data,
     datosEmisor: () => ({ nombre: "Almacén Bimi" }),
-    agricultorPorId: (id) => AGRICULTORES[id],
+    agricultorPorId: (id) => (agricultores ? AGRICULTORES[id] : null),
+    asegurarParametros: async () => ajustes,
+    asegurarAgricultoresTodos: async () => { app.agricultoresRecargados = true; return []; },
     param: fuentes().param,
     toast: (m) => { app.ultimoToast = m; },
     imprimirDocumento: (html, nombre) => { app.impreso = { html, nombre }; },
@@ -148,6 +150,27 @@ test("salidas save the copy the first time they print and reuse it afterwards", 
   } finally {
     AGRICULTORES[1].nombre = "<Pepe & Hijos>";
   }
+});
+
+test("salidas do not freeze or print a blank copy when settings or farmers failed to load", async () => {
+  const sinAjustes = crearSalidas({ ...SALIDA }, { ajustes: false });
+  await sinAjustes.app.imprimirSalida(7);
+  assert.equal(sinAjustes.llamadas.some((l) => l[1] === "update"), false, "no guarda la copia");
+  assert.equal(sinAjustes.app.impreso, undefined, "ni imprime un CMR sin emisor");
+
+  const sinAgricultores = crearSalidas({ ...SALIDA }, { agricultores: false });
+  await sinAgricultores.app.imprimirSalida(7);
+  assert.equal(sinAgricultores.app.agricultoresRecargados, true, "vuelve a pedirlos");
+  assert.equal(sinAgricultores.llamadas.some((l) => l[1] === "update"), false);
+  assert.equal(sinAgricultores.app.impreso, undefined);
+  assert.match(sinAgricultores.app.ultimoToast, /agricultores/);
+
+  // Una copia ya guardada se reimprime aunque ahora fallen los ajustes.
+  const guardada = crearSalidas({ ...SALIDA }).app;
+  await guardada.imprimirSalida(7);
+  const conCopia = crearSalidas({ ...SALIDA, copia: { albaran: { token: null, palets: [] }, emisor: {}, agricultores: {}, ajustes: {} } }, { ajustes: false });
+  await conCopia.app.imprimirSalida(7);
+  assert.ok(conCopia.app.impreso);
 });
 
 // --- Página pública del QR ---------------------------------------------

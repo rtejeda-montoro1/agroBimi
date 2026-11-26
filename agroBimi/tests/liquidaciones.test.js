@@ -225,3 +225,37 @@ test("liquidaciones only add discount and empty-box lines when there is somethin
   assert.deepEqual(tipos(calcular(datosLiq(), registros, { pendiente: 0 })), ["bimi", "descuento"]);
   assert.deepEqual(tipos(calcular(datosLiq(), [{ cajas_entradas: 10 }], { pendiente: 2 })), ["bimi", "cajas_perdidas"]);
 });
+
+test("liquidaciones do not calculate or allow saving without the farmer's box balance", async () => {
+  const elements = new Map();
+  const getElement = (id) => {
+    if (!elements.has(id)) elements.set(id, createElement());
+    return elements.get(id);
+  };
+  const app = { state: { agricultoresTodos: [], agricultoresActuales: [] }, dom: {} };
+  loadModule("utils.js", app, { document: { createElement: () => ({}) } });
+  Object.assign(app, {
+    $: getElement,
+    db: { from: () => fakeQuery({ data: [{ id: 1, cajas_entradas: 10, liquidacion_id: null }], error: null }) },
+    traerTodo: (crear) => crear(),
+    consultar: async (q) => (await q).data,
+    saldoCajasAgricultor: async () => null,   // falló la consulta de cajas
+    toast() {},
+  });
+  loadModule("paginacion.js", app);
+  const module = loadModule("liquidaciones.js", app).window.App;
+  app.dom.formLiquidacion = createElement();
+  getElement("formFacturar").querySelectorAll = () => [];
+  module.configurarEventosLiquidaciones();
+
+  Object.entries({ liqAgricultor: "3", liqDesde: "2026-11-01", liqHasta: "2026-11-15",
+    liqCampana: "1", liqKgPorCaja: "1", liqPrecioKg: "0.5" })
+    .forEach(([id, v]) => { getElement(id).value = v; });
+  getElement("liqIncluirCajas").checked = true;
+  getElement("btnGuardarLiquidacion").disabled = false;
+
+  await getElement("btnCalcularLiquidacion").listeners.get("click")[0]();
+  assert.equal(app.state.liquidacionPrevia ?? null, null);
+  assert.equal(getElement("btnGuardarLiquidacion").disabled, true);
+  assert.match(getElement("cuerpoLiqLineas").innerHTML, /No se han podido cargar las cajas/);
+});

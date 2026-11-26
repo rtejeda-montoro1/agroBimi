@@ -439,6 +439,15 @@
     }
 
     if (id !== calculoActual) return;
+    // Sin el saldo de cajas saldría una liquidación sin la línea de cajas
+    // perdidas, con pinta de buena y lista para guardar: no se calcula.
+    if (datos.incluirCajas && saldoCajas === null) {
+      limpiarCalculo();
+      App.$("cuerpoLiqLineas").innerHTML = App.filaMensaje(4,
+        "No se han podido cargar las cajas del agricultor. Comprueba la conexión y vuelve a pulsar «Calcular».",
+        "empty error");
+      return;
+    }
     const calculo = calcularLiquidacion(datos, registros, saldoCajas);
     App.state.liquidacionPrevia = {
       datos,

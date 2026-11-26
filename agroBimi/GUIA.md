@@ -290,8 +290,8 @@ completos, cajas listas para salir, cajas en cámara y cajas **sin palet**
 sale sola en la impresora de pegatinas (después del justificante, si se
 pidió). También se puede imprimir con **🏷 Imprimir etiqueta** en la tarjeta
 del palet. Para eso tiene que estar abierto **QZ Tray** (el icono junto al
-reloj): si no lo está, sale un aviso; ábrelo y vuelve a imprimirla con el
-botón. Desde la oficina se siguen pudiendo imprimir en **📦 Stock en cámara**.
+reloj): si no lo está, sale un aviso; ábrelo y la tablet la vuelve a
+intentar sola cada minuto (o imprímela con el botón). Desde la oficina se siguen pudiendo imprimir en **📦 Stock en cámara**.
 
 **Si se va la red:** se puede seguir apuntando (e imprimiendo) igual. Arriba
 sale un aviso naranja y las entradas aparecen en **Hoy** como

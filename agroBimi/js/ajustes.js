@@ -20,12 +20,16 @@
       // avisamos pero no bloqueamos.
       App.toast("No se pudieron cargar los ajustes: " + error.message);
       App.state.parametros = { ...App.PARAMETROS_DEFECTO };
+      // Lo miran Ajustes y la copia del QR: con los valores por defecto no
+      // se puede guardar nada que pise o congele los datos reales.
+      App.state.parametrosCargados = false;
       return false;
     }
 
     const guardados = {};
     (data || []).forEach((p) => { guardados[p.clave] = p.valor; });
     App.state.parametros = { ...App.PARAMETROS_DEFECTO, ...guardados };
+    App.state.parametrosCargados = true;
     return true;
   }
 
@@ -43,7 +47,18 @@
     return App.num(param(clave));
   }
 
-  function abrirAjustes() {
+  // Si al entrar no se pudieron cargar, se vuelve a intentar. Sin los
+  // ajustes reales el formulario saldría con los valores por defecto y, al
+  // guardar, los escribiría encima de los de verdad (emisor, series, IVA...).
+  async function asegurarParametros() {
+    if (App.state.parametrosCargados) return true;
+    if (await cargarParametros()) return true;
+    App.toast("No se han podido cargar los ajustes. Comprueba la conexión y vuelve a intentarlo.");
+    return false;
+  }
+
+  async function abrirAjustes() {
+    if (!(await asegurarParametros())) return;
     Object.keys(App.PARAMETROS_DEFECTO).forEach((clave) => {
       const input = App.$(PREFIJO + clave);
       if (input) input.value = param(clave);
@@ -53,6 +68,10 @@
 
   async function guardarAjustes(e) {
     e.preventDefault();
+    if (!App.state.parametrosCargados) {
+      App.toast("No se han podido cargar los ajustes: no se guarda nada para no pisar los datos reales. Cierra y vuelve a abrir Ajustes.");
+      return;
+    }
 
     const filas = Object.keys(App.PARAMETROS_DEFECTO)
       .map((clave) => {
@@ -105,6 +124,7 @@
 
   Object.assign(App, {
     cargarParametros,
+    asegurarParametros,
     param,
     paramNum,
     datosEmisor,

@@ -310,7 +310,11 @@ etiquetas solo se imprimen desde la oficina). Las tarjetas de palets tienen
 completa un palet, la tablet abre sola la impresion de su etiqueta (detras
 del justificante, si se pidio). Para eso recuerda los palets completos que
 ya conoce (`bascula_palets_completos` en localStorage); al entrar solo los
-apunta, sin imprimir.
+apunta, sin imprimir. Un palet solo pasa a "conocido" cuando su etiqueta se
+ha impreso: si falla (QZ cerrado, impresora apagada, recarga a medias) queda
+en `bascula_etiquetas_pendientes` y se reintenta cada minuto y al entrar.
+Cada etiqueta tiene un limite de 30 s: si QZ no contesta, se corta la
+conexion y no se queda parada la cola de impresion (justificantes incluidos).
 
 Sin red: cada entrada se guarda primero en la tablet (localStorage) y
 despues se envia; si no hay conexion se queda en cola y se reintenta sola

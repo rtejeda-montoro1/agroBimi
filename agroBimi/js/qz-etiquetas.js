@@ -101,7 +101,28 @@ tarsPV2BwvZ7X8piFXBbCaI=
     }
   }
 
-  async function imprimir({ html, ancho = 105, alto = 75 }, db) {
+  // Tiempo máximo para una etiqueta. Si QZ no contesta (p. ej. no le llega
+  // la firma y espera a que alguien pulse «Allow» en una ventana que en
+  // kiosk nadie ve), sin límite se quedaría parada toda la cola de
+  // impresión de la báscula, justificantes incluidos.
+  const LIMITE_MS = 30 * 1000;
+
+  function imprimir(etiqueta, db, { limite = LIMITE_MS } = {}) {
+    let temporizador;
+    const tiempo = new Promise((_, reject) => {
+      temporizador = setTimeout(() => {
+        // Se cierra la conexión para que la próxima etiqueta empiece de cero.
+        try {
+          Promise.resolve(window.qz?.websocket?.disconnect?.()).catch(() => {});
+        } catch { /* ya estaba cerrada */ }
+        reject(falla("QZ Tray no responde. Comprueba que está abierto y que la impresora de etiquetas está encendida, y vuelve a imprimir la etiqueta."));
+      }, limite);
+    });
+    return Promise.race([imprimirSinLimite(etiqueta, db), tiempo])
+      .finally(() => clearTimeout(temporizador));
+  }
+
+  async function imprimirSinLimite({ html, ancho = 105, alto = 75 }, db) {
     const qz = window.qz;
     if (!qz) throw falla("No se pudo cargar QZ Tray en la página. Revisa la conexión y recarga.");
     preparar(qz, db);

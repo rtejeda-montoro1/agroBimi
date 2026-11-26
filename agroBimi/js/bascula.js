@@ -36,6 +36,10 @@
   // Palets completos que la tablet ya conoce: los que no estén aquí se
   // acaban de completar y se imprime su etiqueta sola.
   const KEY_ETIQUETAS = "bascula_palets_completos";
+  // Palets completos cuya etiqueta automática aún no ha salido (QZ cerrado,
+  // impresora apagada, página recargada a medias...). No pasan a
+  // KEY_ETIQUETAS hasta que la etiqueta se imprime, y se reintentan.
+  const KEY_ETIQUETAS_PENDIENTES = "bascula_etiquetas_pendientes";
   // Etiquetas de palet desde la báscula. El justificante sale con
   // --kiosk-printing por la predeterminada (la de tickets); las etiquetas
   // van por QZ Tray a la impresora de pegatinas (js/qz-etiquetas.js).
@@ -735,7 +739,16 @@
   function encolarImpresion(preparar, descripcion = "el documento") {
     colaImpresion = colaImpresion
       .then(preparar)
-      .then((trabajo) => (trabajo ? imprimirAhora(trabajo) : undefined))
+      .then(async (trabajo) => {
+        if (!trabajo) return;
+        try {
+          await imprimirAhora(trabajo);
+        } catch (error) {
+          trabajo.alFallar?.();
+          throw error;
+        }
+        trabajo.alImprimir?.();
+      })
       .catch((error) => {
         console.error(`Error al imprimir ${descripcion}`, error);
         toast(error?.aviso
@@ -954,7 +967,41 @@
         !confirm(`El palet ${p.codigo || ""} todavía no está completo. ¿Imprimir la etiqueta igualmente?`)) {
       return;
     }
-    encolarImpresion(() => etiquetaParaImprimir(p, state.palets), `la etiqueta del palet ${p.codigo || ""}`.trim());
+    // Uno en progreso no se apunta: cuando se complete, su etiqueta tiene
+    // que salir sola.
+    encolarImpresion(() => {
+      const trabajo = etiquetaParaImprimir(p, state.palets);
+      return paletCompleto(p) ? conAviso(trabajo, p.id) : trabajo;
+    }, `la etiqueta del palet ${p.codigo || ""}`.trim());
+  }
+
+  // Al imprimirse la etiqueta (sola o con el botón), el palet deja de estar
+  // pendiente y ya no se vuelve a imprimir solo.
+  const etiquetasEnCola = new Set();
+  function conAviso(trabajo, id) {
+    etiquetasEnCola.add(id);
+    return {
+      ...trabajo,
+      alImprimir: () => { etiquetasEnCola.delete(id); etiquetaImpresa(id); },
+      alFallar: () => { etiquetasEnCola.delete(id); },
+    };
+  }
+
+  function hayEtiquetasPendientes() {
+    if (!ETIQUETAS_EN_BASCULA) return false;
+    const pendientes = almacen.leer(KEY_ETIQUETAS_PENDIENTES, []);
+    return Array.isArray(pendientes) && pendientes.some((id) => !etiquetasEnCola.has(id));
+  }
+
+  function etiquetaImpresa(id) {
+    const pendientes = almacen.leer(KEY_ETIQUETAS_PENDIENTES, []);
+    if (Array.isArray(pendientes) && pendientes.includes(id)) {
+      almacen.guardar(KEY_ETIQUETAS_PENDIENTES, pendientes.filter((x) => x !== id));
+    }
+    const conocidos = almacen.leer(KEY_ETIQUETAS, null);
+    if (Array.isArray(conocidos) && !conocidos.includes(id)) {
+      almacen.guardar(KEY_ETIQUETAS, [...conocidos, id]);
+    }
   }
 
   function etiquetaParaImprimir(p, datos) {
@@ -988,19 +1035,33 @@
     const cap = data.cajas_por_palet || 60;
     const completos = (data.palets || []).filter((p) => (p.num_cajas || 0) >= cap);
     const conocidos = almacen.leer(KEY_ETIQUETAS, null);
-    almacen.guardar(KEY_ETIQUETAS, completos.map((p) => p.id));
-    if (soloAnotar || !Array.isArray(conocidos)) return;
+    const guardadas = almacen.leer(KEY_ETIQUETAS_PENDIENTES, []);
+    const pendientes = Array.isArray(guardadas) ? guardadas : [];
+    // La primera vez que se usa la tablet no hay lista: todo lo de antes
+    // se da por conocido.
+    const primeraVez = !Array.isArray(conocidos);
 
+    // Nuevos: los que se han completado hoy y la tablet no conocía, y los
+    // que se quedaron sin etiqueta (aunque sean de otro día o se acabe de
+    // recargar la página). Al entrar (soloAnotar) solo cuentan estos.
     const hoy = diaLocal();
     const nuevos = completos
-      .filter((p) => !conocidos.includes(p.id) && p.fecha_completo === hoy)
+      .filter((p) => !primeraVez && !conocidos.includes(p.id) &&
+        (pendientes.includes(p.id) || (!soloAnotar && p.fecha_completo === hoy)))
       .sort((a, b) => (a.secuencia ?? 0) - (b.secuencia ?? 0));
-    if (!nuevos.length) return;
-    toast(nuevos.length === 1
-      ? `Palet ${nuevos[0].codigo} completo: imprimiendo su etiqueta`
-      : `${nuevos.length} palets completos: imprimiendo sus etiquetas`);
-    nuevos.forEach((p) =>
-      encolarImpresion(() => etiquetaParaImprimir(p, data), `la etiqueta del palet ${p.codigo || ""}`.trim()));
+    const idsNuevos = new Set(nuevos.map((p) => p.id));
+    almacen.guardar(KEY_ETIQUETAS, completos.filter((p) => !idsNuevos.has(p.id)).map((p) => p.id));
+    almacen.guardar(KEY_ETIQUETAS_PENDIENTES, [...idsNuevos]);
+
+    // Las que ya están en la cola de impresión no se piden otra vez.
+    const imprimir = nuevos.filter((p) => !etiquetasEnCola.has(p.id));
+    if (!imprimir.length) return;
+    toast(imprimir.length === 1
+      ? `Palet ${imprimir[0].codigo} completo: imprimiendo su etiqueta`
+      : `${imprimir.length} palets completos: imprimiendo sus etiquetas`);
+    imprimir.forEach((p) =>
+      encolarImpresion(() => conAviso(etiquetaParaImprimir(p, data), p.id),
+        `la etiqueta del palet ${p.codigo || ""}`.trim()));
   }
 
   function notificarErrorEtiquetas(error, actualizarRed = true) {
@@ -1301,7 +1362,11 @@
         notificarErrorActualizacion("los agricultores", error)), REFRESCO_AGRICULTORES_MS),
       setInterval(enviarPendientes, REINTENTO_ENVIO_MS),
       setInterval(pintarFecha, REFRESCO_HOY_MS),
-      setInterval(() => cargarPalets(), REFRESCO_HOY_MS),
+      setInterval(() => {
+        cargarPalets();
+        // Las etiquetas que no salieron se reintentan solas.
+        if (hayEtiquetasPendientes()) etiquetasDePaletsCompletados().catch(notificarErrorEtiquetas);
+      }, REFRESCO_HOY_MS),
     );
   }
 
