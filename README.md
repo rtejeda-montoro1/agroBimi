@@ -1,346 +1,61 @@
 # AgroBimi
 
-Aplicaciones web de gestion agricola. Cada modulo es una app independiente
-dentro de su propia carpeta.
+Aplicación web de gestión agrícola para un almacén de bimi: agricultores,
+entradas de producción, cámara y palets, salidas con CMR y albarán,
+liquidaciones y recibos. Funciona en el navegador con
+[Supabase](https://supabase.com) como base de datos y se publica con
+GitHub Pages.
 
-## Estructura de la raiz
+La guía de uso (qué hace cada botón) está en
+[agroBimi/GUIA.md](agroBimi/GUIA.md).
 
-- index.html: punto de entrada. Hoy redirige a agroBimi/. En el futuro sera
-  el login comun y el selector de modulo.
-- agroBimi/: modulo de gestion de Bimi (agricultores y registros de produccion).
-- agroPepper/: modulo de gestion de pimientos (pendiente de crear).
+## Estructura
 
-## Modulo agroBimi
+- `index.html`: punto de entrada; redirige a `agroBimi/`.
+- `agroBimi/`: la aplicación.
+  - `index.html`, `styles.css`, `app.js`: la app de la oficina.
+  - `bascula.html`, `bascula.css`: el puesto de la báscula (tablet junto al
+    peso para apuntar las cajas que entran).
+  - `albaran.html`: copia digital de una salida, la que abre el QR del CMR
+    y del albarán.
+  - `documentos.css`: estilos del CMR y del albarán.
+  - `config.js`: URL del proyecto de Supabase y su clave pública (anon).
+  - `schema.sql`: esquema completo de la base de datos (tablas, funciones,
+    triggers y permisos).
+  - `js/`: un módulo por área (agricultores, registros, campañas, plantas,
+    cajas, palets, salidas, liquidaciones, facturas, ajustes, báscula...).
+  - `tests/`: pruebas unitarias.
+- `supabase/functions/`: funciones Edge de Supabase.
 
-- agroBimi/GUIA.md: guia de usuario (que hace cada boton y como se usa).
-- agroBimi/index.html: estructura principal de la interfaz.
-- agroBimi/styles.css: estilos de la aplicacion (incluye los estilos de
-  impresion de facturas).
-- agroBimi/config.js: constantes de configuracion (Supabase URL y anon key).
-- agroBimi/schema.sql: esquema SQL de la base de datos.
-- agroBimi/app.js: punto de entrada de la aplicacion.
-- agroBimi/logo_web.png: logo usado en la cabecera, el login y el favicon.
-- agroBimi/bascula.html + bascula.css: puesto de la bascula (tablet junto al
-  peso para apuntar cajas). Pagina independiente de la app principal.
-- agroBimi/albaran.html: copia digital publica de una salida (CMR + albaran),
-  la que abre el QR. Sin login: solo `albaran_copia(token)`.
-- agroBimi/documentos.css: estilos del CMR y del albaran (impresion en
-  index.html; tambien en pantalla en albaran.html).
+## Pruebas
 
-### Modulos JavaScript
-
-- agroBimi/js/core.js: estado global, referencias DOM y cliente de base de datos.
-- agroBimi/js/utils.js: utilidades compartidas (fechas, numeros, importes,
-  numeracion de documentos, modales, impresion).
-- agroBimi/js/ajustes.js: parametros globales (emisor de facturas, precios,
-  IVA y series de numeracion).
-- agroBimi/js/auth.js: autenticacion y sesion.
-- agroBimi/js/agricultores.js: logica CRUD de agricultores y sus datos fiscales.
-- agroBimi/js/campanas.js: logica de campanas y filtro por campana.
-- agroBimi/js/registros.js: logica CRUD de registros.
-- agroBimi/js/plantas.js: retiradas de plantas por ciclo y calculo de rendimiento.
-- agroBimi/js/cajas.js: control de cajas vacias y descuadres.
-- agroBimi/js/paginacion.js: listados por paginas (palets, liquidaciones,
-  salidas y buscar por campaña), con los filtros aplicados en el servidor.
-- agroBimi/js/palets.js: paletizacion (camara, palets y etiquetas).
-- agroBimi/js/salidas.js: salidas de palets y albaranes de salida.
-- agroBimi/js/documentos-salida.js: plantillas del CMR y del albaran a partir
-  de la copia congelada de la salida, y el QR (qrcode-generator por CDN).
-- agroBimi/js/albaran-publico.js: logica de albaran.html.
-- agroBimi/js/liquidaciones.js: liquidaciones por fechas y generacion de facturas.
-- agroBimi/js/facturas.js: documento de liquidacion / factura e impresion.
-- agroBimi/js/reportes.js: exportacion a Excel.
-- agroBimi/js/ui.js: eventos de interfaz e inicializacion.
-- agroBimi/js/bascula.js: logica del puesto de la bascula (no usa App).
-- agroBimi/tests/: pruebas unitarias de los modulos core, utilidades,
-  configuracion, autenticacion y bloqueo del login, agricultores, ajustes,
-  campanas, registros, plantas, cajas, liquidaciones, facturas, palets, salidas,
-  reportes, bascula, interfaz y punto de entrada.
-
-### Pruebas
-
-Con Node.js 18 o posterior, ejecuta desde la raiz:
+Con Node.js 18 o posterior, desde la raíz:
 
     npm --prefix agroBimi test
 
-Las pruebas usan el test runner integrado de Node.js y no requieren instalar
-dependencias. Ejecuta este comando despues de cada cambio para comprobar los
-flujos y calculos principales de la aplicacion.
+No hace falta instalar dependencias (usa el test runner de Node.js).
 
-Para bloquear commits en `main` cuando fallen las pruebas, activa el hook
-local una vez en cada clon:
+Para que no se pueda hacer commit en `main` con las pruebas fallando,
+activa el hook una vez en cada clon:
 
     git config core.hooksPath .githooks
 
-El hook ejecuta `npm --prefix agroBimi test` solo en la rama `main` y cancela el
-commit si la suite falla. `AGENTS.md` contiene la misma regla para los agentes.
+## Puesta en marcha
 
-## Puesta en marcha / actualizacion
+1. Crea un proyecto en Supabase y pon su URL y su clave anon en
+   `agroBimi/config.js`.
+2. Ejecuta `agroBimi/schema.sql` completo en el editor SQL de Supabase. Se
+   puede volver a ejecutar sin perder datos: solo crea lo que falte. Los
+   cambios que transforman datos existentes van en scripts de migración
+   aparte, fuera del repositorio.
+3. Da de alta los usuarios en Supabase (Authentication) con el registro
+   público desactivado.
+4. Entra en la app y rellena **⚙ Ajustes** (datos del emisor, precios, IVA
+   y series de numeración).
 
-Ejecuta `agroBimi/schema.sql` completo en el editor SQL de Supabase. Es
-idempotente: se puede volver a ejecutar tantas veces como haga falta, crea
-solo lo que falte y no borra datos.
+## Datos privados
 
-`schema.sql` es el esquema actual: cada tabla con todas sus columnas, mas
-las funciones, triggers y permisos. Ya no lleva los pasos para actualizar
-bases de datos antiguas (desde noviembre de 2026). Si una base de datos es
-anterior, ejecuta antes el `schema.sql` del commit `4d8ce36`. Si cambias una
-tabla, anade la columna en su `create table` y tambien con un
-`alter table ... add column if not exists` al final del archivo (las
-instrucciones estan en su cabecera).
-
-**Datos del cliente:** el repositorio es publico, asi que los datos reales
-del emisor de los recibos (nombre, NIF, direccion, registro de
-establecimiento) y del CMR (remitente y porteador) no estan en el codigo
-ni en `schema.sql`: salen vacios. Viven en `agroBimi/privado/datos_cliente.sql`,
-que esta en `.gitignore` y se guarda aparte (por ejemplo, en el repositorio
-privado de backups). En una instalacion nueva, ejecutalo despues de
-`schema.sql` o rellena esos datos en Ajustes. No subas al repo documentos
-reales (recibos, facturas en PDF) ni datos de agricultores.
-
-**Migraciones:** los scripts SQL que actualizan una base de datos que ya
-tiene datos (pasar datos antiguos al formato nuevo, juntar registros, etc.)
-no estan en el repositorio: se guardan aparte, junto a los datos privados.
-Cada cambio de este README que necesita una lo indica con "requiere
-migracion". Leela antes de ejecutarla en Supabase. La de la campana 26/27
-(deja esa campana como unica y pone ciclo 1 a lo que no tenia) va **una
-sola vez, antes de `schema.sql`**.
-
-### Campana y ciclo obligatorios
-
-Ningun registro, retirada de plantas ni liquidacion puede ir sin campana, y
-registros y retiradas siempre llevan ciclo 1, 2 o 3 (`schema.sql`, seccion
-15). En la app los desplegables no tienen opcion vacia: salen con la campana
-mas reciente y el ciclo 1. Por eso una campana con datos no se puede borrar.
-
-Despues, en la app, entra en **⚙ Ajustes** y rellena:
-
-- los datos del emisor de las facturas,
-- el precio por caja de bimi y el precio de la caja vacia perdida,
-- el IVA / compensacion,
-- las series de numeracion (liquidaciones y facturas).
-
-## Como funciona cada cosa
-
-### Rendimiento por ciclo
-
-Las plantas que retira cada agricultor se anotan en **🌱 Plantas retiradas**
-(tabla `retiradas_plantas`). Puede haber varias retiradas dentro del mismo
-ciclo: se suman. Con eso y las cajas de los registros se calcula:
-
-    rendimiento = cajas de bimi entradas / plantas retiradas
-
-Se ve en el panel *Rendimiento por ciclo* de la ficha del agricultor. (El
-informe global de rendimientos se quito de la web para simplificarla; si se
-vuelve a pedir, esta en `respaldo/2026-10-10/`.)
-
-Las plantas que se anotaban en los registros antiguos (columnas
-`num_plantas` y `fecha_retirada` de `registros`) ya no se usan: el calculo
-usa solo la tabla nueva. La migracion `2026-11-04_quitar_sin_uso.sql` quita
-esas columnas si estan vacias.
-
-### Control de cajas vacias
-
-    descuadre = cajas vacias retiradas - cajas llenas devueltas - cajas vacias devueltas
-    pendiente = descuadre - cajas ya cobradas en liquidaciones
-
-Las cajas son fisicas, asi que el saldo se lleva por agricultor; los filtros
-de campana y de fechas solo limitan que movimientos entran en la cuenta. Lo
-que no vuelve se le descuenta al hacer su liquidacion, al precio de *caja
-vacia perdida* de Ajustes.
-
-Se anota en el propio registro: *Cajas Vacias retiradas* (lo que se lleva) y
-*Cajas Vacias devueltas* (lo que devuelve sin usar).
-
-### Camara, paletizacion y salidas
-
-Todas las cajas que pasan por la bascula van a la camara y **la base de datos
-las reparte sola en palets** de `cajas_por_palet` (60) al apuntar la pesada
-(trigger `registros_paletizar`, `schema.sql` seccion 16; requiere
-migracion en una base de datos existente). Rellena el palet abierto mas
-antiguo de la campana y lo que sobra abre el siguiente. Al estar en la base de
-datos vale igual al pesar y al sincronizar sin red. Solo se paletizan los
-registros de la bascula (`origen = 'bascula'`): lo apuntado a mano en la
-oficina no entra en la camara ni en los palets (tampoco desde Editar palet).
-En la app la pantalla se llama "Stock en camara".
-
-- "Registrar sin paletizacion" (boton rojo de la bascula):
-  `bascula_registrar(..., p_paletizar => false)` marca en su transaccion
-  `agrobimi.sin_paletizar` y el trigger no reparte esas cajas; quedan como
-  `sin_palet` en `paletizado_entradas` y `bascula_pesadas.paletizar = false`.
-  Las siguientes pesadas del mismo registro solo paletizan lo suyo. "Stock
-  en camara" avisa (en rojo) de las cajas que no estan en ningun palet y
-  `bascula_palets()` devuelve su total (`sin_palet`).
-- Cada linea de palet esta ligada a su pesada (`palet_lineas.registro_id`):
-  de ahi salen el agricultor y la fecha de entrada.
-- Estados: *en formacion* (menos de 60, sus cajas estan "en camara"),
-  *completo* (`fecha_completo`, etiqueta y salida) y *con salida*
-  (`fecha_salida` + `albaran_id`).
-- Corregir una pesada a la baja o borrarla quita sus cajas de sus palets sin
-  salida (del mas reciente al mas antiguo). Si ya salieron, la base de datos
-  lo impide. Un palet sin salida que se queda sin cajas se borra solo
-  (`palets_quitar_vacios`); su numero no se reutiliza.
-- Edicion manual: `palet_guardar_lineas(palet, lineas)` toma las cajas de lo
-  que la pesada tenga sin palet o en otros palets en formacion. No hay boton
-  de eliminar palet: dejarlo sin cajas desde Editar lo borra.
-- Salida: `albaran_crear(datos, palets)` numera el albaran (`serie_albaran`),
-  da salida a los palets y pone la fecha de salida en `registros.fecha_cmr`
-  de sus pesadas, todo a la vez; `albaran_anular` los devuelve y deja en
-  `fecha_cmr` la de otra salida suya (o vacia).
-- Se imprime la carta de porte (CMR, 3 ejemplares) y el albaran. Los datos
-  fijos del CMR son parametros (`cmr_remitente`, `cmr_porteador`,
-  `cmr_tipo_palet`, `peso_bruto_caja_kg`); lo variable va en
-  `albaranes_salida`.
-- QR / copia digital (`schema.sql` seccion 23): cada albaran tiene un
-  `token` (uuid aleatorio) y, la primera vez que se imprime, guarda en
-  `copia` (jsonb) todo lo que sale en el papel (cabecera, palets, nombre y
-  NIF de los agricultores, emisor y ajustes del CMR). Las reimpresiones y
-  `albaran.html?t=<token sin guiones>` pintan desde esa copia con las mismas
-  plantillas (`js/documentos-salida.js`). El rol anon solo puede llamar a
-  `albaran_copia(token)`; token y copia no se pueden cambiar despues
-  (trigger `albaranes_copia_proteger`) y anular el albaran lo borra. El
-  enlace se construye con la URL desde la que se imprime. Los albaranes
-  anteriores guardan su copia al reimprimirlos.
-- La vista `paletizado_entradas` dice, por pesada, cuantas cajas estan en
-  palets en formacion, sin palet, en palets completos o ya salidas.
-- Solo se paletizan las pesadas desde `paletizado_desde` (Ajustes). Los palets
-  de la version anterior (sin pesadas detras) no se rellenan.
-
-La etiqueta lleva arriba el numero del palet con la fecha de llenado al lado
-(o "En progreso"). Se imprime con un `@page` (sin nombre) del tamano de Ajustes
-(`etiqueta_ancho_mm` x `etiqueta_alto_mm`, 105 x 75 por defecto). La tabla
-`camara_entradas` y la vista `camara_saldos` (guardar cajas en camara a mano)
-ya no estan en `schema.sql`: la migracion `2026-11-04_quitar_sin_uso.sql` las
-quita de una base de datos existente si estan vacias.
-
-### Liquidaciones y facturas
-
-Una liquidacion agrupa los registros de UN agricultor en un rango de fechas
-que todavia no se le han pagado, y calcula:
-
-    + kg de bimi (cajas x kg por caja) x precio por kg
-    - descuento en kg                  x precio por kg
-    - cajas vacias no devueltas    x precio de caja perdida
-    +- concepto libre
-    = base -> + IVA / compensacion -> total
-
-Se paga por kg: `kg_por_caja` (Ajustes, 8 por defecto) pasa las cajas a kg y
-cada liquidacion guarda el suyo y su `precio_kg`. El descuento de cada
-registro va en kg (`registros.descuento_kg`). `liquidacion_guardar`
-comprueba que la linea de bimi sea cajas x `kg_por_caja`. Las liquidaciones
-de antes llevan `precio_caja` y sus lineas en cajas; no se tocan. Requiere
-migracion (`2026-11-25_descuento_kg.sql`, antes de `schema.sql`). El albaran
-de salida tambien muestra los kg (cajas x `kg_por_caja`).
-
-Un registro solo puede entrar en UNA liquidacion (columna
-`registros.liquidacion_id`): asi no se paga dos veces lo mismo. En la tabla
-del agricultor los registros ya liquidados salen marcados.
-
-Las lineas se guardan calculadas, de forma que una liquidacion cerrada no
-cambia de importe si despues se editan los registros o los precios.
-
-Estados: **borrador** (se puede recalcular y editar) -> **cerrada** (ya no se
-edita) -> **facturada** (tiene numero de factura). Al facturar, el numero se
-copia tambien al campo `num_factura` de cada registro incluido, asi que la
-agrupacion por factura de la tabla del agricultor sigue funcionando igual.
-
-Si el agricultor trae su propia factura, al facturar se elige esa opcion y
-se escriben su numero y su fecha: quedan en `num_factura` / `fecha_factura`
-con `factura_agricultor = true` y `factura_secuencia` vacia (no gasta numero
-de la serie). El documento se imprime como liquidacion, no como recibo de
-compensacion. Requiere migracion (columna `factura_agricultor`).
-
-El PDF se obtiene imprimiendo y eligiendo "Guardar como PDF" en el dialogo
-del navegador: no hace falta ninguna libreria externa.
-
-### Puesto de la bascula
-
-La bascula no exporta los pesos, asi que junto a ella se pone una tablet u
-ordenador con `agroBimi/bascula.html`. Ahi se busca el agricultor (lupa,
-por codigo o nombre), el ciclo,
-el numero de cajas y las cajas vacias que se lleva (0 por defecto). A la
-derecha, en la misma pantalla, se ven los palets (solo lectura,
-`bascula_palets()`). La pantalla esta pensada para una Surface 3 en
-horizontal: tres columnas a toda la altura y cada una con su propio scroll.
-Las
-pesadas del mismo dia de un agricultor (misma campana y ciclo) se suman en
-un unico registro con fecha de hoy, `cajas_entradas`,
-`cajas_vacias_retiradas` y `origen = 'bascula'`; si ese registro ya esta
-liquidado se abre otro. Cada pesada suelta queda en `bascula_pesadas`
-(ligada a su registro): la tablet lista las de hoy y `bascula_anular` resta
-una sola del registro del dia (si se queda a 0, lo borra). Requiere
-migracion: crea `bascula_pesadas` y junta los registros que ya estaban
-repetidos. A partir de ahi cuenta como
-cualquier otro registro: rendimiento y liquidaciones. Guardar las cajas en
-la camara es un paso aparte (ver "Camara y palets").
-
-Seguridad: la tablet entra con un usuario propio dado de alta en la tabla
-`usuarios_bascula` (instrucciones en `schema.sql`, seccion 12). Su sesion
-no caduca (no hay cierre por inactividad), pero ese usuario no puede leer
-ni escribir ninguna tabla: solo usar las funciones `bascula_*`, que
-listan agricultores y campanas, apuntan cajas y anulan lo apuntado hoy
-que no este liquidado. Si se intenta usar en la app principal, se le
-redirige a la bascula (y alli tiene que entrar). No se ha hecho sin login porque la web es publica:
-cualquiera con la URL podria apuntar cajas a un agricultor.
-La bascula guarda su sesion aparte de la de la oficina (`storageKey`
-propio): abrir `bascula.html` en un navegador con la oficina abierta pide
-la contrasena en vez de entrar con el usuario de la oficina.
-
-Login (oficina y bascula): tras 5 contrasenas incorrectas seguidas con el
-mismo email desde la misma conexion (IP), ese email queda bloqueado 24
-horas desde esa conexion. Va por IP para que nadie de fuera pueda bloquear
-la cuenta de la oficina o de la bascula a proposito
-(`schema.sql`, seccion 22; tabla `login_bloqueos`). Para desbloquearlo
-antes, en el editor SQL de Supabase:
-`delete from login_bloqueos where email = 'el-email@...';`
-
-Etiquetas de palet en la bascula: por QZ Tray (`js/qz-etiquetas.js`). El
-justificante sale con Chrome `--kiosk-printing` por la impresora
-predeterminada (la de tickets, RP-12N); la etiqueta va por QZ Tray a la
-impresora cuyo nombre contiene "BV400" (Toshiba TEC BV420T), al tamano de
-Ajustes. QZ solo imprime sin preguntar si la peticion va firmada: el
-certificado publico esta en `js/qz-etiquetas.js` y, como `override.crt`, en
-`C:\Program Files\QZ Tray\` de la tablet; la clave privada esta en el
-secreto `QZ_CLAVE_PRIVADA` de Supabase y firma la Edge Function `qz-firmar`
-(`supabase/functions/qz-firmar/index.ts`, Verify JWT activado, solo para
-`es_bascula()`). Copia local de la clave en `agroBimi/privado/qz/` (no se
-sube). Interruptor: `ETIQUETAS_EN_BASCULA` en `js/bascula.js` (a false, las
-etiquetas solo se imprimen desde la oficina). Las tarjetas de palets tienen
-"Imprimir etiqueta" y, cuando una pesada enviada desde la tablet
-completa un palet, la tablet abre sola la impresion de su etiqueta (detras
-del justificante, si se pidio). Para eso recuerda los palets completos que
-ya conoce (`bascula_palets_completos` en localStorage); al entrar solo los
-apunta, sin imprimir. Un palet solo pasa a "conocido" cuando su etiqueta se
-ha impreso: si falla (QZ cerrado, impresora apagada, recarga a medias) queda
-en `bascula_etiquetas_pendientes` y se reintenta cada minuto y al entrar.
-Cada etiqueta tiene un limite de 30 s: si QZ no contesta, se corta la
-conexion y no se queda parada la cola de impresion (justificantes incluidos).
-
-Sin red: cada entrada se guarda primero en la tablet (localStorage) y
-despues se envia; si no hay conexion se queda en cola y se reintenta sola
-al volver la red. Cada entrada lleva un uuid generado en la tablet
-(`bascula_pesadas.client_uuid`, unico; antes `registros.client_uuid`), asi
-que un reintento nunca la suma dos veces.
-Tambien guarda la hora de la pesada (`registros.pesada_en`): la fecha del
-registro es el dia en que se peso (hora de Madrid), aunque llegue al
-servidor despues. El servidor rechaza pesadas futuras o de hace mas de 7
-dias; las rechazadas se quedan en la tablet a la vista para revisarlas.
-
-Justificante: cada entrada se imprime (navegador -> imprimir) en dos copias,
-cada una en su pagina: 1 "Copia para el proveedor", 2 "Copia para el
-almacen". Lleva arriba "BIMI" y "Almacen Hortofruticola"; luego el almacen
-receptor (el emisor de Ajustes), proveedor (el agricultor), cultivo (Bimi),
-ciclo, cajas entradas, cajas vacias retiradas, fecha y hora y hueco para la
-firma. El tamano del papel esta pendiente de la impresora: se
-ajusta en `bascula.css` con `--ticket-ancho` y el margen de `@page` (ahora
-72 mm, valido para tickets de 80 mm y para A4).
-
-## Notas
-
-- Todas las rutas dentro de un modulo son relativas, asi que la carpeta se
-  puede mover o renombrar sin tocar el codigo.
-- El proyecto usa Supabase y una estructura modular en JavaScript para separar
-  responsabilidades.
-- Ninguna fecha de la app admite dias futuros.
-- Al crear agroPepper habra que decidir que se comparte entre modulos
-  (config de Supabase, login, estilos base) para no duplicarlo.
+El repositorio es público: aquí no van datos del cliente ni de los
+agricultores, documentos reales, copias de seguridad ni claves. Todo eso se
+guarda fuera del repositorio (la carpeta `agroBimi/privado/` está en
+`.gitignore`).

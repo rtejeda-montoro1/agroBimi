@@ -1,25 +1,16 @@
 # Guía de uso — Gestión de Bimi
 
-Guía breve de las funciones: plantas y rendimiento, control de cajas, y
-liquidaciones y facturas.
+Guía breve de las funciones: plantas y rendimiento, control de cajas, cámara
+y palets, salidas con CMR y albarán, liquidaciones y facturas, y el puesto de
+la báscula.
 
 Los nombres entre comillas son los botones tal y como salen en la app.
-
-Versión maquetada, más cómoda de leer y de pasar a quien la vaya a usar:
-<https://claude.ai/code/artifact/3f9b1f29-a845-44e4-96cd-287958080ebb>
-(privada hasta que la compartas desde el menú de la propia página).
 
 ---
 
 ## Antes de empezar (una sola vez)
 
-**Quien lo instala:** ejecutar `schema.sql` completo en el editor SQL de
-Supabase. Se puede volver a ejecutar cuando haga falta: solo crea lo que
-falte y no borra nada. Los datos del emisor y del CMR no están en el
-repositorio (es público): se rellenan en Ajustes o con el fichero privado
-`privado/datos_cliente.sql`, que se guarda aparte.
-
-**Quien lo usa:** entrar en «⚙ Ajustes» y rellenar
+Entrar en «⚙ Ajustes» y rellenar
 
 1. **Emisor de los recibos:** nombre, CIF, dirección y registro de
    establecimiento. Quien lo instala los deja rellenos; solo hay que
@@ -353,7 +344,7 @@ que tengas puestos.
   escriben a mano, la app avisa y no guarda.
 - **La sesión se cierra a los 20 minutos sin actividad.** Es normal tener que
   volver a entrar después de comer. (La tablet de la báscula no se cierra.)
-- **Cinco intentos fallidos de contraseña bloquean el acceso 24 horas** en
+- **Cinco intentos fallidos de contraseña bloquean el acceso 24 horas**
   desde esa misma conexión a internet.
 - **Al cerrar un formulario con datos escritos sin guardar, pregunta antes de
   descartarlos.**
