@@ -77,7 +77,7 @@
 
   function bloqueQr(qr, clase) {
     if (!qr) return "";
-    return `<div class="doc-qr ${clase}">${qr}<span>Copia digital<br>Digital copy</span></div>`;
+    return `<div class="doc-qr ${clase}">${qr}</div>`;
   }
 
   const esc = (v) => App.escapar(v == null ? "" : String(v));

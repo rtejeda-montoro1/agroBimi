@@ -202,7 +202,6 @@
 /* QR de la copia digital: en el albarán, junto al nº de documento; en el
    CMR, en la casilla 5 (documentos anexos). */
 .doc-qr { display: flex; flex-direction: column; align-items: center; gap: 1mm; flex-shrink: 0; }
-.doc-qr span { font-size: 6.3pt; line-height: 1.2; text-align: center; color: #000; }
 .doc-qr svg { display: block; }
 .alb-qr svg { width: 24mm; height: 24mm; }
 .cmr-qr svg { width: 18mm; height: 18mm; }
